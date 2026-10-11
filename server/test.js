@@ -36,7 +36,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   srv.server.listen(0);
   await new Promise(r => srv.server.once('listening', r));
   const base = `http://127.0.0.1:${srv.server.address().port}`;
-  srv.pollLoop();
+  await srv.setupBot(); srv.pollLoop();
   const post = (p, b) => fetch(base + p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(async r => ({ status: r.status, body: await r.json() }));
 
   const alice = { id: 111, first_name: 'Alice' }, bob = { id: 222, first_name: 'Bob', last_name: '<script>' };
@@ -94,6 +94,9 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   await sleep(400);
   assert.ok(JSON.parse(fs.readFileSync(dataFile, 'utf8')).payments.ch1, 'persisted to disk');
+  r = await fetch(base + '/api/status').then(x => x.json());
+  assert.equal(r.webappUrlOk, true); assert.ok(r.updatesHandled >= 6); assert.equal(r.lastHandleError, null);
+  assert.ok(!JSON.stringify(r).includes(TOKEN), 'status never leaks the token');
   console.log('✅ all server tests passed');
   srv.stop(); fake.close(); process.exit(0);
 })().catch(e => { console.error('❌', e); process.exit(1); });

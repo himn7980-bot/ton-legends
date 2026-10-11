@@ -2,7 +2,8 @@
 //
 // Env vars:
 //   BOT_TOKEN     (required) token from @BotFather
-//   WEBAPP_URL    (required) public https URL where this server is reachable, e.g. https://ton-legends.onrender.com
+//   WEBAPP_URL    public https URL of this server, e.g. https://ton-legends.onrender.com
+//                 (optional on Render: RENDER_EXTERNAL_URL is used automatically)
 //   PORT          default 3000
 //   DATA_FILE     default ./data/db.json
 //   TELEGRAM_API  default https://api.telegram.org (overridable for tests)
@@ -12,7 +13,12 @@ const path = require('path');
 const crypto = require('crypto');
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
-const WEBAPP_URL = (process.env.WEBAPP_URL || '').replace(/\/$/, '');
+const WEBAPP_URL = (process.env.WEBAPP_URL || process.env.RENDER_EXTERNAL_URL || '').trim().replace(/\/$/, '');
+// Live diagnostics, exposed at GET /api/status (no secrets).
+const diag = { startedAt: new Date().toISOString(), bot: null, webappUrl: WEBAPP_URL || null,
+  webappUrlOk: /^https:\/\/[^/\s]+/.test(WEBAPP_URL), setupError: null, lastPollAt: null, lastPollError: null,
+  lastUpdateAt: null, updatesHandled: 0, lastHandleError: null, lastSendError: null };
+function logErr(key, e) { diag[key] = `${new Date().toISOString()} ${e.message}`; console.error(key, e.message); }
 const PORT = +process.env.PORT || 3000;
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data', 'db.json');
 const TG = (process.env.TELEGRAM_API || 'https://api.telegram.org') + '/bot' + BOT_TOKEN + '/';
@@ -129,7 +135,13 @@ async function handleUpdate(up) {
     if (arg.startsWith('ref_')) applyReferral(userRec(m.from), arg);
     const url = WEBAPP_URL;
     const L = tx(m.from.language_code);
-    await tg('sendMessage', { chat_id: m.chat.id, text: L.start, reply_markup: { inline_keyboard: [[{ text: L.play, web_app: { url } }]] } });
+    try {
+      await tg('sendMessage', { chat_id: m.chat.id, text: L.start, reply_markup: { inline_keyboard: [[{ text: L.play, web_app: { url } }]] } });
+    } catch (e) {
+      // Usually a missing/invalid WEBAPP_URL (Telegram requires https). Reply anyway so the bot never looks dead.
+      logErr('lastSendError', e);
+      await tg('sendMessage', { chat_id: m.chat.id, text: `${L.start}\n\n⚠️ Game link is not configured (WEBAPP_URL). ${url || ''}`.trim() });
+    }
   }
 }
 
@@ -151,12 +163,14 @@ async function pollLoop() {
   while (polling) {
     try {
       const ups = await tg('getUpdates', { offset, timeout: 25, allowed_updates: ['message', 'pre_checkout_query'] });
+      diag.lastPollAt = new Date().toISOString(); diag.lastPollError = null;
       for (const up of ups) {
         offset = up.update_id + 1;
-        try { await handleUpdate(up); } catch (e) { console.error('update error', e.message); }
+        diag.lastUpdateAt = new Date().toISOString(); diag.updatesHandled++;
+        try { await handleUpdate(up); } catch (e) { logErr('lastHandleError', e); }
       }
     } catch (e) {
-      console.error('poll error', e.message);
+      logErr('lastPollError', e);
       await new Promise(r => setTimeout(r, 3000));
     }
   }
@@ -199,6 +213,7 @@ function leaderboard(meId) {
 
 const routes = {
   'GET /api/health': () => ({ ok: true, bot: BOT_USERNAME, packs: PACKS }),
+  'GET /api/status': () => ({ ...diag, bot: BOT_USERNAME, users: Object.keys(db.users).length, node: process.version }),
   'POST /api/hello': (body, u) => { applyReferral(u, body.startParam); return { ok: true, pending: u.pending }; },
   'POST /api/score': (body, u) => {
     const stage = Math.max(0, Math.min(MAX_STAGE, Math.floor(+body.stage || 0)));
@@ -249,7 +264,7 @@ async function setupBot() {
     if (WEBAPP_URL) await tg('setChatMenuButton', { menu_button: { type: 'web_app', text: TEXT.en.menu, web_app: { url: WEBAPP_URL } } });
     await tg('setMyCommands', { commands: [{ command: 'start', description: TEXT.en.cmd }] });
     await tg('setMyCommands', { commands: [{ command: 'start', description: TEXT.fa.cmd }], language_code: 'fa' });
-  } catch (e) { console.error('bot setup failed:', e.message); }
+  } catch (e) { logErr('setupError', e); }
 }
 async function start() {
   server.listen(PORT, () => console.log(`TON Legends server on :${PORT}`));
