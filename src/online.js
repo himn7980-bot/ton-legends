@@ -13,7 +13,7 @@ const Online = (() => {
     const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 8000);
     try {
       const r = await fetch(API + '/api/' + path, body === undefined ? { signal: ctl.signal } :
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ initData: initData(), ...body }), signal: ctl.signal });
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ initData: initData(), lang: typeof LANG !== 'undefined' ? LANG : 'en', ...body }), signal: ctl.signal });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return await r.json();
     } finally { clearTimeout(to); }

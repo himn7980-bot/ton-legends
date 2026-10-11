@@ -73,7 +73,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   r = await post('/api/invoice', { initData: initData(alice), pack: 'coins_m' });
   assert.equal(r.body.link, 'https://t.me/$invoice-test');
   const inv = calls.find(c => c.method === 'createInvoiceLink').data;
-  assert.equal(inv.currency, 'XTR'); assert.equal(inv.prices[0].amount, 75); assert.equal(inv.payload, '111:coins_m');
+  assert.equal(inv.currency, 'XTR'); assert.match(inv.title, /10,000 coins/); assert.equal(inv.prices[0].amount, 75); assert.equal(inv.payload, '111:coins_m');
   r = await post('/api/invoice', { initData: initData(alice), pack: 'nope' }); assert.equal(r.status, 400);
 
   queue.push({ update_id: 1, pre_checkout_query: { id: 'pc1', from: alice, currency: 'XTR', total_amount: 75, invoice_payload: '111:coins_m' } });
@@ -87,6 +87,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   r = await post('/api/claim', { initData: initData(alice) }); assert.equal(r.body.coins, 10000, 'duplicate payment credited once');
   const starts = calls.filter(c => c.method === 'sendMessage' && c.data.chat_id === 333);
   assert.equal(starts[0].data.reply_markup.inline_keyboard[0][0].web_app.url, 'https://game.example');
+  assert.match(starts[0].data.text, /Welcome to TON Legends/);
+  queue.push({ update_id: 6, message: { chat: { id: 444 }, from: { id: 444, first_name: 'Reza', language_code: 'fa' }, text: '/start' } });
+  await sleep(800);
+  assert.match(calls.filter(c => c.method === 'sendMessage' && c.data.chat_id === 444)[0].data.text, /خوش آمدی/);
 
   await sleep(400);
   assert.ok(JSON.parse(fs.readFileSync(dataFile, 'utf8')).payments.ch1, 'persisted to disk');

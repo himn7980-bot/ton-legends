@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fa" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -12,15 +12,15 @@
 <div id="app">
   <header id="top">
     <div class="logo">TON <b>Legends</b></div>
-    <div class="hdr-r"><div class="coins" id="coins">🪙 <span>0</span></div><button class="gear" id="settings" aria-label="تنظیمات">⚙️</button></div>
+    <div class="hdr-r"><div class="coins" id="coins">🪙 <span>0</span></div><button class="gear" id="settings" aria-label="Settings">⚙️</button></div>
   </header>
   <main id="screen"></main>
   <nav id="nav">
-    <button data-tab="map" class="active"><span>🗺️</span>نقشه</button>
-    <button data-tab="heroes"><span>🃏</span>قهرمان‌ها</button>
-    <button data-tab="chest"><span>🎁</span>صندوق</button>
-    <button data-tab="quests"><span>📜</span>ماموریت</button>
-    <button data-tab="rank"><span>🏆</span>رتبه‌ها</button>
+    <button data-tab="map" class="active"><span>🗺️</span>Map</button>
+    <button data-tab="heroes"><span>🃏</span>Heroes</button>
+    <button data-tab="chest"><span>🎁</span>Chests</button>
+    <button data-tab="quests"><span>📜</span>Quests</button>
+    <button data-tab="rank"><span>🏆</span>Ranks</button>
   </nav>
 </div>
 <div id="battle" hidden></div>
@@ -29,6 +29,7 @@
 <script src="audio.js"></script>
 <script src="online.js"></script>
 <script src="engine.js"></script>
+<script src="i18n.js"></script>
 <script src="game.js"></script>
 <script src="meta.js"></script>
 <script async src="https://telegram.org/js/telegram-web-app.js" onload="window.initTelegram && initTelegram()"></script>

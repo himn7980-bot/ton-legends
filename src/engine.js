@@ -1,52 +1,54 @@
 // TON Legends — battle engine and game data (no DOM here, so it can be simulated in Node)
 
+// Display text (names of roles/rarities, hero titles, skills, worlds) lives in i18n.js.
 const RARITY = {
-  C: { name: 'معمولی', color: '#9aa4b2', mult: 1.0 },
-  R: { name: 'کمیاب', color: '#3fa2ff', mult: 1.15 },
-  E: { name: 'حماسی', color: '#b66bff', mult: 1.3 },
-  L: { name: 'افسانه‌ای', color: '#ffc531', mult: 1.5 },
+  C: { color: '#9aa4b2', mult: 1.0 },
+  R: { color: '#3fa2ff', mult: 1.15 },
+  E: { color: '#b66bff', mult: 1.3 },
+  L: { color: '#ffc531', mult: 1.5 },
 };
 
 const ROLES = {
-  tank:     { name: 'تانک',     icon: '🛡️', hp: 1450, atk: 62,  spd: 1.4 },
-  warrior:  { name: 'جنگجو',    icon: '⚔️', hp: 1000, atk: 96,  spd: 1.2 },
-  assassin: { name: 'قاتل',     icon: '🗡️', hp: 760,  atk: 128, spd: 1.0 },
-  archer:   { name: 'کماندار',  icon: '🏹', hp: 720,  atk: 108, spd: 1.1 },
-  mage:     { name: 'جادوگر',   icon: '🔮', hp: 660,  atk: 118, spd: 1.5 },
-  control:  { name: 'کنترل',    icon: '❄️', hp: 820,  atk: 90,  spd: 1.3 },
-  healer:   { name: 'درمانگر',  icon: '💧', hp: 820,  atk: 72,  spd: 1.3 },
-  support:  { name: 'پشتیبان',  icon: '✨', hp: 860,  atk: 76,  spd: 1.3 },
+  tank:     { icon: '🛡️', hp: 1450, atk: 62,  spd: 1.4 },
+  warrior:  { icon: '⚔️', hp: 1000, atk: 96,  spd: 1.2 },
+  assassin: { icon: '🗡️', hp: 760,  atk: 128, spd: 1.0 },
+  archer:   { icon: '🏹', hp: 720,  atk: 108, spd: 1.1 },
+  mage:     { icon: '🔮', hp: 660,  atk: 118, spd: 1.5 },
+  control:  { icon: '❄️', hp: 820,  atk: 90,  spd: 1.3 },
+  healer:   { icon: '💧', hp: 820,  atk: 72,  spd: 1.3 },
+  support:  { icon: '✨', hp: 860,  atk: 76,  spd: 1.3 },
 };
 
 const HEROES = [
-  { id: 'pinkbull',  name: 'Pink Bull',    title: 'تایتان طلایی',       role: 'tank',     rarity: 'R', skill: 'زمین‌لرزه',       desc: '۱۵۰٪ آسیب به همه دشمنان و گیج کردن آن‌ها به مدت ۱.۵ ثانیه' },
-  { id: 'notcoin',   name: 'Notcoin',      title: 'نگهبان طلایی',       role: 'tank',     rarity: 'L', skill: 'سپر طلایی',       desc: 'به همه هم‌تیمی‌ها سپری برابر ۲۵٪ جان خودش می‌دهد' },
-  { id: 'volya',     name: 'Volya',        title: 'نگهبان افسانه‌ها',   role: 'warrior',  rarity: 'L', skill: 'پرتو لیزری',      desc: '۴۵۰٪ آسیب به قوی‌ترین دشمن' },
-  { id: 'egor',      name: 'Egor',         title: 'معدنچی کریستال',     role: 'warrior',  rarity: 'C', skill: 'شکستن زره',       desc: '۲۵۰٪ آسیب؛ دشمن ۵ ثانیه ۳۰٪ آسیب بیشتر می‌گیرد. (+۱۰٪ سکه)' },
-  { id: 'paws',      name: 'PAWS',         title: 'ضربه‌زن پنجه ماه',   role: 'assassin', rarity: 'E', skill: 'پنجه آتشین',      desc: 'سه ضربه‌ی ۱۴۰٪ به دشمن جلویی' },
-  { id: 'noctis',    name: 'Noctis Veyl',  title: 'سایه پنهان',         role: 'assassin', rarity: 'L', skill: 'ضربه سایه',       desc: '۵۰۰٪ آسیب به ضعیف‌ترین دشمن و ۳ ثانیه جاخالی دادن' },
-  { id: 'gramcat',   name: 'Gramcat',      title: 'کماندار آسمان',      role: 'archer',   rarity: 'C', skill: 'تیر نافذ',        desc: '۱۷۰٪ آسیب به همه دشمنان' },
-  { id: 'utya',      name: 'Utya',         title: 'پیشاهنگ بال یخی',    role: 'archer',   rarity: 'E', skill: 'باران یخ',        desc: '۱۴۰٪ آسیب به همه و کند کردن آن‌ها به مدت ۳ ثانیه' },
-  { id: 'pengu',     name: 'Pengu',        title: 'تکاور قطبی',         role: 'control',  rarity: 'E', skill: 'انجماد',          desc: '۹۰٪ آسیب به همه و منجمد کردن ۲.۵ ثانیه' },
-  { id: 'memegram',  name: 'Memegram',     title: 'جادوگر ستاره',       role: 'mage',     rarity: 'R', skill: 'انفجار ستاره‌ای', desc: '۲۲۰٪ آسیب به همه دشمنان' },
-  { id: 'yoda',      name: 'Yoda',         title: 'حکیم باستانی',       role: 'mage',     rarity: 'E', skill: 'نیروی ذهن',       desc: '۱۹۰٪ آسیب به همه و عقب انداختن حمله‌ی دشمنان' },
-  { id: 'virus',     name: 'Virus',        title: 'کیمیاگر سبز',        role: 'mage',     rarity: 'R', skill: 'معجون سمی',       desc: 'سم روی همه (۶۰٪ در ثانیه، ۵ ثانیه) و ۲۵٪ کاهش حمله‌ی دشمنان' },
-  { id: 'babyshark', name: 'Baby Shark',   title: 'روح اقیانوس',        role: 'healer',   rarity: 'R', skill: 'گرداب شفا',       desc: '۲۵۰٪ درمان برای همه هم‌تیمی‌ها' },
-  { id: 'yaya',      name: 'Yaya',         title: 'نگهبان فانوس',       role: 'support',  rarity: 'C', skill: 'فانوس جادویی',    desc: '۴۰٪ افزایش حمله‌ی تیم به مدت ۶ ثانیه و کمی درمان' },
-  { id: 'dog',       name: 'telegram.dog', title: 'پیک جادویی',         role: 'support',  rarity: 'C', skill: 'نامه فوری',       desc: '۵۰ انرژی به همه‌ی هم‌تیمی‌ها می‌دهد' },
-  { id: 'teddy',     name: 'Teddy',        title: 'رئیس مهربان',        role: 'support',  rarity: 'R', skill: 'بغل طلایی',       desc: '۳۵۰٪ درمان برای ضعیف‌ترین هم‌تیمی و سپر. (+۲۰٪ سکه)' },
+  { id: 'pinkbull',  name: 'Pink Bull',    role: 'tank',     rarity: 'R' },
+  { id: 'notcoin',   name: 'Notcoin',      role: 'tank',     rarity: 'L' },
+  { id: 'volya',     name: 'Volya',        role: 'warrior',  rarity: 'L' },
+  { id: 'egor',      name: 'Egor',         role: 'warrior',  rarity: 'C' },
+  { id: 'paws',      name: 'PAWS',         role: 'assassin', rarity: 'E' },
+  { id: 'noctis',    name: 'Noctis Veyl',  role: 'assassin', rarity: 'L' },
+  { id: 'gramcat',   name: 'Gramcat',      role: 'archer',   rarity: 'C' },
+  { id: 'utya',      name: 'Utya',         role: 'archer',   rarity: 'E' },
+  { id: 'pengu',     name: 'Pengu',        role: 'control',  rarity: 'E' },
+  { id: 'memegram',  name: 'Memegram',     role: 'mage',     rarity: 'R' },
+  { id: 'yoda',      name: 'Yoda',         role: 'mage',     rarity: 'E' },
+  { id: 'virus',     name: 'Virus',        role: 'mage',     rarity: 'R' },
+  { id: 'babyshark', name: 'Baby Shark',   role: 'healer',   rarity: 'R' },
+  { id: 'yaya',      name: 'Yaya',         role: 'support',  rarity: 'C' },
+  { id: 'dog',       name: 'telegram.dog', role: 'support',  rarity: 'C' },
+  { id: 'teddy',     name: 'Teddy',        role: 'support',  rarity: 'R' },
 ];
 const HERO_BY_ID = Object.fromEntries(HEROES.map(h => [h.id, h]));
 const STARTERS = ['pinkbull', 'egor', 'gramcat', 'memegram', 'babyshark'];
 const MAX_LEVEL = 30;
 const COIN_BONUS = { egor: 0.10, teddy: 0.20 };
 
+// Each world is guarded by a themed squad of rival cards and a boss card that matches the world's art.
 const WORLDS = [
-  { name: 'اقیانوس عمیق',     bg: 'linear-gradient(180deg,#0a4f8a,#0d7cc2 45%,#e9d39a)', foes: [['🦀', 'خرچنگ', 1, 1], ['🐙', 'اختاپوس', 1.2, 0.9], ['🐡', 'بادکنک‌ماهی', 0.8, 1.3]], boss: ['🐋', 'نهنگ غول‌پیکر'] },
-  { name: 'غار کریستال',      bg: 'linear-gradient(180deg,#071a3a,#123d7a 50%,#1b1f2e)', foes: [['🦇', 'خفاش', 0.8, 1.3], ['🪨', 'سنگ‌غول', 1.5, 0.8], ['🕷️', 'عنکبوت', 1, 1.1]], boss: ['🐉', 'اژدهای کریستالی'] },
-  { name: 'شهر نئونی',        bg: 'linear-gradient(180deg,#05061a,#1a1f6b 55%,#3a1a5c)', foes: [['🤖', 'ربات', 1.3, 0.9], ['👾', 'هکر', 0.9, 1.2], ['🛰️', 'پهپاد', 0.8, 1.3]], boss: ['🛸', 'سفینه‌ی مادر'] },
-  { name: 'معبد فانوس',       bg: 'linear-gradient(180deg,#2a0b2e,#8a1f2a 55%,#3b2318)', foes: [['👺', 'شیطانک', 1, 1.1], ['🐍', 'مار', 0.9, 1.2], ['🏮', 'فانوس نفرین‌شده', 1.3, 0.9]], boss: ['🐲', 'اژدهای سرخ'] },
-  { name: 'آزمایشگاه سبز',    bg: 'linear-gradient(180deg,#06210f,#145c2c 55%,#2d1f0e)', foes: [['🧟', 'زامبی', 1.4, 0.9], ['🍄', 'قارچ سمی', 0.9, 1.2], ['🦂', 'عقرب', 1, 1.15]], boss: ['💀', 'جادوگر تاریکی'] },
+  { key: 'ocean',  bg: 'linear-gradient(180deg,#0a4f8a,#0d7cc2 45%,#e9d39a)', boss: 'babyshark', foes: ['utya', 'pengu', 'dog', 'gramcat'] },
+  { key: 'cave',   bg: 'linear-gradient(180deg,#071a3a,#123d7a 50%,#1b1f2e)', boss: 'egor',      foes: ['memegram', 'yoda', 'pengu', 'gramcat'] },
+  { key: 'city',   bg: 'linear-gradient(180deg,#05061a,#1a1f6b 55%,#3a1a5c)', boss: 'notcoin',   foes: ['paws', 'pinkbull', 'teddy', 'volya'] },
+  { key: 'temple', bg: 'linear-gradient(180deg,#2a0b2e,#8a1f2a 55%,#3b2318)', boss: 'yaya',      foes: ['dog', 'yoda', 'noctis', 'teddy'] },
+  { key: 'lab',    bg: 'linear-gradient(180deg,#06210f,#145c2c 55%,#2d1f0e)', boss: 'virus',     foes: ['noctis', 'volya', 'paws', 'pinkbull'] },
 ];
 const STAGES_PER_WORLD = 10;
 const TOTAL_STAGES = WORLDS.length * STAGES_PER_WORLD;
@@ -67,31 +69,26 @@ function stageReward(idx) {
   return Math.round((80 + 25 * idx) * (boss ? 3 : 1));
 }
 
+const ENEMY_HP = 0.56, ENEMY_ATK = 0.23;
 function stageEnemies(idx) {
   const w = WORLDS[Math.floor(idx / STAGES_PER_WORLD)], local = idx % STAGES_PER_WORLD;
   const sc = 2.4 + 0.32 * idx;
-  const base = { hp: 700 * sc, atk: 31 * sc, spd: 1.6 };
-  const list = [];
-  const minion = (i) => {
-    const f = w.foes[i % w.foes.length];
-    return { emoji: f[0], name: f[1], hp: base.hp * f[2], atk: base.atk * f[3], spd: base.spd };
+  const card = (id, boss) => {
+    const b = heroStats(id, 1), r = ROLES[HERO_BY_ID[id].role];
+    const hpM = boss ? 3.2 : 1, atkM = boss ? 1.35 : 1;
+    return { id, role: HERO_BY_ID[id].role, name: HERO_BY_ID[id].name, boss: !!boss,
+      hp: b.hp * ENEMY_HP * sc * hpM, atk: b.atk * ENEMY_ATK * sc * atkM * (r.spd / 1.3), spd: r.spd };
   };
-  if (local === STAGES_PER_WORLD - 1) {
-    list.push(minion(0));
-    list.push({ emoji: w.boss[0], name: w.boss[1], hp: base.hp * 5, atk: base.atk * 1.5, spd: 1.8, boss: true });
-    list.push(minion(1));
-  } else {
-    const n = Math.min(5, 2 + Math.floor(local / 2.5));
-    for (let i = 0; i < n; i++) list.push(minion(i + local));
-  }
-  return list;
+  if (local === STAGES_PER_WORLD - 1) return [card(w.foes[0]), card(w.boss, true), card(w.foes[1])];
+  const n = Math.min(5, 2 + Math.floor(local / 2.5));
+  return Array.from({ length: n }, (_, i) => card(w.foes[(i + local) % w.foes.length]));
 }
 
 // ---------- battle ----------
 let UID = 1;
 function makeUnit(side, o) {
   return {
-    uid: UID++, side, id: o.id || null, name: o.name, emoji: o.emoji || null, role: o.role || null, boss: !!o.boss,
+    uid: UID++, side, id: o.id, name: o.name, role: o.role, boss: !!o.boss,
     maxHp: Math.round(o.hp), hp: Math.round(o.hp), atk: o.atk, spd: o.spd,
     timer: Math.random() * o.spd * 0.6, energy: side === 'hero' ? 20 : 0, shield: 0, fx: {}, alive: true,
     bossCd: 7, poisonNext: 0,
@@ -123,7 +120,7 @@ function damage(B, src, tgt, amount, opts = {}) {
   dmg = Math.max(1, Math.round(dmg * (0.92 + Math.random() * 0.16)));
   if (tgt.shield > 0) { const a = Math.min(tgt.shield, dmg); tgt.shield -= a; dmg -= a; if (dmg === 0) { B.events.push({ type: 'block', uid: tgt.uid }); return 0; } }
   tgt.hp -= dmg;
-  if (tgt.side === 'hero') tgt.energy = Math.min(100, tgt.energy + 3);
+  tgt.energy = Math.min(100, tgt.energy + (tgt.side === 'hero' ? 3 : 2));
   B.events.push({ type: 'dmg', uid: tgt.uid, amount: dmg, crit, poison: !!opts.poison });
   if (tgt.hp <= 0) { tgt.hp = 0; tgt.alive = false; B.events.push({ type: 'die', uid: tgt.uid }); }
   return dmg;
@@ -166,6 +163,8 @@ function basicAttack(B, u) {
     if (!t) return;
     B.events.push({ type: 'atk', uid: u.uid, target: t.uid });
     damage(B, u, t, atkOf(B, u));
+    if (u.role === 'healer') heal(B, lowest(friendsOf(B, u)), atkOf(B, u) * 0.5);
+    u.energy = Math.min(100, u.energy + 10);
   }
 }
 
@@ -191,7 +190,7 @@ const SKILLS = {
 function castSkill(B, u) {
   if (!u.alive || u.energy < 100 || B.over || !foesOf(B, u).length) return false;
   u.energy = 0;
-  B.events.push({ type: 'skill', uid: u.uid, id: u.id });
+  B.events.push({ type: 'skill', uid: u.uid, id: u.id, side: u.side });
   SKILLS[u.id](B, u);
   checkEnd(B);
   return true;
@@ -220,7 +219,7 @@ function step(B, dt) {
         for (const h of alive(B.heroes)) damage(B, u, h, atkOf(B, u) * 0.9);
       }
     }
-    if (B.auto && u.side === 'hero' && u.energy >= 100) castSkill(B, u);
+    if (u.energy >= 100 && (u.side === 'enemy' || B.auto)) castSkill(B, u);
   }
   checkEnd(B);
   if (B.t > 120 && !B.over) B.over = 'lose'; // time limit

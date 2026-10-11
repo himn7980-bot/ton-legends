@@ -22,10 +22,29 @@ const REF_INVITER = 500, REF_NEWCOMER = 300;
 
 // Coin packs sold for Telegram Stars (currency XTR). Server is the source of truth for prices.
 const PACKS = [
-  { id: 'coins_s', title: '۳٬۰۰۰ سکه', coins: 3000, stars: 25 },
-  { id: 'coins_m', title: '۱۰٬۰۰۰ سکه', coins: 10000, stars: 75 },
-  { id: 'coins_l', title: '۳۰٬۰۰۰ سکه', coins: 30000, stars: 200 },
+  { id: 'coins_s', coins: 3000, stars: 25 },
+  { id: 'coins_m', coins: 10000, stars: 75 },
+  { id: 'coins_l', coins: 30000, stars: 200 },
 ];
+
+// Bot texts: Persian for Telegram users with a Persian UI, English for everyone else.
+const TEXT = {
+  en: {
+    start: '⚔️ Welcome to TON Legends!\n\nCollect hero cards, build your team and battle boss cards across 5 worlds.\n\nTap the button below to start 👇',
+    play: '🎮 Play', open: '🎮 Open game', menu: '🎮 Play',
+    paid: c => `✅ Payment successful! ${c.toLocaleString('en-US')} coins were added. Open the game to collect them.`,
+    packTitle: c => `${c.toLocaleString('en-US')} coins`, packDesc: c => `${c.toLocaleString('en-US')} coins for TON Legends`,
+    cmd: 'Play TON Legends',
+  },
+  fa: {
+    start: '⚔️ به TON Legends خوش آمدی!\n\nکارت‌های قهرمان را جمع کن، تیمت را بچین و در ۵ دنیا با کارت‌های رئیس بجنگ.\n\nبرای شروع روی دکمه‌ی زیر بزن 👇',
+    play: '🎮 شروع بازی', open: '🎮 ورود به بازی', menu: '🎮 بازی',
+    paid: c => `✅ پرداخت موفق! ${c.toLocaleString('fa-IR')} سکه به حسابت اضافه شد. بازی را باز کن تا دریافت کنی.`,
+    packTitle: c => `${c.toLocaleString('fa-IR')} سکه`, packDesc: c => `${c.toLocaleString('fa-IR')} سکه برای بازی TON Legends`,
+    cmd: 'شروع بازی TON Legends',
+  },
+};
+const tx = lang => (String(lang || '').startsWith('fa') ? TEXT.fa : TEXT.en);
 
 if (!BOT_TOKEN) { console.error('BOT_TOKEN is required'); process.exit(1); }
 
@@ -100,19 +119,17 @@ async function handleUpdate(up) {
     u.pending += pack.coins;
     db.payments[chargeId] = { uid, pack: packId, stars: p.total_amount, at: Date.now() };
     persist();
-    await tg('sendMessage', { chat_id: m.chat.id, text: `✅ پرداخت موفق! ${pack.coins.toLocaleString('fa-IR')} سکه به حسابت اضافه شد. بازی را باز کن تا دریافت کنی.`,
-      reply_markup: { inline_keyboard: [[{ text: '🎮 ورود به بازی', web_app: { url: WEBAPP_URL } }]] } });
+    const L = tx(m.from.language_code);
+    await tg('sendMessage', { chat_id: m.chat.id, text: L.paid(pack.coins),
+      reply_markup: { inline_keyboard: [[{ text: L.open, web_app: { url: WEBAPP_URL } }]] } });
     return;
   }
   if (typeof m.text === 'string' && m.text.startsWith('/start')) {
     const arg = m.text.split(' ')[1] || '';
     if (arg.startsWith('ref_')) applyReferral(userRec(m.from), arg);
     const url = WEBAPP_URL;
-    await tg('sendMessage', {
-      chat_id: m.chat.id,
-      text: '⚔️ به TON Legends خوش آمدی!\n\nقهرمان‌ها را جمع کن، تیمت را بچین و در ۵ دنیا با رئیس‌های قدرتمند بجنگ.\n\nبرای شروع روی دکمه‌ی زیر بزن 👇',
-      reply_markup: { inline_keyboard: [[{ text: '🎮 شروع بازی', web_app: { url } }]] },
-    });
+    const L = tx(m.from.language_code);
+    await tg('sendMessage', { chat_id: m.chat.id, text: L.start, reply_markup: { inline_keyboard: [[{ text: L.play, web_app: { url } }]] } });
   }
 }
 
@@ -194,9 +211,10 @@ const routes = {
   'POST /api/invoice': async (body, u) => {
     const pack = PACKS.find(p => p.id === body.pack);
     if (!pack) throw Object.assign(new Error('unknown pack'), { code: 400 });
+    const L = tx(body.lang);
     const link = await tg('createInvoiceLink', {
-      title: `TON Legends · ${pack.title}`, description: `${pack.coins.toLocaleString('fa-IR')} سکه برای بازی TON Legends`,
-      payload: `${u.id}:${pack.id}`, currency: 'XTR', prices: [{ label: pack.title, amount: pack.stars }],
+      title: `TON Legends · ${L.packTitle(pack.coins)}`, description: L.packDesc(pack.coins),
+      payload: `${u.id}:${pack.id}`, currency: 'XTR', prices: [{ label: L.packTitle(pack.coins), amount: pack.stars }],
     });
     return { link };
   },
@@ -228,8 +246,9 @@ async function setupBot() {
     BOT_USERNAME = me.username;
     console.log('bot @' + BOT_USERNAME);
     await tg('deleteWebhook', {});
-    if (WEBAPP_URL) await tg('setChatMenuButton', { menu_button: { type: 'web_app', text: '🎮 بازی', web_app: { url: WEBAPP_URL } } });
-    await tg('setMyCommands', { commands: [{ command: 'start', description: 'شروع بازی TON Legends' }] });
+    if (WEBAPP_URL) await tg('setChatMenuButton', { menu_button: { type: 'web_app', text: TEXT.en.menu, web_app: { url: WEBAPP_URL } } });
+    await tg('setMyCommands', { commands: [{ command: 'start', description: TEXT.en.cmd }] });
+    await tg('setMyCommands', { commands: [{ command: 'start', description: TEXT.fa.cmd }], language_code: 'fa' });
   } catch (e) { console.error('bot setup failed:', e.message); }
 }
 async function start() {
