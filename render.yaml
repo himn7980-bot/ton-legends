@@ -1,0 +1,16 @@
+# One-click deploy on Render.com (Blueprint). Set BOT_TOKEN and WEBAPP_URL in the dashboard.
+services:
+  - type: web
+    name: ton-legends
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: WEBAPP_URL
+        sync: false
