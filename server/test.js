@@ -107,6 +107,18 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   await sleep(400);
   assert.ok(JSON.parse(fs.readFileSync(dataFile, 'utf8')).payments.ch1, 'persisted to disk');
+  // fusion: limited, numbered editions
+  srv.db.users['111'].profile.owned.notcoin = 8; srv.db.users['111'].profile.owned.pinkbull = 8; srv.db.users['111'].profile.coins += 10000;
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'fuse', id: 'f_golden_bull' } });
+  assert.equal(r.body.result.serial, 1); assert.equal(r.body.profile.owned.f_golden_bull, 1); assert.equal(r.body.profile.serials.f_golden_bull, 1);
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'fuse', id: 'f_golden_bull' } }); assert.equal(r.status, 400, 'one copy per player');
+  r = await post('/api/act', { initData: initData(bob), action: { type: 'fuse', id: 'f_night_plague' } }); assert.equal(r.status, 400, 'parts required');
+  srv.db.mint.f_toxic_sage = 300; Object.assign(srv.db.users['222'].profile.owned, { virus: 9, yoda: 9 }); srv.db.users['222'].profile.coins += 5000;
+  r = await post('/api/act', { initData: initData(bob), action: { type: 'fuse', id: 'f_toxic_sage' } }); assert.equal(r.body.error, 'sold_out');
+  srv.db.users['222'].profile.coins -= 5000;
+  r = await fetch(base + '/api/health').then(x => x.json()); assert.equal(r.mint.f_golden_bull, 1);
+  console.log('   fusion: serial #1 minted, sold-out edition refused');
+
   // ---------- arena ----------
   const coinsOf = async who => (await post('/api/profile', { initData: initData(who) })).body.profile.coins;
   function listen(ticket) {

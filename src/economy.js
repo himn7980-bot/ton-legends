@@ -3,7 +3,7 @@
 (function (root, factory) {
   if (typeof module !== 'undefined') module.exports = factory(require('./engine.js'));
   // In the browser engine.js declares top-level consts (not window properties), so pass them explicitly.
-  else root.ECON = factory({ STAGES_PER_WORLD, STARTERS, HEROES, MAX_LEVEL, TOTAL_STAGES, COIN_BONUS, heroStats, upgradeCost, stageReward, replayStage });
+  else root.ECON = factory({ STAGES_PER_WORLD, STARTERS, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, HERO_BY_ID, MAX_LEVEL, TOTAL_STAGES, COIN_BONUS, heroStats, upgradeCost, stageReward, replayStage });
 })(typeof self !== 'undefined' ? self : this, function (E) {
   const CHESTS = {
     basic: { cost: 300, rates: { C: 55, R: 32, E: 11, L: 2 } },
@@ -25,16 +25,18 @@
   ];
   const DAILY_REWARDS = [200, 300, 400, 500, 700, 900, 'royal'];
   const AFK_CAP_H = 8;
-  const KEYS = ['coins', 'owned', 'team', 'cleared', 'stats', 'daily', 'dq', 'ach', 'afkSince', 'pending'];
+  const HOLO_CHANCE = 0.03; // a chest card has a 3% chance to come out as a shimmering Holo variant (cosmetic)
+  const KEYS = ['coins', 'owned', 'team', 'cleared', 'stats', 'daily', 'dq', 'ach', 'afkSince', 'pending', 'serials', 'holo'];
 
   function newProfile(now) {
     return { coins: 300, owned: Object.fromEntries(E.STARTERS.map(id => [id, 1])), team: [...E.STARTERS], cleared: 0,
       stats: { wins: 0, losses: 0, chests: 0, upgrades: 0, skills: 0, bosses: 0, pvpWins: 0, pvpLosses: 0 },
-      daily: { last: null, streak: 0 }, dq: { date: null, p: {}, c: {} }, ach: {}, afkSince: now, pending: null };
+      daily: { last: null, streak: 0 }, dq: { date: null, p: {}, c: {} }, ach: {}, afkSince: now, pending: null, serials: {}, holo: {} };
   }
   function normalize(p, now) {
     const d = newProfile(now);
-    return { ...d, ...p, stats: { ...d.stats, ...(p.stats || {}) }, daily: { ...d.daily, ...(p.daily || {}) }, dq: { ...d.dq, ...(p.dq || {}) }, ach: { ...(p.ach || {}) } };
+    return { ...d, ...p, stats: { ...d.stats, ...(p.stats || {}) }, daily: { ...d.daily, ...(p.daily || {}) }, dq: { ...d.dq, ...(p.dq || {}) },
+      ach: { ...(p.ach || {}) }, serials: { ...(p.serials || {}) }, holo: { ...(p.holo || {}) } };
   }
   const pickKeys = p => Object.fromEntries(KEYS.map(k => [k, p[k]]));
 
@@ -73,15 +75,17 @@
     const pool = E.HEROES.filter(h => h.rarity === rarity);
     const h = pool[Math.floor(rng() * pool.length)];
     track(p, 'chests', 1, now);
+    const holo = !p.holo[h.id] && rng() < HOLO_CHANCE;
+    if (holo) p.holo[h.id] = true;
     if (!p.owned[h.id]) {
       p.owned[h.id] = 1;
       const added = p.team.length < 5;
       if (added) p.team.push(h.id);
-      return { id: h.id, rarity, outcome: 'new', added };
+      return { id: h.id, rarity, outcome: 'new', added, holo };
     }
-    if (p.owned[h.id] < E.MAX_LEVEL) { p.owned[h.id]++; return { id: h.id, rarity, outcome: 'dupe', level: p.owned[h.id] }; }
+    if (p.owned[h.id] < E.MAX_LEVEL) { p.owned[h.id]++; return { id: h.id, rarity, outcome: 'dupe', level: p.owned[h.id], holo }; }
     const refund = Math.round(c.cost / 2); p.coins += refund;
-    return { id: h.id, rarity, outcome: 'refund', refund };
+    return { id: h.id, rarity, outcome: 'refund', refund, holo };
   }
 
   // Apply one player action. Mutates p and returns a result; throws on invalid actions.
@@ -138,6 +142,20 @@
         const coins = x.r[tier]; p.ach[x.id] = tier + 1; p.coins += coins;
         return { coins };
       }
+      case 'fuse': {
+        const f = E.FUSIONS.find(x => x.id === a.id);
+        if (!f) fail('bad_action');
+        if (p.owned[f.id]) fail('claimed');
+        const rule = E.FUSION_RULES[f.parts.length];
+        if (f.parts.some(id => (p.owned[id] || 0) < rule.minLevel)) fail('need_parts');
+        if (p.coins < rule.cost) fail('no_coins');
+        // Online, the server hands out the next serial number (and refuses when the edition is sold out).
+        const serial = ctx.mint ? ctx.mint(f.id, rule.supply) : null;
+        p.coins -= rule.cost; p.owned[f.id] = 1;
+        if (serial) p.serials[f.id] = serial;
+        track(p, 'fusions', 1, now);
+        return { id: f.id, serial, supply: rule.supply };
+      }
       case 'stageStart': {
         const idx = a.stage | 0;
         if (idx < 0 || idx >= E.TOTAL_STAGES || idx > p.cleared) fail('locked');
@@ -171,7 +189,7 @@
     const p = newProfile(now);
     if (!local || typeof local !== 'object') return p;
     const owned = {};
-    for (const h of E.HEROES) { const lv = local.owned && Number(local.owned[h.id]); if (lv >= 1) owned[h.id] = Math.min(5, Math.floor(lv)); }
+    for (const h of E.BASE_HEROES) { const lv = local.owned && Number(local.owned[h.id]); if (lv >= 1) owned[h.id] = Math.min(5, Math.floor(lv)); }
     for (const id of E.STARTERS) owned[id] = owned[id] || 1;
     p.owned = owned;
     p.team = (Array.isArray(local.team) ? local.team : []).filter((id, i, a) => owned[id] && a.indexOf(id) === i).slice(0, 5);
@@ -181,6 +199,6 @@
     return p;
   }
 
-  return { CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
+  return { HOLO_CHANCE, CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
     dqReward, dailyCanClaim, dailyNext, afkRate, afkAmount, achTier, coinBonus, stageCoins, teamPower, claimable, act, importLocal };
 });

@@ -6,6 +6,8 @@ const RARITY = {
   R: { color: '#3fa2ff', mult: 1.15 },
   E: { color: '#b66bff', mult: 1.3 },
   L: { color: '#ffc531', mult: 1.5 },
+  M: { color: '#ff5ad1', mult: 1 }, // Mythic — duo fusions
+  X: { color: '#46f0ff', mult: 1 }, // Cosmic — trio fusions
 };
 
 const ROLES = {
@@ -37,6 +39,35 @@ const HEROES = [
   { id: 'dog',       name: 'telegram.dog', role: 'support',  rarity: 'C' },
   { id: 'teddy',     name: 'Teddy',        role: 'support',  rarity: 'R' },
 ];
+// Fusion cards: crafted in the Fusion Lab from heroes you own. Their skill fires every part's skill at once.
+// Supply is limited worldwide (server-side), so each copy gets a serial number.
+const FUSIONS = [
+  { id: 'f_golden_bull',     name: 'Golden Bull',      role: 'tank',     parts: ['pinkbull', 'notcoin'] },
+  { id: 'f_sky_hunters',     name: 'Sky Hunters',      role: 'archer',   parts: ['gramcat', 'utya'] },
+  { id: 'f_frost_twins',     name: 'Frost Twins',      role: 'control',  parts: ['pengu', 'utya'] },
+  { id: 'f_arctic_tide',     name: 'Arctic Tide',      role: 'healer',   parts: ['babyshark', 'pengu'] },
+  { id: 'f_crystal_star',    name: 'Crystal Star',     role: 'mage',     parts: ['egor', 'memegram'] },
+  { id: 'f_shadow_paw',      name: 'Shadow Paw',       role: 'assassin', parts: ['noctis', 'paws'] },
+  { id: 'f_toxic_sage',      name: 'Toxic Sage',       role: 'mage',     parts: ['virus', 'yoda'] },
+  { id: 'f_lantern_hug',     name: 'Lantern Hug',      role: 'support',  parts: ['teddy', 'yaya'] },
+  { id: 'f_courier_cat',     name: 'Courier Cat',      role: 'archer',   parts: ['dog', 'gramcat'] },
+  { id: 'f_legend_sentinel', name: 'Legend Sentinel',  role: 'tank',     parts: ['volya', 'notcoin'] },
+  { id: 'f_bull_market',     name: 'Bull Market Boss', role: 'tank',     parts: ['pinkbull', 'teddy'] },
+  { id: 'f_cosmic_sage',     name: 'Cosmic Sage',      role: 'mage',     parts: ['memegram', 'yoda'] },
+  { id: 'f_plague_shadow',   name: 'Plague Shadow',    role: 'assassin', parts: ['noctis', 'virus'] },
+  { id: 'f_lantern_reef',    name: 'Lantern Reef',     role: 'healer',   parts: ['babyshark', 'yaya'] },
+  { id: 'f_crystal_claw',    name: 'Crystal Claw',     role: 'warrior',  parts: ['egor', 'paws'] },
+  { id: 'f_sky_courier',     name: 'Sky Courier',      role: 'warrior',  parts: ['volya', 'dog'] },
+  { id: 'f_ton_treasury',    name: 'TON Treasury',     role: 'tank',     parts: ['notcoin', 'pinkbull', 'teddy'] },
+  { id: 'f_frozen_ocean',    name: 'Frozen Ocean',     role: 'control',  parts: ['babyshark', 'pengu', 'utya'] },
+  { id: 'f_night_plague',    name: 'Night Plague',     role: 'assassin', parts: ['noctis', 'paws', 'virus'] },
+  { id: 'f_crystal_cosmos',  name: 'Crystal Cosmos',   role: 'mage',     parts: ['egor', 'memegram', 'yoda'] },
+  { id: 'f_legend_express',  name: 'Legend Express',   role: 'warrior',  parts: ['volya', 'dog', 'gramcat'] },
+  { id: 'f_lantern_festival', name: 'Lantern Festival', role: 'support', parts: ['yaya', 'teddy', 'babyshark'] },
+].map(f => ({ ...f, fusion: true, rarity: f.parts.length === 3 ? 'X' : 'M' }));
+const FUSION_RULES = { 2: { minLevel: 8, cost: 4000, supply: 300 }, 3: { minLevel: 12, cost: 15000, supply: 30 } };
+const BASE_HEROES = HEROES.slice();
+HEROES.push(...FUSIONS);
 const HERO_BY_ID = Object.fromEntries(HEROES.map(h => [h.id, h]));
 const STARTERS = ['pinkbull', 'egor', 'gramcat', 'memegram', 'babyshark'];
 const MAX_LEVEL = 30;
@@ -55,12 +86,19 @@ const TOTAL_STAGES = WORLDS.length * STAGES_PER_WORLD;
 
 function heroStats(id, level) {
   const h = HERO_BY_ID[id], r = ROLES[h.role];
+  if (h.fusion) {
+    // Fusion level 1 = its parts at the level required to fuse them; then boosted: duo ×1.5 HP / ×1.25 ATK, trio ×1.8 / ×1.4.
+    const offset = (h.parts.length === 3 ? 12 : 8) - 1;
+    const ps = h.parts.map(p => heroStats(p, level + offset)), k = ps.length === 3 ? [1.8, 1.4] : [1.5, 1.25];
+    const avg = key => ps.reduce((a, s) => a + s[key], 0) / ps.length;
+    return { hp: Math.round(avg('hp') * k[0]), atk: Math.round(avg('atk') * k[1]), spd: r.spd };
+  }
   const m = RARITY[h.rarity].mult * (1 + 0.12 * (level - 1));
   return { hp: Math.round(r.hp * m), atk: Math.round(r.atk * m), spd: r.spd };
 }
 
 function upgradeCost(id, level) {
-  const f = { C: 1, R: 1.3, E: 1.7, L: 2.2 }[HERO_BY_ID[id].rarity];
+  const f = { C: 1, R: 1.3, E: 1.7, L: 2.2, M: 3, X: 4 }[HERO_BY_ID[id].rarity];
   return Math.round((40 * level + 8 * level * level) * f);
 }
 
@@ -203,6 +241,7 @@ const SKILLS = {
   dog(B, u) { for (const f of friendsOf(B, u)) if (f !== u) f.energy = Math.min(100, f.energy + 50); },
   teddy(B, u) { const t = lowest(friendsOf(B, u)); heal(B, t, atkOf(B, u) * 3.5); t.shield += atkOf(B, u) * 2; B.events.push({ type: 'shield', uid: t.uid }); },
 };
+for (const f of FUSIONS) SKILLS[f.id] = (B, u) => { for (const p of f.parts) if (foesOf(B, u).length) SKILLS[p](B, u); };
 
 function castSkill(B, u) {
   if (!u || !u.alive || u.energy < 100 || B.over || !foesOf(B, u).length) return false;
@@ -268,6 +307,6 @@ function replayStage(team, levels, idx, seed, inputs) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { RARITY, ROLES, HEROES, HERO_BY_ID, STARTERS, WORLDS, TOTAL_STAGES, STAGES_PER_WORLD, MAX_LEVEL, COIN_BONUS, TICK,
+  module.exports = { RARITY, ROLES, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, HERO_BY_ID, STARTERS, WORLDS, TOTAL_STAGES, STAGES_PER_WORLD, MAX_LEVEL, COIN_BONUS, TICK,
     heroStats, upgradeCost, stageReward, stageEnemies, createBattle, createPvpBattle, step, castSkill, applyInput, replayStage };
 }

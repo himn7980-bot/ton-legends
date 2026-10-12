@@ -115,7 +115,8 @@ function applyLang(lang) {
 function settingsModal() {
   const t = T();
   openModal(`<div class="big center" style="font-size:24px">${t.settings}</div>
-    <div class="setting"><span>${t.language}</span><div class="seg"><button data-lang="en" class="${LANG === 'en' ? 'on' : ''}">English</button><button data-lang="fa" class="${LANG === 'fa' ? 'on' : ''}">فارسی</button></div></div>
+    <div class="setting"><span>${t.language}</span><button class="tag lang-cur" id="s-lang">${LANGS.find(l => l[0] === LANG)[1]} ▾</button></div>
+    <div class="setting"><span>${t.guide}</span><button class="tag" id="s-guide">${t.show}</button></div>
     <div class="setting"><span>${t.sfx}</span><button class="toggle ${S.sfx ? 'on' : ''}" id="t-sfx"></button></div>
     <div class="setting"><span>${t.music}</span><button class="toggle ${S.music ? 'on' : ''}" id="t-music"></button></div>
     <div class="setting"><span>${t.howTo}</span><button class="tag" id="s-help">${t.show}</button></div>
@@ -123,7 +124,8 @@ function settingsModal() {
     <p class="muted center">${t.version} ${Online.tg() ? t.cloudOn : ''}</p>
     <button class="btn wide" id="s-ok">${t.close}</button>`, box => {
     const q = s => box.querySelector(s);
-    box.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => { S.lang = b.dataset.lang; save(); applyLang(S.lang); settingsModal(); });
+    q('#s-lang').onclick = langModal;
+    q('#s-guide').onclick = guideModal;
     q('#t-sfx').onclick = e => { S.sfx = !S.sfx; save(); Sound.set({ sfx: S.sfx }); e.target.classList.toggle('on', S.sfx); };
     q('#t-music').onclick = e => { S.music = !S.music; save(); Sound.set({ music: S.music }); e.target.classList.toggle('on', S.music); };
     q('#s-help').onclick = help;
@@ -133,6 +135,19 @@ function settingsModal() {
     };
     q('#s-ok').onclick = closeModal;
   });
+}
+
+function langModal() {
+  openModal(`<div class="big center" style="font-size:22px">${T().language}</div>
+    <div class="lang-grid">${LANGS.map(([code, name]) => `<button class="lang ${code === LANG ? 'on' : ''}" data-lang="${code}">${name}</button>`).join('')}</div>`, box => {
+    box.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => { S.lang = b.dataset.lang; save(); applyLang(S.lang); settingsModal(); });
+  }, { onBack: settingsModal });
+}
+function guideModal() {
+  const t = T();
+  openModal(`<div class="big center" style="font-size:22px">${t.guideTitle}</div>
+    ${t.guideSections.map(([h, p]) => `<div class="guide-sec"><div class="t">${h}</div><p class="muted">${p}</p></div>`).join('')}
+    <button class="btn wide" id="g-ok">${t.close}</button>`, box => box.querySelector('#g-ok').onclick = closeModal);
 }
 
 // ---------- boot ----------
@@ -149,6 +164,9 @@ window.initTelegram = async () => {
   if (!w) return Online.markReady();
   try { w.ready(); w.expand(); w.setHeaderColor('#0a0f24'); w.setBackgroundColor('#0a0f24'); if (w.disableVerticalSwipes) w.disableVerticalSwipes(); } catch (e) {}
   try { w.BackButton.onClick(goBack); } catch (e) {}
+  // First launch: speak the player's Telegram language until they pick one.
+  const u = Online.user();
+  if (!S.lang && u && u.language_code && detectLang(u.language_code) !== LANG) { setLang(detectLang(u.language_code)); showCoins(); refresh(); }
   syncNav();
   await Online.connect();
   if (Online.state.server) {
@@ -178,7 +196,7 @@ window.initTelegram = async () => {
 
 // Called at the end of arena.js, once every screen's code is loaded.
 function boot() {
-  setLang(S.lang || 'en');
+  setLang(S.lang || detectLang());
   Sound.set({ sfx: S.sfx, music: S.music });
   Sound.music('menu');
   showCoins();

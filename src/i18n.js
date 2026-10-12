@@ -2,7 +2,7 @@
 const I18N = {
   en: {
     dir: 'ltr', locale: 'en-US',
-    rarity: { C: 'Common', R: 'Rare', E: 'Epic', L: 'Legendary' },
+    rarity: { C: 'Common', R: 'Rare', E: 'Epic', L: 'Legendary', M: 'Mythic', X: 'Cosmic' },
     role: { tank: 'Tank', warrior: 'Warrior', assassin: 'Assassin', archer: 'Archer', mage: 'Mage', control: 'Control', healer: 'Healer', support: 'Support' },
     world: { ocean: 'Deep Ocean', cave: 'Crystal Cave', city: 'Neon City', temple: 'Lantern Temple', lab: 'Green Lab' },
     hero: {
@@ -73,15 +73,32 @@ const I18N = {
       pvpLeaveNote: 'Your cards will keep fighting on auto and the result still counts.', arenaWins: 'Arena wins',
       err: { no_coins: 'Not enough coins', busy: 'You already have a duel in progress', room_gone: 'This duel is no longer available', own_room: "That's your own invite",
         bad_stake: 'Invalid stake', bad_team: 'Put at least one hero in your team', locked: 'This stage is locked', claimed: 'Already claimed',
-        not_ready: 'Not ready yet', cannot_upgrade: 'Cannot upgrade', network: 'Connection problem — please try again', no_profile: 'Still connecting — try again' },
+        not_ready: 'Not ready yet', cannot_upgrade: 'Cannot upgrade', sold_out: 'This edition is sold out', need_parts: 'Level up the parts first', network: 'Connection problem — please try again', no_profile: 'Still connecting — try again' },
+      labTitle: '🧪 Fusion Lab', openLab: '🧪 Fusion Lab',
+      labNote: "Fuse heroes you own into a Fusion card. Its special skill fires ALL of its parts' skills at once. Every fusion is a numbered limited edition — when the worldwide supply runs out, nobody can craft it again.",
+      duo: '💗 Duo fusions · Mythic', trio: '💎 Trio fusions · Cosmic', needs: l => `Parts at level ${l}+`, fuse: c => `🧪 Fuse · 🪙 ${c}`,
+      left: (a, b) => `${a} / ${b} left`, soldOut: 'Sold out', ownedTag: 'Owned', fused: 'Fusion complete!', serialOf: (s, m) => `Serial #${s} of ${m}`,
+      fusionTitle: names => `Fusion of ${names}`, fusionDesc: "Fires every part's skill at once:",
+      holo: 'HOLO', holoNew: '🌈 HOLO card! An ultra-rare shimmering variant.', holoCount: (a, b) => `🌈 Holo ${a}/${b}`,
+      guide: '📖 Game guide', guideTitle: '📖 How TON Legends works', readGuide: '📖 Read the full guide',
+      guideSections: [
+        ['⚔️ Battles', 'Your 5 cards fight automatically. Each card fills its blue energy bar by attacking and taking hits; when it glows ⚡, tap it to fire its special skill. Turn on Auto to let cards fire skills by themselves.'],
+        ['🛡️ Roles', 'Tanks absorb hits, Warriors and Assassins hit hard, Archers and Mages damage several enemies, Healers and Supports keep the team alive. A balanced team beats five attackers.'],
+        ['💎 Rarity', 'Common, Rare, Epic and Legendary cards drop from chests. Mythic (duo) and Cosmic (trio) cards can only be crafted in the Fusion Lab. 3% of chest cards come out as shimmering Holo variants — pure bragging rights.'],
+        ['🧪 Fusion Lab', "Level up two or three heroes and fuse them into a Fusion card. Its skill fires all of its parts' skills together. Each fusion is a numbered limited edition: 300 copies of each duo and only 30 of each trio — worldwide."],
+        ['🥊 Arena', 'Duel real players live. Both put the same coin stake into the pot; the winner takes it all and a draw refunds both. If you leave mid-duel, your cards keep fighting on auto.'],
+        ['🪙 Coins & Stars', 'Earn coins from stages (×2 on first clear), daily rewards, quests, achievements and the idle chest. Spend them on upgrades, chests and fusions. Coin packs can also be bought with Telegram Stars; coins cannot be cashed out.'],
+        ['📅 Every day', 'Claim the 7-day login reward (day 7 = a free Royal Chest), finish the 4 daily quests and collect the idle chest — your heroes earn coins even while you are away.'],
+        ['🛡️ Fair play', 'Inside Telegram your coins and cards live on the game server. Every win is re-checked by replaying the battle, so nobody can cheat their way to the top.'],
+      ],
       leaveTitle: 'Leave the battle?', leaveNote: "You'll lose this fight's progress.", leave: 'Leave', stay: 'Keep fighting',
       settings: '⚙️ Settings', sfx: '🔊 Sound effects', music: '🎵 Music', language: '🌐 Language', howTo: '❓ How to play', show: 'Show',
-      reset: '🗑️ Start over (erase all progress)', erase: 'Erase', sure: 'Sure? Tap again', version: 'TON Legends · v1.1', cloudOn: '· Telegram cloud save on ☁️', close: 'Close',
+      reset: '🗑️ Start over (erase all progress)', erase: 'Erase', sure: 'Sure? Tap again', version: 'TON Legends · v1.4', cloudOn: '· Telegram cloud save on ☁️', close: 'Close',
     },
   },
   fa: {
     dir: 'rtl', locale: 'fa-IR',
-    rarity: { C: 'معمولی', R: 'کمیاب', E: 'حماسی', L: 'افسانه‌ای' },
+    rarity: { C: 'معمولی', R: 'کمیاب', E: 'حماسی', L: 'افسانه‌ای', M: 'اسطوره‌ای', X: 'کیهانی' },
     role: { tank: 'تانک', warrior: 'جنگجو', assassin: 'قاتل', archer: 'کماندار', mage: 'جادوگر', control: 'کنترل', healer: 'درمانگر', support: 'پشتیبان' },
     world: { ocean: 'اقیانوس عمیق', cave: 'غار کریستال', city: 'شهر نئونی', temple: 'معبد فانوس', lab: 'آزمایشگاه سبز' },
     hero: {
@@ -152,22 +169,66 @@ const I18N = {
       pvpLeaveNote: 'کارت‌هایت خودکار به جنگ ادامه می‌دهند و نتیجه حساب می‌شود.', arenaWins: 'برد آرنا',
       err: { no_coins: 'سکه‌ی کافی نداری', busy: 'یک دوئل در جریان داری', room_gone: 'این دوئل دیگر در دسترس نیست', own_room: 'این دعوت خودت است',
         bad_stake: 'مبلغ نامعتبر', bad_team: 'حداقل یک قهرمان در تیمت بگذار', locked: 'این مرحله قفل است', claimed: 'قبلاً دریافت شده',
-        not_ready: 'هنوز آماده نیست', cannot_upgrade: 'ارتقا ممکن نیست', network: 'مشکل اتصال — دوباره امتحان کن', no_profile: 'در حال اتصال — دوباره امتحان کن' },
+        not_ready: 'هنوز آماده نیست', cannot_upgrade: 'ارتقا ممکن نیست', sold_out: 'این نسخه تمام شده', need_parts: 'اول اجزا را ارتقا بده', network: 'مشکل اتصال — دوباره امتحان کن', no_profile: 'در حال اتصال — دوباره امتحان کن' },
+      labTitle: '🧪 آزمایشگاه ترکیب', openLab: '🧪 آزمایشگاه ترکیب',
+      labNote: 'قهرمان‌هایی را که داری با هم ترکیب کن تا یک کارت ترکیبی بسازی. مهارت ویژه‌ی آن، مهارت همه‌ی اجزایش را با هم اجرا می‌کند. هر کارت ترکیبی نسخه‌ی محدود و شماره‌دار است — وقتی تعدادش در کل دنیا تمام شود، دیگر هیچ‌کس نمی‌تواند آن را بسازد.',
+      duo: '💗 ترکیب دوتایی · اسطوره‌ای', trio: '💎 ترکیب سه‌تایی · کیهانی', needs: l => `اجزا در سطح ${l} یا بالاتر`, fuse: c => `🧪 ترکیب · 🪙 ${c}`,
+      left: (a, b) => `${a} از ${b} باقی مانده`, soldOut: 'تمام شد', ownedTag: 'داری', fused: 'ترکیب انجام شد!', serialOf: (s, m) => `شماره‌ی ${s} از ${m}`,
+      fusionTitle: names => `ترکیب ${names}`, fusionDesc: 'مهارت همه‌ی اجزا را با هم اجرا می‌کند:',
+      holo: 'هولو', holoNew: '🌈 کارت هولو! یک نسخه‌ی درخشان و فوق‌العاده کمیاب.', holoCount: (a, b) => `🌈 هولو ${a}/${b}`,
+      guide: '📖 راهنمای بازی', guideTitle: '📖 TON Legends چطور کار می‌کند', readGuide: '📖 خواندن راهنمای کامل',
+      guideSections: [
+        ['⚔️ نبرد', 'پنج کارت تو خودکار می‌جنگند. هر کارت با حمله کردن و ضربه خوردن نوار آبی انرژی‌اش را پر می‌کند؛ وقتی درخشید ⚡ رویش بزن تا مهارت ویژه‌اش اجرا شود. با روشن کردن «خودکار»، کارت‌ها خودشان مهارت می‌زنند.'],
+        ['🛡️ نقش‌ها', 'تانک‌ها ضربه‌ها را جذب می‌کنند، جنگجو و قاتل محکم می‌زنند، کماندار و جادوگر به چند دشمن آسیب می‌زنند، درمانگر و پشتیبان تیم را زنده نگه می‌دارند. تیم متعادل از پنج مهاجم قوی‌تر است.'],
+        ['💎 کمیابی', 'کارت‌های معمولی، کمیاب، حماسی و افسانه‌ای از صندوق درمی‌آیند. کارت‌های اسطوره‌ای (دوتایی) و کیهانی (سه‌تایی) فقط در آزمایشگاه ترکیب ساخته می‌شوند. ۳٪ کارت‌های صندوق به‌صورت «هولو»ی درخشان درمی‌آیند — فقط برای پز دادن!'],
+        ['🧪 آزمایشگاه ترکیب', 'دو یا سه قهرمان را ارتقا بده و ترکیبشان کن. مهارت کارت ترکیبی، مهارت همه‌ی اجزایش را با هم اجرا می‌کند. هر ترکیب نسخه‌ی محدود و شماره‌دار است: از هر ترکیب دوتایی ۳۰۰ عدد و از هر سه‌تایی فقط ۳۰ عدد در کل دنیا.'],
+        ['🥊 آرنا', 'به‌صورت زنده با بازیکن‌های واقعی دوئل کن. هر دو مبلغ یکسانی وسط می‌گذارید؛ برنده همه را برمی‌دارد و در مساوی سکه‌ها برمی‌گردد. اگر وسط دوئل خارج شوی، کارت‌هایت خودکار می‌جنگند.'],
+        ['🪙 سکه و استارز', 'از مرحله‌ها (اولین برد ×۲)، جایزه‌ی روزانه، ماموریت‌ها، دستاوردها و صندوق استراحت سکه بگیر و خرج ارتقا، صندوق و ترکیب کن. بسته‌های سکه را با Telegram Stars هم می‌شود خرید؛ سکه‌ها قابل نقد کردن نیستند.'],
+        ['📅 هر روز', 'جایزه‌ی ورود ۷ روزه را بگیر (روز هفتم = صندوق سلطنتی رایگان)، ۴ ماموریت روزانه را تمام کن و صندوق استراحت را جمع کن — قهرمان‌هایت حتی وقتی نیستی سکه جمع می‌کنند.'],
+        ['🛡️ بازی منصفانه', 'داخل تلگرام سکه‌ها و کارت‌هایت روی سرور بازی است. هر برد با شبیه‌سازی دوباره‌ی نبرد بررسی می‌شود، پس هیچ‌کس نمی‌تواند با تقلب بالا برود.'],
+      ],
       leaveTitle: 'از نبرد خارج می‌شوی؟', leaveNote: 'پیشرفت این نبرد از دست می‌رود.', leave: 'خروج', stay: 'ادامه‌ی نبرد',
       settings: '⚙️ تنظیمات', sfx: '🔊 صداها', music: '🎵 موسیقی', language: '🌐 زبان', howTo: '❓ راهنمای بازی', show: 'نمایش',
-      reset: '🗑️ شروع دوباره (پاک شدن همه‌ی پیشرفت)', erase: 'پاک کن', sure: 'مطمئنی؟ دوباره بزن', version: 'TON Legends · نسخه‌ی ۱.۱', cloudOn: '· ذخیره‌ی ابری تلگرام فعال ☁️', close: 'بستن',
+      reset: '🗑️ شروع دوباره (پاک شدن همه‌ی پیشرفت)', erase: 'پاک کن', sure: 'مطمئنی؟ دوباره بزن', version: 'TON Legends · نسخه‌ی ۱.۴', cloudOn: '· ذخیره‌ی ابری تلگرام فعال ☁️', close: 'بستن',
     },
   },
 };
 
+// Languages: English is the base; other languages (i18n-world.js) only need to translate what they can —
+// anything missing falls back to English.
+const LANGS = [['en', 'English'], ['fa', 'فارسی'], ['ru', 'Русский'], ['ar', 'العربية'], ['tr', 'Türkçe'], ['es', 'Español'], ['pt', 'Português'],
+  ['fr', 'Français'], ['de', 'Deutsch'], ['id', 'Bahasa Indonesia'], ['uk', 'Українська'], ['hi', 'हिन्दी'], ['zh', '中文'], ['uz', 'Oʻzbekcha']];
+function mergeLang(base, over) {
+  const out = { ...base };
+  for (const [k, v] of Object.entries(over || {})) {
+    out[k] = v && typeof v === 'object' && !Array.isArray(v) && base[k] && typeof base[k] === 'object' && !Array.isArray(base[k]) ? mergeLang(base[k], v) : v;
+  }
+  return out;
+}
+const RESOLVED = {};
+function langPack(code) { return RESOLVED[code] || (RESOLVED[code] = code === 'en' ? I18N.en : mergeLang(I18N.en, I18N[code])); }
+function detectLang(code) {
+  const c = String(code || (typeof navigator !== 'undefined' && navigator.language) || 'en').toLowerCase().slice(0, 2);
+  return I18N[c] ? c : 'en';
+}
+
 let LANG = 'en';
-const L = () => I18N[LANG];
-const T = () => I18N[LANG].t;
-const heroText = id => { const [title, skill, desc] = I18N[LANG].hero[id]; return { title, skill, desc }; };
-const worldName = w => I18N[LANG].world[WORLDS[w].key];
+const L = () => langPack(LANG);
+const T = () => langPack(LANG).t;
+const heroText = id => {
+  const h = HERO_BY_ID[id];
+  if (h && h.fusion) {
+    const t = T(), parts = h.parts.map(p => heroText(p));
+    return { title: t.fusionTitle(h.parts.map(p => HERO_BY_ID[p].name).join(' × ')), skill: parts.map(p => p.skill).join(' + '),
+      desc: `${t.fusionDesc} ${parts.map(p => p.skill).join(' · ')}` };
+  }
+  const [title, skill, desc] = L().hero[id];
+  return { title, skill, desc };
+};
+const worldName = w => L().world[WORLDS[w].key];
 function setLang(lang) {
   LANG = I18N[lang] ? lang : 'en';
   document.documentElement.lang = LANG;
-  document.documentElement.dir = I18N[LANG].dir;
+  document.documentElement.dir = L().dir || 'ltr';
   document.querySelectorAll('#nav [data-tab]').forEach(b => { b.lastChild.textContent = T()[b.dataset.tab]; });
 }

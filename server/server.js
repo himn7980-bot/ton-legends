@@ -55,7 +55,28 @@ const TEXT = {
       : e.result === 'lose' ? `💔 دوئل آرنا را به ${e.opp} باختی (-${e.stake.toLocaleString('fa-IR')} سکه).` : `🤝 دوئل آرنا با ${e.opp} مساوی شد و سکه‌هایت برگشت.`,
   },
 };
-const tx = lang => (String(lang || '').startsWith('fa') ? TEXT.fa : TEXT.en);
+// Short bot texts for the other game languages (fall back to English for anything missing).
+const MORE = {
+  ru: ['⚔️ Добро пожаловать в TON Legends!\n\nСобирай карты героев, собирай команду, сражайся с боссами в 5 мирах и бросай вызов игрокам на арене.\n\nНажми кнопку ниже 👇', '🎮 Играть', 'Играть в TON Legends', 'монет', 'Оплата прошла! Монеты добавлены', 'Дуэль на арене против', 'победа', 'поражение', 'ничья — ставка возвращена'],
+  ar: ['⚔️ مرحبًا بك في TON Legends!\n\nاجمع بطاقات الأبطال، كوّن فريقك، قاتل الزعماء في 5 عوالم وتحدَّ اللاعبين في الساحة.\n\nاضغط الزر بالأسفل 👇', '🎮 العب', 'العب TON Legends', 'عملة', 'تم الدفع! أُضيفت العملات', 'مبارزة الساحة ضد', 'فوز', 'خسارة', 'تعادل — أُعيد الرهان'],
+  tr: ['⚔️ TON Legends’a hoş geldin!\n\nKahraman kartları topla, takımını kur, 5 dünyada boss’larla savaş ve arenada oyunculara meydan oku.\n\nAşağıdaki butona dokun 👇', '🎮 Oyna', 'TON Legends oyna', 'coin', 'Ödeme başarılı! Coin’ler eklendi', 'Arena düellosu, rakip:', 'galibiyet', 'yenilgi', 'berabere — bahis iade edildi'],
+  es: ['⚔️ ¡Bienvenido a TON Legends!\n\nColecciona cartas de héroes, arma tu equipo, vence a los jefes de 5 mundos y reta a jugadores en la arena.\n\nToca el botón 👇', '🎮 Jugar', 'Jugar a TON Legends', 'monedas', '¡Pago completado! Monedas añadidas', 'Duelo de arena contra', 'victoria', 'derrota', 'empate — apuesta devuelta'],
+  pt: ['⚔️ Bem-vindo ao TON Legends!\n\nColecione cartas de heróis, monte seu time, vença chefes em 5 mundos e desafie jogadores na arena.\n\nToque no botão 👇', '🎮 Jogar', 'Jogar TON Legends', 'moedas', 'Pagamento concluído! Moedas adicionadas', 'Duelo na arena contra', 'vitória', 'derrota', 'empate — aposta devolvida'],
+  fr: ['⚔️ Bienvenue dans TON Legends !\n\nCollectionne des cartes de héros, forme ton équipe, bats les boss de 5 mondes et défie des joueurs dans l’arène.\n\nTouche le bouton 👇', '🎮 Jouer', 'Jouer à TON Legends', 'pièces', 'Paiement réussi ! Pièces ajoutées', 'Duel d’arène contre', 'victoire', 'défaite', 'égalité — mise rendue'],
+  de: ['⚔️ Willkommen bei TON Legends!\n\nSammle Heldenkarten, stell dein Team zusammen, besiege Bosse in 5 Welten und fordere Spieler in der Arena heraus.\n\nTippe auf den Button 👇', '🎮 Spielen', 'TON Legends spielen', 'Münzen', 'Zahlung erfolgreich! Münzen gutgeschrieben', 'Arenaduell gegen', 'Sieg', 'Niederlage', 'Unentschieden — Einsatz zurück'],
+  id: ['⚔️ Selamat datang di TON Legends!\n\nKoleksi kartu pahlawan, susun timmu, kalahkan bos di 5 dunia, dan tantang pemain di arena.\n\nKetuk tombol di bawah 👇', '🎮 Main', 'Main TON Legends', 'koin', 'Pembayaran berhasil! Koin ditambahkan', 'Duel arena melawan', 'menang', 'kalah', 'seri — taruhan dikembalikan'],
+  uk: ['⚔️ Ласкаво просимо до TON Legends!\n\nЗбирай карти героїв, створюй команду, перемагай босів у 5 світах і кидай виклик гравцям на арені.\n\nНатисни кнопку нижче 👇', '🎮 Грати', 'Грати в TON Legends', 'монет', 'Оплата пройшла! Монети додано', 'Дуель на арені проти', 'перемога', 'поразка', 'нічия — ставку повернено'],
+  hi: ['⚔️ TON Legends में स्वागत है!\n\nहीरो कार्ड जमा करो, टीम बनाओ, 5 दुनिया के बॉस हराओ और अखाड़े में खिलाड़ियों को चुनौती दो।\n\nनीचे बटन दबाओ 👇', '🎮 खेलें', 'TON Legends खेलें', 'सिक्के', 'भुगतान सफल! सिक्के जोड़ दिए गए', 'अखाड़ा मुक़ाबला बनाम', 'जीत', 'हार', 'बराबरी — दाँव वापस'],
+  zh: ['⚔️ 欢迎来到 TON Legends！\n\n收集英雄卡，组建队伍，挑战5个世界的首领，并在竞技场与玩家对决。\n\n点击下方按钮 👇', '🎮 开始游戏', '开始 TON Legends', '金币', '支付成功！金币已到账', '竞技场对决 vs', '胜利', '失败', '平局——押注已退还'],
+  uz: ['⚔️ TON Legends’ga xush kelibsan!\n\nQahramon kartalarini yigʻ, jamoa tuz, 5 dunyoda bosslarni yeng va arenada oʻyinchilarni duelga chaqir.\n\nPastdagi tugmani bos 👇', '🎮 Oʻynash', 'TON Legends oʻynash', 'tanga', 'Toʻlov bajarildi! Tangalar qoʻshildi', 'Arena dueli, raqib:', 'gʻalaba', 'magʻlubiyat', 'durang — tikish qaytarildi'],
+};
+for (const [code, [start, play, cmd, coins, paid, duel, win, lose, draw]] of Object.entries(MORE)) {
+  const fmt = n => n.toLocaleString('en-US');
+  TEXT[code] = { ...TEXT.en, start, play, open: play, menu: play, cmd,
+    paid: c => `✅ ${paid}: +${fmt(c)} ${coins}.`, packTitle: c => `${fmt(c)} ${coins}`, packDesc: c => `TON Legends · ${fmt(c)} ${coins}`,
+    arena: e => `${e.result === 'win' ? '🏆' : e.result === 'lose' ? '💔' : '🤝'} ${duel} ${e.opp}: ${e.result === 'win' ? `${win} +${fmt(e.pot)} ${coins}` : e.result === 'lose' ? `${lose} -${fmt(e.stake)} ${coins}` : draw}` };
+}
+const tx = lang => TEXT[String(lang || '').toLowerCase().slice(0, 2)] || TEXT.en;
 
 if (!BOT_TOKEN) { console.error('BOT_TOKEN is required'); process.exit(1); }
 
@@ -88,6 +109,14 @@ function credit(u, coins) {
   u.gift = (u.gift || 0) + coins;
 }
 const rng = () => crypto.randomInt(2 ** 32) / 2 ** 32;
+// Limited editions: each fusion card has a worldwide supply; copies are numbered #1…#supply.
+function mint(id, supply) {
+  db.mint = db.mint || {};
+  const next = (db.mint[id] || 0) + 1;
+  if (next > supply) throw Object.assign(new Error('sold_out'), { code: 400 });
+  db.mint[id] = next;
+  return next;
+}
 const profileOut = u => ECON.pickKeys(u.profile);
 
 // ---------- Telegram WebApp initData validation ----------
@@ -235,7 +264,7 @@ const arena = createArena({ db, persist, notify: (uid, end) => {
 } });
 
 const routes = {
-  'GET /api/health': () => ({ ok: true, bot: BOT_USERNAME, packs: PACKS }),
+  'GET /api/health': () => ({ ok: true, bot: BOT_USERNAME, packs: PACKS, mint: db.mint || {} }),
   'GET /api/status': () => ({ ...diag, bot: BOT_USERNAME, users: Object.keys(db.users).length, node: process.version }),
   'POST /api/hello': (body, u) => { applyReferral(u, body.startParam); return { ok: true }; },
   // The server keeps each Telegram player's coins and heroes. First visit imports the offline save (clamped).
@@ -245,7 +274,7 @@ const routes = {
   },
   'POST /api/act': (body, u) => {
     if (!u.profile) throw Object.assign(new Error('no_profile'), { code: 400 });
-    const result = ECON.act(u.profile, body.action, { now: Date.now(), rng });
+    const result = ECON.act(u.profile, body.action, { now: Date.now(), rng, mint });
     return { profile: profileOut(u), result };
   },
   'POST /api/score': () => ({ ok: true }), // kept for older clients; leaderboard now uses server profiles
@@ -294,7 +323,7 @@ async function setupBot() {
     await tg('deleteWebhook', {});
     if (WEBAPP_URL) await tg('setChatMenuButton', { menu_button: { type: 'web_app', text: TEXT.en.menu, web_app: { url: WEBAPP_URL } } });
     await tg('setMyCommands', { commands: [{ command: 'start', description: TEXT.en.cmd }] });
-    await tg('setMyCommands', { commands: [{ command: 'start', description: TEXT.fa.cmd }], language_code: 'fa' });
+    for (const code of Object.keys(TEXT).filter(c => c !== 'en')) await tg('setMyCommands', { commands: [{ command: 'start', description: TEXT[code].cmd }], language_code: code });
   } catch (e) { logErr('setupError', e); }
 }
 async function start() {

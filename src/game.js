@@ -102,8 +102,8 @@ window.addEventListener('popstate', () => {
 // ---------- tabs ----------
 function show(tab) {
   S.tab = tab; save();
-  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  ({ map: renderMap, arena: renderArena, heroes: renderHeroes, chest: renderChest, quests: renderQuests, rank: renderRank })[tab]();
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === (tab === 'lab' ? 'heroes' : tab)));
+  ({ map: renderMap, arena: renderArena, lab: renderLab, heroes: renderHeroes, chest: renderChest, quests: renderQuests, rank: renderRank })[tab]();
   updateBadge();
   window.scrollTo(0, 0);
   syncNav();
@@ -156,23 +156,27 @@ function renderMap() {
 
 // ---------- heroes ----------
 function renderHeroes() {
-  const t = T(), owned = HEROES.filter(h => S.owned[h.id]).length;
-  const order = [...HEROES].sort((a, b) => (!!S.owned[b.id] - !!S.owned[a.id]) || ('LERC'.indexOf(a.rarity) - 'LERC'.indexOf(b.rarity)));
+  const t = T(), owned = BASE_HEROES.filter(h => S.owned[h.id]).length, holos = BASE_HEROES.filter(h => S.holo[h.id]).length;
+  // Collection: all base heroes + the fusion cards you crafted (the rest live in the Fusion Lab).
+  const order = HEROES.filter(h => !h.fusion || S.owned[h.id])
+    .sort((a, b) => (!!S.owned[b.id] - !!S.owned[a.id]) || ('XMLERC'.indexOf(a.rarity) - 'XMLERC'.indexOf(b.rarity)));
   $('#screen').innerHTML = `
     <div class="h2">${t.battleTeam} <span class="muted">(${n(S.team.length)}/${n(5)} · ${t.power} ${n(teamPower(S.team))})</span></div>
     <div class="team-slots">${[0, 1, 2, 3, 4].map(i => `<button class="slot" data-id="${S.team[i] || ''}">${S.team[i] ? `<img src="${img(S.team[i])}" alt="">` : '+'}</button>`).join('')}</div>
-    <div class="h2">${t.collection} <span class="muted">(${n(owned)}/${n(HEROES.length)})</span></div>
+    <button class="btn wide lab-btn" id="to-lab">${t.openLab}</button>
+    <div class="h2">${t.collection} <span class="muted">(${n(owned)}/${n(BASE_HEROES.length)}) · ${t.holoCount(n(holos), n(BASE_HEROES.length))}</span></div>
     <div class="grid">${order.map(cardHtml).join('')}</div>`;
   document.querySelectorAll('.card, .slot').forEach(c => c.onclick = () => c.dataset.id && heroModal(c.dataset.id));
+  $('#to-lab').onclick = () => show('lab');
 }
 function cardHtml(h) {
   const t = T(), lv = S.owned[h.id], rc = RARITY[h.rarity].color;
   const canUp = lv && lv < MAX_LEVEL && S.coins >= upgradeCost(h.id, lv);
-  return `<button class="card ${lv ? '' : 'locked'}" data-id="${h.id}" style="--rc:${rc}">
+  return `<button class="card ${lv ? '' : 'locked'} ${S.holo[h.id] ? 'holo' : ''}" data-id="${h.id}" style="--rc:${rc}">
     <img src="${img(h.id)}" alt="${h.name}" loading="lazy">
     ${lv ? `<span class="lv">${t.level(n(lv))}</span>` : '<span class="lock">🔒</span>'}
     <span class="rl">${ROLES[h.role].icon}</span>
-    ${canUp ? '<span class="up">⬆️</span>' : ''}
+    ${canUp ? '<span class="up">⬆️</span>' : ''}${S.serials[h.id] ? `<span class="serial">#${n(S.serials[h.id])}</span>` : ''}
     <div class="info">${S.team.includes(h.id) ? `<span class="in-team">${t.inTeam}</span>` : ''}<div class="nm">${h.name}</div><div class="muted" style="font-size:11px">${heroText(h.id).title}</div></div>
   </button>`;
 }
@@ -181,7 +185,8 @@ function heroModal(id) {
   const s = heroStats(id, lv || 1), cost = lv ? upgradeCost(id, lv) : 0, inTeam = S.team.includes(id);
   const next = lv && lv < MAX_LEVEL ? heroStats(id, lv + 1) : null;
   openModal(`
-    <img class="poster" src="${img(id)}" style="--rc:${R.color}" alt="">
+    <div class="poster-wrap ${S.holo[id] ? 'holo' : ''}" style="--rc:${R.color}"><img class="poster" src="${img(id)}" alt="">
+      ${S.holo[id] ? `<span class="holo-tag">${t.holo}</span>` : ''}${S.serials[id] ? `<span class="serial big-serial">#${n(S.serials[id])}/${n(FUSION_RULES[h.parts.length].supply)}</span>` : ''}</div>
     <div class="row" style="margin-top:12px"><div><div class="big latin" style="font-size:26px">${h.name}</div><div class="muted">${ht.title}</div></div>
       <div class="end"><span class="tag" style="color:${R.color}">${L().rarity[h.rarity]}</span><div class="muted" style="margin-top:6px">${ROLES[h.role].icon} ${L().role[h.role]}</div></div></div>
     <div class="stats">
@@ -193,12 +198,14 @@ function heroModal(id) {
     ${lv ? `<div class="btns">
       <button class="btn gold" id="up" ${!next || S.coins < cost ? 'disabled' : ''}>${next ? t.upgrade(n(cost)) : t.maxLevel}</button>
       <button class="btn ${inTeam ? 'ghost' : ''}" id="tm" ${!inTeam && S.team.length >= 5 ? 'disabled' : ''}>${inTeam ? t.leaveTeam : S.team.length >= 5 ? t.teamFull : t.joinTeam}</button>
-    </div>` : `<p class="center muted">${t.getFromChest}</p><button class="btn wide" id="tochest">${t.goChest}</button>`}
+    </div>` : h.fusion ? `<p class="center muted">${t.needs(n(FUSION_RULES[h.parts.length].minLevel))}</p><button class="btn wide" id="tolab">${t.openLab}</button>`
+      : `<p class="center muted">${t.getFromChest}</p><button class="btn wide" id="tochest">${t.goChest}</button>`}
   `, box => {
     const up = box.querySelector('#up'), tm = box.querySelector('#tm'), tc = box.querySelector('#tochest');
     if (up) up.onclick = async () => { up.disabled = true; if (await tryAct({ type: 'upgrade', id })) { haptic('medium'); Sound.play('heal'); refresh(); heroModal(id); } else up.disabled = false; };
     if (tm) tm.onclick = async () => { const team = inTeam ? S.team.filter(x => x !== id) : [...S.team, id]; if (await tryAct({ type: 'team', team })) { closeModal(); refresh(); } };
     if (tc) tc.onclick = () => { closeModal(); show('chest'); };
+    const tl = box.querySelector('#tolab'); if (tl) tl.onclick = () => { closeModal(); show('lab'); };
   });
 }
 
@@ -245,7 +252,8 @@ function chestReveal(c, r) {
   haptic('heavy'); Sound.play('chest'); if (rarity === 'L' || rarity === 'E') Sound.play('legend');
   openModal(`<div class="center">
     <div class="tag" style="color:${R.color}">${L().rarity[rarity]}</div>
-    <div class="reveal" style="--rc:${R.color}"><div class="flip"><img src="${img(h.id)}" alt=""></div></div>
+    <div class="reveal" style="--rc:${R.color}"><div class="flip ${r.holo ? 'holo' : ''}"><img src="${img(h.id)}" alt=""></div></div>
+    ${r.holo ? `<p class="holo-msg">${t.holoNew}</p>` : ''}
     <div class="big latin" style="font-size:26px">${h.name}</div>
     <div class="muted">${heroText(h.id).title} · ${ROLES[h.role].icon} ${L().role[h.role]}</div>
     <p style="font-weight:700">${msg}</p>
@@ -255,6 +263,48 @@ function chestReveal(c, r) {
     box.querySelector('#again').onclick = () => openChest(c);
   });
   if (S.tab === 'chest') renderChest();
+}
+
+// ---------- fusion lab ----------
+function renderLab() {
+  const t = T(), mint = Online.state.mint || {}, online = !!Online.state.profile;
+  const card = f => {
+    const rule = FUSION_RULES[f.parts.length], owned = !!S.owned[f.id];
+    const left = rule.supply - (mint[f.id] || 0), soldOut = online && left <= 0 && !owned;
+    const ready = f.parts.every(p => (S.owned[p] || 0) >= rule.minLevel);
+    const can = !owned && !soldOut && ready && S.coins >= rule.cost;
+    return `<div class="fcard ${owned ? 'owned' : ''}" style="--rc:${RARITY[f.rarity].color}">
+      <button class="fimg" data-hero="${f.id}"><img src="${img(f.id)}" alt="" loading="lazy">${owned && S.serials[f.id] ? `<span class="serial">#${n(S.serials[f.id])}</span>` : ''}</button>
+      <div class="fname latin">${f.name}</div>
+      <div class="fparts">${f.parts.map(p => { const lv = S.owned[p] || 0; return `<span class="fp ${lv >= rule.minLevel ? 'ok' : ''}"><img src="${img(p)}" alt=""><b>${lv ? n(lv) : '🔒'}</b></span>`; }).join('')}</div>
+      <div class="muted fneed">${t.needs(n(rule.minLevel))}</div>
+      ${online ? `<div class="fsupply ${soldOut ? 'out' : ''}">${soldOut ? t.soldOut : t.left(n(left), n(rule.supply))}</div>` : ''}
+      ${owned ? `<div class="tag owned-tag">✓ ${t.ownedTag}</div>` : `<button class="btn ${can ? 'gold' : 'ghost'} fbtn" data-fuse="${f.id}" ${can ? '' : 'disabled'}>${t.fuse(n(rule.cost))}</button>`}
+    </div>`;
+  };
+  $('#screen').innerHTML = `<div class="h2">${t.labTitle}</div><p class="muted">${t.labNote}</p>
+    <div class="h2">${t.duo}</div><div class="fgrid">${FUSIONS.filter(f => f.parts.length === 2).map(card).join('')}</div>
+    <div class="h2">${t.trio}</div><div class="fgrid">${FUSIONS.filter(f => f.parts.length === 3).map(card).join('')}</div>`;
+  document.querySelectorAll('[data-hero]').forEach(b => b.onclick = () => heroModal(b.dataset.hero));
+  document.querySelectorAll('[data-fuse]').forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    const r = await tryAct({ type: 'fuse', id: b.dataset.fuse });
+    if (!r) { renderLab(); return; }
+    if (r.serial) Online.state.mint[r.id] = Math.max(Online.state.mint[r.id] || 0, r.serial);
+    fusionReveal(r);
+    renderLab();
+  });
+}
+function fusionReveal(r) {
+  const t = T(), f = HERO_BY_ID[r.id], R = RARITY[f.rarity];
+  haptic('heavy'); Sound.play('chest'); Sound.play('legend');
+  openModal(`<div class="center">
+    <div class="tag" style="color:${R.color}">${L().rarity[f.rarity]}</div>
+    <div class="reveal" style="--rc:${R.color}"><div class="flip"><img src="${img(f.id)}" alt=""></div></div>
+    <div class="big latin" style="font-size:26px">${f.name}</div>
+    <div class="muted">${heroText(f.id).title}</div>
+    <p style="font-weight:900">${t.fused}${r.serial ? ` <span class="serial inline">${t.serialOf(n(r.serial), n(r.supply))}</span>` : ''}</p>
+    <button class="btn wide gold" id="fr-ok">${t.ok}</button></div>`, box => box.querySelector('#fr-ok').onclick = () => { closeModal(); });
 }
 
 // ---------- battle (shared by stage battles and arena duels) ----------
@@ -501,6 +551,10 @@ function help() {
   const t = T();
   openModal(`<div class="center"><div style="font-size:54px">⚔️</div><div class="big">${t.welcome}</div></div>
     <p>${t.help1}</p><p>${t.help2}</p><p>${t.help3}</p><p>${t.help4}</p>
-    <button class="btn wide" id="ok">${t.letsGo}</button>`, box => box.querySelector('#ok').onclick = done, { onBack: done });
+    <button class="btn wide" id="ok">${t.letsGo}</button>
+    <button class="btn wide ghost" id="hg" style="margin-top:10px">${t.readGuide}</button>`, box => {
+    box.querySelector('#ok').onclick = done;
+    box.querySelector('#hg').onclick = () => { S.seenHelp = true; save(); guideModal(); };
+  }, { onBack: done });
   function done() { const first = !S.seenHelp; S.seenHelp = true; save(); closeModal(); if (first) maybeDaily(); }
 }
