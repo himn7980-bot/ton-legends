@@ -46,12 +46,48 @@ function teamPower(team) {
 function coinBonus(team) { return team.reduce((b, id) => b + (COIN_BONUS[id] || 0), 0); }
 
 // ---------- modal ----------
-function openModal(html, onBind) {
-  const m = $('#modal'); m.querySelector('.modal-box').innerHTML = html; m.hidden = false;
-  if (onBind) onBind(m.querySelector('.modal-box'));
+// opts.onBack: what ✕ / Back / the phone's back button does (default: close). opts.lock: ignore taps outside.
+let modalBack = null;
+function openModal(html, onBind, opts = {}) {
+  const m = $('#modal'), box = m.querySelector('.modal-box');
+  box.innerHTML = html; box.scrollTop = 0; m.hidden = false;
+  if (opts.lock) m.dataset.lock = '1'; else delete m.dataset.lock;
+  modalBack = opts.onBack || closeModal;
+  if (onBind) onBind(box);
+  syncNav();
 }
-function closeModal() { $('#modal').hidden = true; }
-$('#modal').addEventListener('click', e => { if (e.target.id === 'modal' && !$('#modal').dataset.lock) closeModal(); });
+function closeModal() { const m = $('#modal'); m.hidden = true; delete m.dataset.lock; modalBack = null; syncNav(); }
+$('#modal').addEventListener('click', e => { if (e.target.id === 'modal' && !$('#modal').dataset.lock) goBack(); });
+$('#m-close').addEventListener('click', () => goBack());
+
+// ---------- navigation: one Back for header button, Telegram BackButton and the phone's back key ----------
+// Order: close popup → leave battle (with confirm) → Map (home).
+let histPushed = false, ignorePop = false;
+function canGoBack() { return !$('#modal').hidden || !!BT || S.tab !== 'map'; }
+function goBack() {
+  if (!$('#modal').hidden) return (modalBack || closeModal)();
+  if (BT) return BT.ended ? undefined : confirmLeave();
+  if (S.tab !== 'map') show('map');
+}
+function syncNav() {
+  const can = canGoBack(), w = Online.tg();
+  const back = $('#back'); if (back) back.hidden = S.tab === 'map';
+  if (w) {
+    try { if (w.BackButton) can ? w.BackButton.show() : w.BackButton.hide(); } catch (e) {}
+    try { BT && !BT.ended ? w.enableClosingConfirmation() : w.disableClosingConfirmation(); } catch (e) {}
+    return;
+  }
+  // Plain browser: map the device/browser back button onto goBack via one history entry.
+  if (can && !histPushed) { history.pushState({ tl: 1 }, ''); histPushed = true; }
+  else if (!can && histPushed) { histPushed = false; ignorePop = true; history.back(); }
+}
+window.addEventListener('popstate', () => {
+  if (Online.tg()) return;
+  if (ignorePop) { ignorePop = false; return; }
+  histPushed = false;
+  if (canGoBack()) goBack();
+  syncNav();
+});
 
 // ---------- tabs ----------
 function show(tab) {
@@ -60,6 +96,7 @@ function show(tab) {
   ({ map: renderMap, heroes: renderHeroes, chest: renderChest, quests: renderQuests, rank: renderRank })[tab]();
   updateBadge();
   window.scrollTo(0, 0);
+  syncNav();
 }
 document.querySelectorAll('#nav button').forEach(b => b.onclick = () => show(b.dataset.tab));
 function refresh() { show(S.tab); }
@@ -258,17 +295,32 @@ function startBattle(idx) {
     const u = B.heroes.find(x => x.uid === +nd.dataset.uid);
     if (castSkill(B, u)) { haptic('medium'); flush(); }
   });
-  $('#b-exit').onclick = () => endBattle(null);
+  $('#b-exit').onclick = confirmLeave;
   $('#b-speed').onclick = e => { S.speed = S.speed === 1 ? 2 : S.speed === 2 ? 3 : 1; save(); e.target.textContent = '×' + n(S.speed); };
   $('#b-auto').onclick = e => { S.auto = !S.auto; B.auto = S.auto; save(); e.target.classList.toggle('on', S.auto); };
   render();
   Sound.music('battle');
   BT.raf = requestAnimationFrame(loop);
+  syncNav();
+}
+
+function confirmLeave() {
+  if (!BT || BT.ended) return;
+  const t = T();
+  BT.paused = true;
+  const resume = () => { closeModal(); if (BT) { BT.paused = false; BT.last = performance.now(); } };
+  openModal(`<div class="center"><div style="font-size:52px">🏳️</div><div class="big" style="font-size:24px">${t.leaveTitle}</div>
+    <p class="muted">${t.leaveNote}</p>
+    <div class="btns"><button class="btn ghost" id="lv-yes">${t.leave}</button><button class="btn" id="lv-no">${t.stay}</button></div></div>`, box => {
+    box.querySelector('#lv-yes').onclick = () => { closeModal(); endBattle(null); };
+    box.querySelector('#lv-no').onclick = resume;
+  }, { onBack: resume });
 }
 
 function loop(now) {
   if (!BT) return;
   const { B } = BT;
+  if (BT.paused) { BT.last = now; BT.raf = requestAnimationFrame(loop); return; }
   let dt = Math.min(0.1, (now - BT.last) / 1000) * S.speed;
   BT.last = now;
   while (dt > 0 && !B.over) { const d = Math.min(0.05, dt); step(B, d); dt -= d; }
@@ -363,6 +415,7 @@ function endBattle(result) {
   BT = null;
   Sound.music('menu');
   if (!result) { $('#battle').hidden = true; refresh(); return; }
+  const resultBack = () => { const b = $('#modal').querySelector('#r-map, #r-heroes'); if (b) b.click(); };
   if (result === 'win') {
     const first = idx === S.cleared;
     track('wins');
@@ -388,7 +441,7 @@ function endBattle(result) {
         <button class="btn ghost" id="r-map">${t.toMap}</button>
         <button class="btn ghost" id="r-again">${t.replay}</button>
         ${hasNext ? `<button class="btn" id="r-next">${t.next}</button>` : ''}
-      </div></div>`, box => bindResult(box, idx, nextIdx));
+      </div></div>`, box => bindResult(box, idx, nextIdx), { lock: true, onBack: resultBack });
   } else {
     S.stats.losses++; save(); Sound.play('lose');
     openModal(`<div class="center">
@@ -398,12 +451,11 @@ function endBattle(result) {
       <div class="btns" style="margin-top:14px">
         <button class="btn ghost" id="r-heroes">${t.heroes}</button>
         <button class="btn" id="r-again">${t.retry}</button>
-      </div></div>`, box => bindResult(box, idx));
+      </div></div>`, box => bindResult(box, idx), { lock: true, onBack: resultBack });
   }
-  $('#modal').dataset.lock = '1';
 }
 function bindResult(box, idx, nextIdx) {
-  const leave = (fn) => () => { delete $('#modal').dataset.lock; closeModal(); fn(); };
+  const leave = (fn) => () => { closeModal(); fn(); syncNav(); };
   const q = s => box.querySelector(s);
   if (q('#r-map')) q('#r-map').onclick = leave(() => { $('#battle').hidden = true; show('map'); });
   if (q('#r-heroes')) q('#r-heroes').onclick = leave(() => { $('#battle').hidden = true; show('heroes'); });
@@ -416,5 +468,6 @@ function help() {
   const t = T();
   openModal(`<div class="center"><div style="font-size:54px">⚔️</div><div class="big">${t.welcome}</div></div>
     <p>${t.help1}</p><p>${t.help2}</p><p>${t.help3}</p><p>${t.help4}</p>
-    <button class="btn wide" id="ok">${t.letsGo}</button>`, box => box.querySelector('#ok').onclick = () => { S.seenHelp = true; save(); closeModal(); maybeDaily(); });
+    <button class="btn wide" id="ok">${t.letsGo}</button>`, box => box.querySelector('#ok').onclick = done, { onBack: done });
+  function done() { const first = !S.seenHelp; S.seenHelp = true; save(); closeModal(); if (first) maybeDaily(); }
 }

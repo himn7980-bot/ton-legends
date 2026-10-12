@@ -41,6 +41,8 @@ function initData(user) {
     window.Telegram = { WebApp: { initData: ${JSON.stringify(initData(user))}, initDataUnsafe: { user: ${JSON.stringify(user)}, start_param: '' },
       ready(){}, expand(){}, setHeaderColor(){}, setBackgroundColor(){}, isVersionAtLeast: () => true,
       HapticFeedback: { impactOccurred(){} },
+      BackButton: { show(){ window.__bb = true; }, hide(){ window.__bb = false; }, onClick(cb){ window.__bbcb = cb; } },
+      enableClosingConfirmation(){ window.__cc = true; }, disableClosingConfirmation(){ window.__cc = false; },
       CloudStorage: { setItem(k, v, cb){ store[k] = v; window.__cloud = store; cb && cb(null, true); }, getItem(k, cb){ cb(null, store[k] || ''); } },
       openTelegramLink(u){ window.__shared = u; },
       openInvoice(link, cb){ window.__invoice = link; fetch('/__pay').finally(() => setTimeout(() => cb('paid'), 300)); } } };` }));
@@ -68,6 +70,16 @@ function initData(user) {
   await p.click('#invite');
   await p.click('#settings'); await p.waitForTimeout(200);
   await p.screenshot({ path: OUT + '/e6-settings.png' });
+  await p.click('#m-close');
+  await p.click('[data-tab=heroes]'); await p.waitForTimeout(150);
+  const bbHeroes = await p.evaluate(() => window.__bb);
+  await p.click('.card[data-id=egor]');
+  await p.evaluate(() => window.__bbcb()); await p.waitForTimeout(150);
+  const afterModal = await p.evaluate(() => ({ modal: !$('#modal').hidden, tab: S.tab }));
+  await p.evaluate(() => window.__bbcb()); await p.waitForTimeout(150);
+  const atHome = await p.evaluate(() => ({ tab: S.tab, bb: window.__bb }));
+  if (!(bbHeroes && !afterModal.modal && afterModal.tab === 'heroes' && atHome.tab === 'map' && atHome.bb === false)) errs.push('telegram back: ' + JSON.stringify({ bbHeroes, afterModal, atHome }));
+  else console.log('✓ Telegram BackButton: popup → Heroes → Map, hidden at home');
   const res = await p.evaluate(() => ({ shared: window.__shared, cloud: !!(window.__cloud && window.__cloud.save), invoice: window.__invoice, stage: S.cleared }));
   console.log({ coinsBefore, coinsAfter, ...res, errors: errs });
   await b.close(); srv.stop(); fake.close(); process.exit(errs.length ? 1 : 0);

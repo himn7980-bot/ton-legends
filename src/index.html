@@ -11,7 +11,7 @@
 <body>
 <div id="app">
   <header id="top">
-    <div class="logo">TON <b>Legends</b></div>
+    <div class="hdr-l"><button class="back" id="back" hidden aria-label="Back">←</button><div class="logo">TON <b>Legends</b></div></div>
     <div class="hdr-r"><div class="coins" id="coins">🪙 <span>0</span></div><button class="gear" id="settings" aria-label="Settings">⚙️</button></div>
   </header>
   <main id="screen"></main>
@@ -24,7 +24,7 @@
   </nav>
 </div>
 <div id="battle" hidden></div>
-<div id="modal" hidden><div class="modal-box"></div></div>
+<div id="modal" hidden><div class="modal-wrap"><button class="m-close" id="m-close" aria-label="Close">✕</button><div class="modal-box"></div></div></div>
 <script>window.TL_CONFIG = { api: '' }; // backend URL ('' = same server that serves the game)</script>
 <script src="audio.js"></script>
 <script src="online.js"></script>

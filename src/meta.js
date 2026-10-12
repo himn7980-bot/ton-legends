@@ -171,11 +171,14 @@ document.addEventListener('pointerdown', e => {
 }, { capture: true });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) updateBadge(); });
 $('#settings').onclick = settingsModal;
+$('#back').onclick = goBack;
 
 window.initTelegram = async () => {
   const w = Online.tg();
   if (!w) return;
   try { w.ready(); w.expand(); w.setHeaderColor('#0a0f24'); w.setBackgroundColor('#0a0f24'); if (w.disableVerticalSwipes) w.disableVerticalSwipes(); } catch (e) {}
+  try { w.BackButton.onClick(goBack); } catch (e) {}
+  syncNav();
   const cloud = await Online.cloudLoad();
   if (cloud && cloud.owned && (cloud.updatedAt || 0) > (S.updatedAt || 0)) {
     S = migrate(cloud); try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {}
