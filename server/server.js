@@ -11,6 +11,8 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const ECON = require('../src/economy.js');
+const createArena = require('./pvp.js');
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const WEBAPP_URL = (process.env.WEBAPP_URL || process.env.RENDER_EXTERNAL_URL || '').trim().replace(/\/$/, '');
@@ -23,7 +25,6 @@ const PORT = +process.env.PORT || 3000;
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data', 'db.json');
 const TG = (process.env.TELEGRAM_API || 'https://api.telegram.org') + '/bot' + BOT_TOKEN + '/';
 const STATIC_DIR = path.join(__dirname, '..', 'src');
-const MAX_STAGE = 50;
 const REF_INVITER = 500, REF_NEWCOMER = 300;
 
 // Coin packs sold for Telegram Stars (currency XTR). Server is the source of truth for prices.
@@ -41,6 +42,8 @@ const TEXT = {
     paid: c => `✅ Payment successful! ${c.toLocaleString('en-US')} coins were added. Open the game to collect them.`,
     packTitle: c => `${c.toLocaleString('en-US')} coins`, packDesc: c => `${c.toLocaleString('en-US')} coins for TON Legends`,
     cmd: 'Play TON Legends',
+    arena: e => e.result === 'win' ? `🏆 You won the arena duel vs ${e.opp}! +${e.pot.toLocaleString('en-US')} coins.`
+      : e.result === 'lose' ? `💔 You lost the arena duel vs ${e.opp} (-${e.stake.toLocaleString('en-US')} coins).` : `🤝 Arena duel vs ${e.opp} was a draw — your stake was returned.`,
   },
   fa: {
     start: '⚔️ به TON Legends خوش آمدی!\n\nکارت‌های قهرمان را جمع کن، تیمت را بچین و در ۵ دنیا با کارت‌های رئیس بجنگ.\n\nبرای شروع روی دکمه‌ی زیر بزن 👇',
@@ -48,6 +51,8 @@ const TEXT = {
     paid: c => `✅ پرداخت موفق! ${c.toLocaleString('fa-IR')} سکه به حسابت اضافه شد. بازی را باز کن تا دریافت کنی.`,
     packTitle: c => `${c.toLocaleString('fa-IR')} سکه`, packDesc: c => `${c.toLocaleString('fa-IR')} سکه برای بازی TON Legends`,
     cmd: 'شروع بازی TON Legends',
+    arena: e => e.result === 'win' ? `🏆 دوئل آرنا را از ${e.opp} بردی! +${e.pot.toLocaleString('fa-IR')} سکه.`
+      : e.result === 'lose' ? `💔 دوئل آرنا را به ${e.opp} باختی (-${e.stake.toLocaleString('fa-IR')} سکه).` : `🤝 دوئل آرنا با ${e.opp} مساوی شد و سکه‌هایت برگشت.`,
   },
 };
 const tx = lang => (String(lang || '').startsWith('fa') ? TEXT.fa : TEXT.en);
@@ -69,12 +74,21 @@ function persist() {
 }
 function userRec(tgUser) {
   const id = String(tgUser.id);
-  const u = db.users[id] || (db.users[id] = { id, stage: 0, power: 0, pending: 0, refBy: null, refs: 0, created: Date.now() });
+  const u = db.users[id] || (db.users[id] = { id, pending: 0, gift: 0, refBy: null, refs: 0, created: Date.now(), profile: null });
   u.name = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ').slice(0, 40) || tgUser.username || 'Player';
   u.username = tgUser.username || null;
   u.seen = Date.now();
+  if (u.profile) u.profile = ECON.normalize(u.profile, Date.now());
   return u;
 }
+// Coins from purchases/referrals go straight into the server profile (or wait until it exists);
+// `gift` remembers how much to announce to the player next time they open the game.
+function credit(u, coins) {
+  if (u.profile) u.profile.coins += coins; else u.pending += coins;
+  u.gift = (u.gift || 0) + coins;
+}
+const rng = () => crypto.randomInt(2 ** 32) / 2 ** 32;
+const profileOut = u => ECON.pickKeys(u.profile);
 
 // ---------- Telegram WebApp initData validation ----------
 // https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
@@ -122,7 +136,7 @@ async function handleUpdate(up) {
     if (!pack) return;
     const u = userRec(m.from);
     if (String(u.id) !== uid) return;
-    u.pending += pack.coins;
+    credit(u, pack.coins);
     db.payments[chargeId] = { uid, pack: packId, stars: p.total_amount, at: Date.now() };
     persist();
     const L = tx(m.from.language_code);
@@ -150,9 +164,9 @@ function applyReferral(u, startParam) {
   const inviterId = startParam.slice(4);
   const inviter = db.users[inviterId];
   if (!inviter || inviterId === u.id) return false;
-  if (u.created < Date.now() - 10 * 60e3 && u.stage > 0) return false; // only fresh players count
-  u.refBy = inviterId; u.pending += REF_NEWCOMER;
-  inviter.refs++; inviter.pending += REF_INVITER;
+  if (u.created < Date.now() - 10 * 60e3 && u.profile && u.profile.cleared > 0) return false; // only fresh players count
+  u.refBy = inviterId; credit(u, REF_NEWCOMER);
+  inviter.refs++; credit(inviter, REF_INVITER);
   persist();
   return true;
 }
@@ -205,24 +219,39 @@ function serveStatic(req, res) {
 }
 
 function leaderboard(meId) {
-  const all = Object.values(db.users).filter(u => u.stage > 0).sort((a, b) => b.stage - a.stage || b.power - a.power || a.seen - b.seen);
-  const top = all.slice(0, 50).map((u, i) => ({ rank: i + 1, name: u.name, stage: u.stage }));
+  const all = Object.values(db.users).filter(u => u.profile && u.profile.cleared > 0)
+    .map(u => ({ id: u.id, name: u.name, stage: u.profile.cleared, pvp: u.profile.stats.pvpWins || 0, power: ECON.teamPower(u.profile), seen: u.seen }))
+    .sort((a, b) => b.stage - a.stage || b.pvp - a.pvp || b.power - a.power || a.seen - b.seen);
+  const top = all.slice(0, 50).map((u, i) => ({ rank: i + 1, name: u.name, stage: u.stage, pvp: u.pvp }));
   const idx = all.findIndex(u => u.id === meId);
   return { top, total: all.length, me: idx >= 0 ? { rank: idx + 1, stage: all[idx].stage } : null };
 }
 
+const arena = createArena({ db, persist, notify: (uid, end) => {
+  const u = db.users[uid];
+  const L = tx(u && u.lang);
+  if (end.result === 'cancelled') return;
+  tg('sendMessage', { chat_id: Number(uid), text: L.arena(end) }).catch(e => logErr('lastSendError', e));
+} });
+
 const routes = {
   'GET /api/health': () => ({ ok: true, bot: BOT_USERNAME, packs: PACKS }),
   'GET /api/status': () => ({ ...diag, bot: BOT_USERNAME, users: Object.keys(db.users).length, node: process.version }),
-  'POST /api/hello': (body, u) => { applyReferral(u, body.startParam); return { ok: true, pending: u.pending }; },
-  'POST /api/score': (body, u) => {
-    const stage = Math.max(0, Math.min(MAX_STAGE, Math.floor(+body.stage || 0)));
-    const power = Math.max(0, Math.min(1e7, Math.floor(+body.power || 0)));
-    if (stage >= u.stage) { u.stage = stage; u.power = Math.max(u.power, power); }
-    return { ok: true };
+  'POST /api/hello': (body, u) => { applyReferral(u, body.startParam); return { ok: true }; },
+  // The server keeps each Telegram player's coins and heroes. First visit imports the offline save (clamped).
+  'POST /api/profile': (body, u) => {
+    if (!u.profile) { u.profile = ECON.importLocal(body.local, Date.now()); u.profile.coins += u.pending; u.pending = 0; }
+    return { profile: profileOut(u) };
   },
+  'POST /api/act': (body, u) => {
+    if (!u.profile) throw Object.assign(new Error('no_profile'), { code: 400 });
+    const result = ECON.act(u.profile, body.action, { now: Date.now(), rng });
+    return { profile: profileOut(u), result };
+  },
+  'POST /api/score': () => ({ ok: true }), // kept for older clients; leaderboard now uses server profiles
   'POST /api/leaderboard': (body, u) => leaderboard(u.id),
-  'POST /api/claim': (body, u) => { const coins = u.pending; u.pending = 0; return { ok: true, coins }; },
+  'POST /api/claim': (body, u) => { const coins = u.gift || 0; u.gift = 0; return { ok: true, coins, profile: u.profile ? profileOut(u) : null }; },
+  ...arena.routes,
   'POST /api/invoice': async (body, u) => {
     const pack = PACKS.find(p => p.id === body.pack);
     if (!pack) throw Object.assign(new Error('unknown pack'), { code: 400 });
@@ -239,6 +268,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   if (req.method === 'OPTIONS') return send(res, 204, {});
   const key = `${req.method} ${url.pathname}`;
+  if (key === 'GET /api/pvp/stream') return arena.stream(req, res, url.searchParams.get('ticket'));
   const handler = routes[key];
   if (!handler) return url.pathname.startsWith('/api/') ? send(res, 404, { error: 'not found' }) : serveStatic(req, res);
   try {
@@ -247,6 +277,7 @@ const server = http.createServer(async (req, res) => {
     const tgUser = verifyInitData(body.initData);
     if (!tgUser || !tgUser.id) return send(res, 401, { error: 'invalid initData' });
     const u = userRec(tgUser);
+    if (body.lang === 'fa' || body.lang === 'en') u.lang = body.lang;
     const out = await handler(body, u);
     persist();
     send(res, 200, out);
@@ -273,4 +304,4 @@ async function start() {
 }
 
 if (require.main === module) start();
-module.exports = { server, verifyInitData, handleUpdate, pollLoop, setupBot, db, PACKS, stop: () => { polling = false; server.close(); } };
+module.exports = { server, verifyInitData, handleUpdate, pollLoop, setupBot, db, PACKS, stop: () => { polling = false; arena.stop(); server.close(); } };

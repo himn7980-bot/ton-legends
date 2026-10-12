@@ -17,6 +17,7 @@
   <main id="screen"></main>
   <nav id="nav">
     <button data-tab="map" class="active"><span>🗺️</span>Map</button>
+    <button data-tab="arena"><span>⚔️</span>Arena</button>
     <button data-tab="heroes"><span>🃏</span>Heroes</button>
     <button data-tab="chest"><span>🎁</span>Chests</button>
     <button data-tab="quests"><span>📜</span>Quests</button>
@@ -30,8 +31,10 @@
 <script src="online.js"></script>
 <script src="engine.js"></script>
 <script src="i18n.js"></script>
+<script src="economy.js"></script>
 <script src="game.js"></script>
 <script src="meta.js"></script>
-<script async src="https://telegram.org/js/telegram-web-app.js" onload="window.initTelegram && initTelegram()"></script>
+<script src="arena.js"></script>
+<script async src="https://telegram.org/js/telegram-web-app.js" onload="window.initTelegram && initTelegram()" onerror="Online.markReady()"></script>
 </body>
 </html>

@@ -12,8 +12,8 @@ for (const [name, team] of Object.entries(teams)) {
       const levels = Object.fromEntries(team.map(id => [id, lv]));
       let wins = 0;
       for (let i = 0; i < 20; i++) {
-        const B = E.createBattle(team, levels, idx); B.auto = true;
-        while (!B.over) { E.step(B, 0.05); B.events.length = 0; }
+        const B = E.createBattle(team, levels, idx); B.autoBy.hero = true;
+        while (!B.over) { E.step(B); B.events.length = 0; }
         if (B.over === 'win') wins++;
       }
       if (wins >= 12) { need = lv; break; }

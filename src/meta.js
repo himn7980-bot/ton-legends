@@ -1,46 +1,19 @@
 // TON Legends — meta game: daily login, missions, achievements, idle chest, leaderboard, settings, boot
 
-// ---------- tracking ----------
-const DAILY_QUESTS = [
-  { id: 'wins', goal: 3, r: 150 },
-  { id: 'skills', goal: 15, r: 120 },
-  { id: 'upgrades', goal: 2, r: 100 },
-  { id: 'chests', goal: 1, r: 100 },
-];
-const ACHIEVEMENTS = [
-  { id: 'win', icon: '⚔️', stat: () => S.stats.wins, tiers: [10, 50, 200, 500], r: [300, 1000, 3000, 8000] },
-  { id: 'world', icon: '🗺️', stat: () => Math.floor(S.cleared / STAGES_PER_WORLD), tiers: [1, 2, 3, 4, 5], r: [500, 1500, 3000, 6000, 12000] },
-  { id: 'heroes', icon: '🃏', stat: () => Object.keys(S.owned).length, tiers: [8, 12, 16], r: [800, 2500, 8000] },
-  { id: 'level', icon: '⬆️', stat: () => Math.max(...Object.values(S.owned)), tiers: [5, 10, 20, 30], r: [300, 1000, 4000, 10000] },
-  { id: 'chest', icon: '🎁', stat: () => S.stats.chests, tiers: [5, 25, 100], r: [500, 2000, 6000] },
-  { id: 'skill', icon: '⚡', stat: () => S.stats.skills, tiers: [50, 300, 1000], r: [300, 1500, 5000] },
-];
-const DAILY_REWARDS = [200, 300, 400, 500, 700, 900, 'royal'];
-const AFK_CAP_H = 8;
+// ---------- rules come from economy.js (shared with the server) ----------
+const { DAILY_QUESTS, DAILY_REWARDS, AFK_CAP_H } = ECON;
+const ACH_ICONS = { win: '⚔️', world: '🗺️', heroes: '🃏', level: '⬆️', chest: '🎁', skill: '⚡' };
+const ACHIEVEMENTS = ECON.ACHIEVEMENTS.map(a => ({ ...a, icon: ACH_ICONS[a.id] }));
+const now = () => Date.now();
+const dqReward = q => ECON.dqReward(S, q);
+const dailyCanClaim = () => ECON.dailyCanClaim(S, now());
+const afkRate = () => ECON.afkRate(S);
+const afkAmount = () => ECON.afkAmount(S, now());
+const achTier = a => ECON.achTier(S, a);
 
-function ensureDQ() { if (S.dq.date !== today()) S.dq = { date: today(), p: {}, c: {} }; }
-function track(key, k = 1) {
-  S.stats[key] = (S.stats[key] || 0) + k;
-  ensureDQ(); S.dq.p[key] = (S.dq.p[key] || 0) + k;
-  save(); updateBadge();
-}
-const dqReward = q => Math.round(q.r * (1 + S.cleared / 8) / 10) * 10;
-const dailyCanClaim = () => S.daily.last !== today();
-function afkRate() { return Math.round(stageReward(Math.max(0, S.cleared - 1)) * 2.5); } // coins per hour
-function afkAmount() { return Math.floor(Math.min(AFK_CAP_H * 3600e3, Date.now() - (S.afkSince || Date.now())) / 3600e3 * afkRate()); }
-function achTier(a) { return S.ach[a.id] || 0; }
-
-function claimableCount() {
-  ensureDQ();
-  let c = dailyCanClaim() ? 1 : 0;
-  if (afkAmount() >= afkRate() / 2) c++;
-  c += DAILY_QUESTS.filter(q => !S.dq.c[q.id] && (S.dq.p[q.id] || 0) >= q.goal).length;
-  c += ACHIEVEMENTS.filter(a => achTier(a) < a.tiers.length && a.stat() >= a.tiers[achTier(a)]).length;
-  return c;
-}
 function updateBadge() {
   const b = document.querySelector('#nav [data-tab=quests]');
-  if (b) b.classList.toggle('dot', claimableCount() > 0);
+  if (b) b.classList.toggle('dot', ECON.claimable(S, now()) > 0);
 }
 
 function giftModal(icon, title, coins, note) {
@@ -51,18 +24,16 @@ function giftModal(icon, title, coins, note) {
 }
 
 // ---------- daily login ----------
-function claimDaily() {
+async function claimDaily() {
   if (!dailyCanClaim()) return;
-  S.daily.streak = S.daily.last === today(-1) ? S.daily.streak % 7 + 1 : 1;
-  S.daily.last = today();
-  const r = DAILY_REWARDS[S.daily.streak - 1];
-  save();
-  if (r === 'royal') openChest(CHESTS.find(c => c.key === 'royal'), true);
-  else { setCoins(r); giftModal('📅', T().dayReward(n(S.daily.streak)), r); }
+  const r = await tryAct({ type: 'daily' });
+  if (!r) return;
+  if (r.chest) chestReveal(CHESTS.find(c => c.key === 'royal'), r.chest);
+  else giftModal('📅', T().dayReward(n(r.day)), r.coins);
 }
 function dailyHtml(panel = true) {
   const t = T(), can = dailyCanClaim();
-  const nextDay = can ? (S.daily.last === today(-1) ? S.daily.streak % 7 + 1 : 1) : S.daily.streak;
+  const nextDay = can ? ECON.dailyNext(S, now()) : S.daily.streak;
   return `<div class="${panel ? 'panel' : ''}"><div class="row"><div class="t">${t.dailyTitle}</div><span class="muted">${t.dailySub}</span></div>
     <div class="days">${DAILY_REWARDS.map((r, i) => {
       const d = i + 1, got = can ? d < nextDay : d <= nextDay, cur = can && d === nextDay;
@@ -75,7 +46,7 @@ function maybeDaily() { if (dailyCanClaim() && S.seenHelp) setTimeout(() => { if
 // ---------- missions tab ----------
 function renderQuests() {
   const t = T();
-  ensureDQ();
+  ECON.ensureDQ(S, now());
   const afk = afkAmount(), afkH = Math.min(AFK_CAP_H, (Date.now() - S.afkSince) / 3600e3);
   $('#screen').innerHTML = `
     ${dailyHtml()}
@@ -89,14 +60,14 @@ function renderQuests() {
     ${ACHIEVEMENTS.map(a => {
       const tier = achTier(a), done = tier >= a.tiers.length, goal = a.tiers[Math.min(tier, a.tiers.length - 1)];
       return questRow('ach-' + a.id, a.icon, t.ach[a.id](n(goal)) + (a.tiers.length > 1 ? ` <span class="muted">(${n(Math.min(tier + 1, a.tiers.length))}/${n(a.tiers.length)})</span>` : ''),
-        Math.min(goal, a.stat()), goal, a.r[Math.min(tier, a.r.length - 1)], done);
+        Math.min(goal, a.stat(S)), goal, a.r[Math.min(tier, a.r.length - 1)], done);
     }).join('')}`;
   $('#daily').onclick = claimDaily;
-  $('#afk').onclick = () => { const a = afkAmount(); S.afkSince = Date.now(); setCoins(a); renderQuests(); };
-  document.querySelectorAll('[data-q]').forEach(b => b.onclick = () => {
+  $('#afk').onclick = async () => { if (await tryAct({ type: 'afk' })) renderQuests(); };
+  document.querySelectorAll('[data-q]').forEach(b => b.onclick = async () => {
     const [kind, id] = b.dataset.q.split('-');
-    if (kind === 'dq') { const q = DAILY_QUESTS.find(x => x.id === id); S.dq.c[id] = true; setCoins(dqReward(q)); }
-    else { const a = ACHIEVEMENTS.find(x => x.id === id); setCoins(a.r[achTier(a)]); S.ach[id] = achTier(a) + 1; save(); }
+    b.disabled = true;
+    await tryAct({ type: kind === 'dq' ? 'quest' : 'ach', id });
     renderQuests();
   });
 }
@@ -116,7 +87,7 @@ function renderRank() {
       <div class="t">${u ? esc(u.first_name + (u.last_name ? ' ' + u.last_name : '')) : t.player}</div>
       <div class="muted">${t.stageOf(n(S.cleared), n(TOTAL_STAGES), n(teamPower(S.team)))}</div></div></div>
     <div class="stats">
-      <div>${t.wins}<b>${n(S.stats.wins)}</b></div><div>${t.heroes}<b>${n(Object.keys(S.owned).length)}/${n(HEROES.length)}</b></div><div>${t.bossesBeaten}<b>${n(S.stats.bosses)}</b></div>
+      <div>${t.wins}<b>${n(S.stats.wins)}</b></div><div>${t.arenaWins}<b>${n(S.stats.pvpWins || 0)}</b></div><div>${t.bossesBeaten}<b>${n(S.stats.bosses)}</b></div>
     </div>
     ${Online.inviteLink() ? `<div class="panel"><div class="t">${t.invite}</div>
       <p class="muted">${t.inviteNote}</p>
@@ -129,7 +100,7 @@ function renderRank() {
     if (!d || !d.top) { el.innerHTML = `<div class="panel center muted">${t.boardErr}</div>`; return; }
     el.innerHTML = `<div class="panel board">${d.top.map(r => `<div class="brow ${d.me && r.rank === d.me.rank ? 'me' : ''}">
         <span class="rk">${r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : n(r.rank)}</span><span class="bn">${esc(r.name)}</span>
-        <span class="bs">${t.stage(n(r.stage))}</span></div>`).join('') || `<p class="muted center">${t.boardEmpty}</p>`}
+        <span class="bs">${t.stage(n(r.stage))}${r.pvp ? ` · ⚔️${n(r.pvp)}` : ''}</span></div>`).join('') || `<p class="muted center">${t.boardEmpty}</p>`}
       ${d.me && d.me.rank > d.top.length ? `<div class="brow me"><span class="rk">${n(d.me.rank)}</span><span class="bn">${t.you}</span><span class="bs">${t.stage(n(d.me.stage))}</span></div>` : ''}
       <p class="muted center" style="margin:8px 0 0">${t.players(n(d.total || 0))}</p></div>`;
   });
@@ -138,7 +109,7 @@ function renderRank() {
 // ---------- settings ----------
 function applyLang(lang) {
   setLang(lang);
-  setCoins(0);
+  showCoins();
   refresh();
 }
 function settingsModal() {
@@ -148,7 +119,7 @@ function settingsModal() {
     <div class="setting"><span>${t.sfx}</span><button class="toggle ${S.sfx ? 'on' : ''}" id="t-sfx"></button></div>
     <div class="setting"><span>${t.music}</span><button class="toggle ${S.music ? 'on' : ''}" id="t-music"></button></div>
     <div class="setting"><span>${t.howTo}</span><button class="tag" id="s-help">${t.show}</button></div>
-    <div class="setting"><span>${t.reset}</span><button class="tag" id="s-reset" style="color:var(--red)">${t.erase}</button></div>
+    ${Online.state.profile ? '' : `<div class="setting"><span>${t.reset}</span><button class="tag" id="s-reset" style="color:var(--red)">${t.erase}</button></div>`}
     <p class="muted center">${t.version} ${Online.tg() ? t.cloudOn : ''}</p>
     <button class="btn wide" id="s-ok">${t.close}</button>`, box => {
     const q = s => box.querySelector(s);
@@ -156,8 +127,8 @@ function settingsModal() {
     q('#t-sfx').onclick = e => { S.sfx = !S.sfx; save(); Sound.set({ sfx: S.sfx }); e.target.classList.toggle('on', S.sfx); };
     q('#t-music').onclick = e => { S.music = !S.music; save(); Sound.set({ music: S.music }); e.target.classList.toggle('on', S.music); };
     q('#s-help').onclick = help;
-    q('#s-reset').onclick = e => {
-      if (e.target.dataset.sure) { const keep = { sfx: S.sfx, music: S.music, lang: S.lang }; S = { ...defaultState(), ...keep, seenHelp: true }; save(); setCoins(0); closeModal(); show('map'); }
+    if (q('#s-reset')) q('#s-reset').onclick = e => {
+      if (e.target.dataset.sure) { const keep = { sfx: S.sfx, music: S.music, lang: S.lang }; S = { ...defaultState(), ...keep, seenHelp: true }; save(); showCoins(); closeModal(); show('map'); }
       else { e.target.dataset.sure = 1; e.target.textContent = t.sure; }
     };
     q('#s-ok').onclick = closeModal;
@@ -175,29 +146,43 @@ $('#back').onclick = goBack;
 
 window.initTelegram = async () => {
   const w = Online.tg();
-  if (!w) return;
+  if (!w) return Online.markReady();
   try { w.ready(); w.expand(); w.setHeaderColor('#0a0f24'); w.setBackgroundColor('#0a0f24'); if (w.disableVerticalSwipes) w.disableVerticalSwipes(); } catch (e) {}
   try { w.BackButton.onClick(goBack); } catch (e) {}
   syncNav();
-  const cloud = await Online.cloudLoad();
-  if (cloud && cloud.owned && (cloud.updatedAt || 0) > (S.updatedAt || 0)) {
-    S = migrate(cloud); try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {}
-    if (S.lang) setLang(S.lang);
-    setCoins(0); refresh();
-  }
   await Online.connect();
-  if (!Online.state.server) return;
-  await Online.hello();
-  const coins = await Online.claim();
-  if (coins > 0) { setCoins(coins); giftModal('🎁', T().giftTitle, coins, T().giftNote); }
-  Online.submitScore(S.cleared, teamPower(S.team));
-  if (S.tab === 'chest' || S.tab === 'rank') refresh();
+  if (Online.state.server) {
+    // Online: the server's profile is the truth (first visit imports this device's save once).
+    try {
+      await Online.hello();
+      const prev = S.coins;
+      Object.assign(S, await Online.loadProfile(ECON.pickKeys(S)));
+      const c = await Online.claim();
+      if (c.profile) Object.assign(S, c.profile);
+      save(); showCoins(prev);
+      if (c.coins > 0) giftModal('🎁', T().giftTitle, c.coins, T().giftNote);
+    } catch (e) {}
+  } else {
+    // No server: fall back to the Telegram cloud copy of the offline save.
+    const cloud = await Online.cloudLoad();
+    if (cloud && cloud.owned && (cloud.updatedAt || 0) > (S.updatedAt || 0)) {
+      S = migrate(cloud); try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {}
+      if (S.lang) setLang(S.lang);
+      showCoins();
+    }
+  }
+  Online.markReady();
+  if (!BT) refresh();
+  if (Online.state.profile) arenaBoot();
 };
 
-setLang(S.lang || 'en');
-Sound.set({ sfx: S.sfx, music: S.music });
-Sound.music('menu');
-setCoins(0);
-show(S.tab || 'map');
-if (!S.seenHelp) help(); else maybeDaily();
-setInterval(updateBadge, 60e3);
+// Called at the end of arena.js, once every screen's code is loaded.
+function boot() {
+  setLang(S.lang || 'en');
+  Sound.set({ sfx: S.sfx, music: S.music });
+  Sound.music('menu');
+  showCoins();
+  show(S.tab || 'map');
+  if (!S.seenHelp) help(); else maybeDaily();
+  setInterval(updateBadge, 60e3);
+}

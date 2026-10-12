@@ -9,41 +9,51 @@ const isBossStage = idx => idx % STAGES_PER_WORLD === STAGES_PER_WORLD - 1;
 
 // ---------- state ----------
 const SAVE_KEY = 'tonlegends_v1';
-const defaultState = () => ({ coins: 300, owned: Object.fromEntries(STARTERS.map(id => [id, 1])), team: [...STARTERS],
-  cleared: 0, sel: 0, world: 0, speed: 1, auto: false, tab: 'map', seenHelp: false, lang: null,
-  sfx: true, music: true, updatedAt: 0, afkSince: Date.now(),
-  stats: { wins: 0, losses: 0, chests: 0, upgrades: 0, skills: 0, bosses: 0 },
-  daily: { last: null, streak: 0 }, dq: { date: null, p: {}, c: {} }, ach: {} });
+// S = economy profile (rules in economy.js; the server owns it when online) + local UI preferences.
+const PREFS = () => ({ sel: 0, world: 0, speed: 1, auto: false, tab: 'map', seenHelp: false, lang: null, sfx: true, music: true, stake: 100, updatedAt: 0 });
+const defaultState = () => ({ ...ECON.newProfile(Date.now()), ...PREFS() });
 let S = load();
 function load() {
   try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && s.owned) return migrate(s); } catch (e) {}
   return defaultState();
 }
-function migrate(s) {
-  const d = defaultState();
-  return { ...d, ...s, stats: { ...d.stats, ...(s.stats || {}) }, daily: { ...d.daily, ...(s.daily || {}) }, dq: { ...d.dq, ...(s.dq || {}) }, ach: { ...(s.ach || {}) } };
-}
+function migrate(s) { return { ...PREFS(), ...ECON.normalize(s, Date.now()) }; }
 function save() {
   S.updatedAt = Date.now();
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {}
   Online.cloudSave(S);
 }
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const today = (off = 0) => { const d = new Date(Date.now() + off * 864e5); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
 
 function haptic(kind) { try { const w = Online.tg(); if (w && w.HapticFeedback) w.HapticFeedback.impactOccurred(kind || 'light'); } catch (e) {} }
 
-function setCoins(delta) {
-  S.coins += delta; save();
-  if (delta > 0) Sound.play('coin');
-  updateBadge();
+function showCoins(prev) {
   const el = $('#coins'); el.querySelector('span').textContent = n(S.coins);
-  if (delta) { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+  if (prev !== undefined && prev !== S.coins) {
+    if (S.coins > prev) Sound.play('coin');
+    el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+  }
+  updateBadge();
 }
-function teamPower(team) {
-  return team.reduce((sum, id) => { const s = heroStats(id, S.owned[id]); return sum + s.hp / 10 + s.atk / s.spd * 2; }, 0);
+const teamPower = team => ECON.teamPower(S, team);
+
+// Every change to coins/heroes/progress is an action. Online the server applies it (same rules, its own
+// clock and dice) and returns the updated profile; offline the rules run locally.
+async function act(action) {
+  await Online.ready;
+  const prev = S.coins;
+  let result;
+  if (Online.state.profile) { const r = await Online.act(action); Object.assign(S, r.profile); result = r.result; }
+  else result = ECON.act(S, action, { now: Date.now(), rng: Math.random });
+  save(); showCoins(prev);
+  return result;
 }
-function coinBonus(team) { return team.reduce((b, id) => b + (COIN_BONUS[id] || 0), 0); }
+const errText = e => T().err[e && e.message] || T().err.network;
+async function tryAct(action) { try { return await act(action); } catch (e) { toast(errText(e)); return null; } }
+function toast(msg) {
+  const d = document.createElement('div'); d.className = 'toast'; d.textContent = msg;
+  document.body.appendChild(d); setTimeout(() => d.remove(), 2600);
+}
 
 // ---------- modal ----------
 // opts.onBack: what ✕ / Back / the phone's back button does (default: close). opts.lock: ignore taps outside.
@@ -93,7 +103,7 @@ window.addEventListener('popstate', () => {
 function show(tab) {
   S.tab = tab; save();
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  ({ map: renderMap, heroes: renderHeroes, chest: renderChest, quests: renderQuests, rank: renderRank })[tab]();
+  ({ map: renderMap, arena: renderArena, heroes: renderHeroes, chest: renderChest, quests: renderQuests, rank: renderRank })[tab]();
   updateBadge();
   window.scrollTo(0, 0);
   syncNav();
@@ -118,7 +128,7 @@ function renderMap() {
   }
   const foes = stageEnemies(S.sel);
   const first = S.sel === S.cleared;
-  const reward = Math.round(stageReward(S.sel) * (1 + coinBonus(S.team)) * (first ? 2 : 1));
+  const reward = ECON.stageCoins(S, S.sel, S.team, first);
   $('#screen').innerHTML = `
     <div class="world" style="background:${W.bg}">
       <div class="world-head">
@@ -186,16 +196,16 @@ function heroModal(id) {
     </div>` : `<p class="center muted">${t.getFromChest}</p><button class="btn wide" id="tochest">${t.goChest}</button>`}
   `, box => {
     const up = box.querySelector('#up'), tm = box.querySelector('#tm'), tc = box.querySelector('#tochest');
-    if (up) up.onclick = () => { setCoins(-cost); S.owned[id]++; track('upgrades'); save(); haptic('medium'); Sound.play('heal'); heroModal(id); refresh(); };
-    if (tm) tm.onclick = () => { S.team = inTeam ? S.team.filter(x => x !== id) : [...S.team, id]; save(); closeModal(); refresh(); };
+    if (up) up.onclick = async () => { up.disabled = true; if (await tryAct({ type: 'upgrade', id })) { haptic('medium'); Sound.play('heal'); refresh(); heroModal(id); } else up.disabled = false; };
+    if (tm) tm.onclick = async () => { const team = inTeam ? S.team.filter(x => x !== id) : [...S.team, id]; if (await tryAct({ type: 'team', team })) { closeModal(); refresh(); } };
     if (tc) tc.onclick = () => { closeModal(); show('chest'); };
   });
 }
 
 // ---------- chest ----------
 const CHESTS = [
-  { key: 'basic', ico: '🎁', cost: 300, c: '#3fa2ff', rates: { C: 55, R: 32, E: 11, L: 2 } },
-  { key: 'royal', ico: '👑', cost: 1200, c: '#ffc531', rates: { C: 0, R: 50, E: 38, L: 12 } },
+  { key: 'basic', ico: '🎁', c: '#3fa2ff', ...ECON.CHESTS.basic },
+  { key: 'royal', ico: '👑', c: '#ffc531', ...ECON.CHESTS.royal },
 ];
 const chestName = c => T()[c.key + 'Chest'];
 function renderChest() {
@@ -217,28 +227,22 @@ function renderChest() {
     b.disabled = true;
     try {
       const r = await Online.buy(b.dataset.pack);
-      if (r.coins) { setCoins(r.coins); giftModal('⭐', t.bought, r.coins); }
+      if (r.profile) { const prev = S.coins; Object.assign(S, r.profile); save(); showCoins(prev); }
+      if (r.coins) giftModal('⭐', t.bought, r.coins);
       else if (r.status === 'paid') giftModal('⏳', t.paid, 0, t.paidNote);
     } catch (e) { giftModal('⚠️', t.buyErr, 0, t.buyErrNote); }
     b.disabled = false;
   });
 }
-function openChest(c, free) {
-  const t = T();
-  if (!free && S.coins < c.cost) return;
-  if (!free) setCoins(-c.cost);
-  track('chests');
-  let roll = Math.random() * 100, rarity = 'C';
-  for (const [r, v] of Object.entries(c.rates)) { if (roll < v) { rarity = r; break; } roll -= v; }
-  const pool = HEROES.filter(h => h.rarity === rarity);
-  const h = pool[Math.floor(Math.random() * pool.length)], R = RARITY[rarity];
-  let msg;
-  if (!S.owned[h.id]) {
-    S.owned[h.id] = 1; msg = t.newHero;
-    if (S.team.length < 5) { S.team.push(h.id); msg += t.addedTeam; }
-  } else if (S.owned[h.id] < MAX_LEVEL) { S.owned[h.id]++; msg = t.dupe(n(S.owned[h.id])); }
-  else { setCoins(Math.round(c.cost / 2)); msg = t.maxRefund(n(c.cost / 2)); }
-  save(); haptic('heavy'); Sound.play('chest'); if (rarity === 'L' || rarity === 'E') Sound.play('legend');
+async function openChest(c) {
+  if (S.coins < c.cost) return;
+  const r = await tryAct({ type: 'chest', key: c.key });
+  if (r) chestReveal(c, r);
+}
+function chestReveal(c, r) {
+  const t = T(), h = HERO_BY_ID[r.id], rarity = r.rarity, R = RARITY[rarity];
+  const msg = r.outcome === 'new' ? t.newHero + (r.added ? t.addedTeam : '') : r.outcome === 'dupe' ? t.dupe(n(r.level)) : t.maxRefund(n(r.refund));
+  haptic('heavy'); Sound.play('chest'); if (rarity === 'L' || rarity === 'E') Sound.play('legend');
   openModal(`<div class="center">
     <div class="tag" style="color:${R.color}">${L().rarity[rarity]}</div>
     <div class="reveal" style="--rc:${R.color}"><div class="flip"><img src="${img(h.id)}" alt=""></div></div>
@@ -253,94 +257,125 @@ function openChest(c, free) {
   if (S.tab === 'chest') renderChest();
 }
 
-// ---------- battle ----------
+// ---------- battle (shared by stage battles and arena duels) ----------
+// BT.mode: 'stage' (simulated here, verified by the server afterwards) or 'pvp' (simulated by the server, streamed here).
 let BT = null;
 const STATUS_ICONS = [['freeze', '❄️'], ['stun', '💫'], ['slow', '🐌'], ['poison', '☠️'], ['vuln', '💔'], ['weak', '🔻'], ['buff', '🔥'], ['dodge', '👻']];
+const isMine = u => u.side === ((BT && BT.mySide) || 'hero');
+const allUnits = () => [...BT.B.heroes, ...BT.B.enemies];
 
 function unitCard(u) {
-  const rc = u.side === 'enemy' ? (u.boss ? '#ff3b3b' : '#e0475a') : RARITY[HERO_BY_ID[u.id].rarity].color;
-  return `<div class="hcard ${u.side} ${u.boss ? 'boss' : ''}" data-uid="${u.uid}" style="--rc:${rc}">
-    ${u.side === 'hero' ? '<span class="ready">⚡</span>' : ''}${u.boss ? '<span class="crown">👑</span>' : ''}
+  const mine = isMine(u);
+  const rc = !mine ? (u.boss ? '#ff3b3b' : '#e0475a') : RARITY[HERO_BY_ID[u.id].rarity].color;
+  return `<div class="hcard ${mine ? 'hero' : 'enemy'} ${u.boss ? 'boss' : ''}" data-uid="${u.uid}" style="--rc:${rc}">
+    ${mine ? '<span class="ready">⚡</span>' : ''}${u.boss ? '<span class="crown">👑</span>' : ''}
     <img src="${img(u.id)}" alt=""><div class="status"></div>
-    <div class="hc-name">${u.name}</div><div class="bar hp ${u.side === 'hero' ? 'h' : ''}"><i></i><i class="sh" style="width:0"></i></div><div class="bar en"><i></i></div></div>`;
+    <div class="hc-name">${u.name}</div><div class="bar hp ${mine ? 'h' : ''}"><i></i><i class="sh" style="width:0"></i></div><div class="bar en"><i></i></div></div>`;
 }
 
-function startBattle(idx) {
-  const t = T();
-  const B = createBattle(S.team, S.owned, idx);
-  B.auto = S.auto;
-  const W = WORLDS[Math.floor(idx / STAGES_PER_WORLD)];
-  const el = $('#battle');
-  el.style.background = W.bg;
+// Draws the battle screen for the current BT. mine = my cards (bottom), theirs = opponent cards (top).
+function buildBattle({ title, bg, mine, theirs, oppLabel, myLabel, onTap, onAuto, showSpeed }) {
+  const t = T(), el = $('#battle');
+  el.style.background = bg;
   el.innerHTML = `
     <div class="b-top">
       <button id="b-exit">✕</button>
-      <div class="b-title">${t.stage(stageLabel(idx))}${isBossStage(idx) ? ' · ' + t.bossCrown : ''}</div>
-      <button id="b-speed">×${n(S.speed)}</button>
+      <div class="b-title">${title}</div>
+      ${showSpeed ? `<button id="b-speed">×${n(S.speed)}</button>` : ''}
       <button id="b-auto" class="${S.auto ? 'on' : ''}">${t.auto}</button>
     </div>
-    <div class="b-enemies n${B.enemies.length}">${B.enemies.map(unitCard).join('')}</div>
+    ${oppLabel ? `<div class="b-name opp">${oppLabel}</div>` : ''}
+    <div class="b-enemies n${theirs.length}">${theirs.map(unitCard).join('')}</div>
     <div class="b-vs">VS</div>
     <div class="b-mid"><div id="b-banner"></div></div>
-    <div class="b-heroes">${B.heroes.map(unitCard).join('')}</div>
+    <div class="b-heroes">${mine.map(unitCard).join('')}</div>
+    ${myLabel ? `<div class="b-name me">${myLabel}</div>` : ''}
     <div class="b-hint">${t.tapHint}</div>
     <div id="b-fx"></div>`;
   el.hidden = false;
-  const els = new Map();
+  BT.els = new Map();
   el.querySelectorAll('[data-uid]').forEach(nd => {
-    els.set(+nd.dataset.uid, { root: nd, hp: nd.querySelector('.bar.hp i'), sh: nd.querySelector('.sh'), en: nd.querySelector('.bar.en i'), st: nd.querySelector('.status'), last: {} });
+    BT.els.set(+nd.dataset.uid, { root: nd, hp: nd.querySelector('.bar.hp i'), sh: nd.querySelector('.sh'), en: nd.querySelector('.bar.en i'), st: nd.querySelector('.status'), last: {} });
   });
-  BT = { B, els, idx, last: performance.now(), raf: 0, ended: false };
   el.querySelectorAll('.hcard.hero').forEach(nd => nd.onclick = () => {
-    const u = B.heroes.find(x => x.uid === +nd.dataset.uid);
-    if (castSkill(B, u)) { haptic('medium'); flush(); }
+    const u = mine.find(x => x.uid === +nd.dataset.uid);
+    if (BT && !BT.ended && u && u.alive && u.energy >= 100) { haptic('medium'); onTap(u); }
   });
   $('#b-exit').onclick = confirmLeave;
-  $('#b-speed').onclick = e => { S.speed = S.speed === 1 ? 2 : S.speed === 2 ? 3 : 1; save(); e.target.textContent = '×' + n(S.speed); };
-  $('#b-auto').onclick = e => { S.auto = !S.auto; B.auto = S.auto; save(); e.target.classList.toggle('on', S.auto); };
+  if (showSpeed) $('#b-speed').onclick = e => { S.speed = S.speed === 1 ? 2 : S.speed === 2 ? 3 : 1; save(); e.target.textContent = '×' + n(S.speed); };
+  $('#b-auto').onclick = e => { S.auto = !S.auto; save(); e.target.classList.toggle('on', S.auto); onAuto(S.auto); };
   render();
+  syncNav();
+}
+
+async function startBattle(idx) {
+  if (BT) return;
+  const r = await tryAct({ type: 'stageStart', stage: idx });
+  if (!r) return;
+  const t = T(), B = createBattle(S.team, S.owned, idx, r.seed);
+  // Taps are queued and applied at the next fixed tick, and recorded as [tick, code] so the server can replay the fight.
+  BT = { mode: 'stage', B, idx, mySide: 'hero', inputs: [], queue: S.auto ? [-1] : [], acc: 0, last: performance.now(), raf: 0, ended: false };
+  buildBattle({
+    title: `${t.stage(stageLabel(idx))}${isBossStage(idx) ? ' · ' + t.bossCrown : ''}`, bg: WORLDS[Math.floor(idx / STAGES_PER_WORLD)].bg,
+    mine: B.heroes, theirs: B.enemies, showSpeed: true,
+    onTap: u => BT.queue.push(u.uid), onAuto: on => BT.queue.push(on ? -1 : -2),
+  });
   Sound.music('battle');
   BT.raf = requestAnimationFrame(loop);
-  syncNav();
 }
 
 function confirmLeave() {
   if (!BT || BT.ended) return;
-  const t = T();
+  const t = T(), pvp = BT.mode === 'pvp';
   BT.paused = true;
   const resume = () => { closeModal(); if (BT) { BT.paused = false; BT.last = performance.now(); } };
   openModal(`<div class="center"><div style="font-size:52px">🏳️</div><div class="big" style="font-size:24px">${t.leaveTitle}</div>
-    <p class="muted">${t.leaveNote}</p>
+    <p class="muted">${pvp ? t.pvpLeaveNote : t.leaveNote}</p>
     <div class="btns"><button class="btn ghost" id="lv-yes">${t.leave}</button><button class="btn" id="lv-no">${t.stay}</button></div></div>`, box => {
-    box.querySelector('#lv-yes').onclick = () => { closeModal(); endBattle(null); };
+    box.querySelector('#lv-yes').onclick = () => { closeModal(); leaveBattle(); };
     box.querySelector('#lv-no').onclick = resume;
   }, { onBack: resume });
 }
 
-function loop(now) {
+function leaveBattle() {
   if (!BT) return;
+  cancelAnimationFrame(BT.raf);
+  if (BT.es) BT.es.close();
+  BT = null;
+  Sound.music('menu');
+  $('#battle').hidden = true;
+  refresh();
+}
+
+function loop(now) {
+  if (!BT || BT.mode !== 'stage') return;
   const { B } = BT;
   if (BT.paused) { BT.last = now; BT.raf = requestAnimationFrame(loop); return; }
-  let dt = Math.min(0.1, (now - BT.last) / 1000) * S.speed;
+  BT.acc += Math.min(0.25, (now - BT.last) / 1000) * S.speed;
   BT.last = now;
-  while (dt > 0 && !B.over) { const d = Math.min(0.05, dt); step(B, d); dt -= d; }
+  while (BT.acc >= TICK && !B.over) {
+    for (const code of BT.queue.splice(0)) { BT.inputs.push([B.tick, code]); applyInput(B, code); }
+    step(B);
+    BT.acc -= TICK;
+  }
   flush();
-  if (B.over && !BT.ended) { BT.ended = true; setTimeout(() => endBattle(B.over), 900); }
+  if (B.over && !BT.ended) { BT.ended = true; syncNav(); setTimeout(finishStage, 900); }
   BT.raf = requestAnimationFrame(loop);
 }
 
 function flush() { processEvents(); render(); }
 
 function render() {
-  const { B, els } = BT;
-  for (const u of [...B.heroes, ...B.enemies]) {
-    const e = els.get(u.uid), Lst = e.last;
+  const B = BT.B;
+  for (const u of allUnits()) {
+    const e = BT.els.get(u.uid); if (!e) continue;
+    const Lst = e.last;
     const hp = Math.round(u.hp / u.maxHp * 1000) / 10;
     if (Lst.hp !== hp) { e.hp.style.width = hp + '%'; Lst.hp = hp; }
     const sh = Math.min(100, Math.round(u.shield / u.maxHp * 100));
     if (Lst.sh !== sh) { e.sh.style.width = sh + '%'; Lst.sh = sh; }
     const en = Math.round(u.energy); if (Lst.en !== en) { e.en.style.width = en + '%'; Lst.en = en; }
-    const full = u.side === 'hero' && u.alive && u.energy >= 100;
+    const full = isMine(u) && u.alive && u.energy >= 100;
     if (Lst.full !== full) { e.root.classList.toggle('full', full); Lst.full = full; }
     if (Lst.alive !== u.alive) { e.root.classList.toggle('dead', !u.alive); Lst.alive = u.alive; }
     const frozen = u.alive && (u.fx.freeze || 0) > B.t;
@@ -373,15 +408,15 @@ const SKILL_COLORS = { pinkbull: '#ff5fa2', notcoin: '#ffc531', volya: '#ff3030'
   babyshark: '#3fffd0', yaya: '#ff9a3a', dog: '#ffd27a', teddy: '#ff7ac8' };
 
 function processEvents() {
-  const t = T(), { B, els } = BT;
+  const t = T(), B = BT.B;
   const evs = B.events.splice(0);
-  const heroSide = new Set(B.heroes.map(u => u.uid));
+  const mineUid = new Set(allUnits().filter(isMine).map(u => u.uid));
   for (const ev of evs) {
-    const e = els.get(ev.uid);
+    const e = BT.els.get(ev.uid);
     switch (ev.type) {
-      case 'atk': if (e) anim(e.root, heroSide.has(ev.uid) ? 'lunge-up' : 'lunge-down'); break;
+      case 'atk': if (e) anim(e.root, mineUid.has(ev.uid) ? 'lunge-up' : 'lunge-down'); break;
       case 'dmg':
-        float(ev.uid, (ev.crit ? '💥' : '') + n(ev.amount), ev.poison ? 'poison' : ev.crit ? 'crit' : heroSide.has(ev.uid) ? 'hurt' : '');
+        float(ev.uid, (ev.crit ? '💥' : '') + n(ev.amount), ev.poison ? 'poison' : ev.crit ? 'crit' : mineUid.has(ev.uid) ? 'hurt' : '');
         if (e && !ev.poison) anim(e.root, 'hit');
         if (!ev.poison) Sound.play(ev.crit ? 'crit' : 'hit');
         break;
@@ -391,8 +426,7 @@ function processEvents() {
       case 'shield': float(ev.uid, t.shield, 'info'); Sound.play('shield'); break;
       case 'die': float(ev.uid, '💀', 'info'); Sound.play('die'); break;
       case 'skill': {
-        const enemy = ev.side === 'enemy';
-        if (!enemy) track('skills');
+        const enemy = !mineUid.has(ev.uid);
         Sound.play('skill');
         if (e) anim(e.root, 'casting');
         $('#b-banner').innerHTML = `<div class="banner ${enemy ? 'enemy' : ''}"><img src="${img(ev.id)}" alt=""><div><div class="s">${heroText(ev.id).skill}</div><div class="n">${HERO_BY_ID[ev.id].name}</div></div></div>`;
@@ -407,43 +441,42 @@ function processEvents() {
   }
 }
 
-function endBattle(result) {
-  if (!BT) return;
-  const t = T();
+// The stage is over on screen; the server (or local rules offline) replays it and decides the reward.
+async function finishStage() {
+  if (!BT || BT.mode !== 'stage') return;
+  const { idx, inputs } = BT;
   cancelAnimationFrame(BT.raf);
-  const idx = BT.idx;
   BT = null;
   Sound.music('menu');
-  if (!result) { $('#battle').hidden = true; refresh(); return; }
+  let res;
+  try { res = await act({ type: 'stageEnd', inputs }); } catch (e) { toast(errText(e)); res = { result: 'lose', stage: idx }; }
+  showStageResult(idx, res);
+}
+
+function showStageResult(idx, res) {
+  const t = T();
   const resultBack = () => { const b = $('#modal').querySelector('#r-map, #r-heroes'); if (b) b.click(); };
-  if (result === 'win') {
-    const first = idx === S.cleared;
-    track('wins');
-    if (isBossStage(idx)) track('bosses');
-    Sound.play('win');
-    const coins = Math.round(stageReward(idx) * (1 + coinBonus(S.team)) * (first ? 2 : 1));
-    if (first) S.cleared = Math.min(TOTAL_STAGES, S.cleared + 1);
+  if (res.result === 'win') {
+    Sound.play('win'); haptic('heavy');
     const nextIdx = Math.min(idx + 1, TOTAL_STAGES - 1);
     const hasNext = idx + 1 < TOTAL_STAGES && idx + 1 <= S.cleared;
     S.sel = hasNext ? nextIdx : idx;
     S.world = Math.floor(S.sel / STAGES_PER_WORLD);
-    setCoins(coins);
-    Online.submitScore(S.cleared, teamPower(S.team));
-    haptic('heavy');
-    const worldDone = first && isBossStage(idx);
+    save();
+    const worldDone = res.first && isBossStage(idx);
     openModal(`<div class="center">
       <div style="font-size:64px">${worldDone ? '🏆' : '🎉'}</div>
       <div class="big">${t.victory}</div>
       <p class="muted">${t.stage(stageLabel(idx))} ${worldDone ? t.worldDone(worldName(Math.floor(idx / STAGES_PER_WORLD))) : ''}</p>
-      <div class="big" style="color:var(--gold)">+🪙 ${n(coins)}</div>
-      ${first ? `<p class="muted">${t.firstBonus}</p>` : ''}
+      <div class="big" style="color:var(--gold)">+🪙 ${n(res.coins)}</div>
+      ${res.first ? `<p class="muted">${t.firstBonus}</p>` : ''}
       <div class="btns" style="margin-top:14px">
         <button class="btn ghost" id="r-map">${t.toMap}</button>
         <button class="btn ghost" id="r-again">${t.replay}</button>
         ${hasNext ? `<button class="btn" id="r-next">${t.next}</button>` : ''}
       </div></div>`, box => bindResult(box, idx, nextIdx), { lock: true, onBack: resultBack });
   } else {
-    S.stats.losses++; save(); Sound.play('lose');
+    Sound.play('lose');
     openModal(`<div class="center">
       <div style="font-size:64px">💔</div>
       <div class="big">${t.defeat}</div>

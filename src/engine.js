@@ -85,26 +85,51 @@ function stageEnemies(idx) {
 }
 
 // ---------- battle ----------
-let UID = 1;
-function makeUnit(side, o) {
+// Deterministic: all randomness comes from a per-battle seeded RNG and time advances in fixed ticks,
+// so the server can replay a battle from (seed, inputs) and get exactly the same result.
+const TICK = 0.05, MAX_TICKS = Math.round(120 / TICK);
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function makeUnit(B, side, o) {
   return {
-    uid: UID++, side, id: o.id, name: o.name, role: o.role, boss: !!o.boss,
+    uid: B.nextUid++, side, id: o.id, name: o.name, role: o.role, boss: !!o.boss,
     maxHp: Math.round(o.hp), hp: Math.round(o.hp), atk: o.atk, spd: o.spd,
-    timer: Math.random() * o.spd * 0.6, energy: side === 'hero' ? 20 : 0, shield: 0, fx: {}, alive: true,
+    timer: B.rng() * o.spd * 0.6, energy: side === 'hero' || B.pvp ? 20 : 0, shield: 0, fx: {}, alive: true,
     bossCd: 7, poisonNext: 0,
   };
 }
-
-function createBattle(team, levels, idx) {
-  const B = { t: 0, idx, events: [], over: null, auto: false };
-  B.heroes = team.map(id => { const s = heroStats(id, levels[id] || 1); return makeUnit('hero', { ...HERO_BY_ID[id], ...s }); });
-  B.enemies = stageEnemies(idx).map(e => makeUnit('enemy', e));
+function newBattle(seed, pvp) {
+  return { t: 0, tick: 0, seed: seed >>> 0, rng: mulberry32(seed >>> 0), nextUid: 1, events: [], over: null, pvp: !!pvp,
+    autoBy: { hero: false, enemy: !pvp } };
+}
+function teamUnits(B, side, team, levels) {
+  return team.map(id => { const s = heroStats(id, levels[id] || 1); return makeUnit(B, side, { ...HERO_BY_ID[id], ...s }); });
+}
+function createBattle(team, levels, idx, seed = (Math.random() * 2 ** 32) >>> 0) {
+  const B = newBattle(seed, false);
+  B.idx = idx;
+  B.heroes = teamUnits(B, 'hero', team, levels);
+  B.enemies = stageEnemies(idx).map(e => makeUnit(B, 'enemy', e));
+  return B;
+}
+// PvP: side A plays as 'hero', side B as 'enemy'; both sides use the same (hero) rules.
+function createPvpBattle(teamA, levelsA, teamB, levelsB, seed) {
+  const B = newBattle(seed, true);
+  B.heroes = teamUnits(B, 'hero', teamA, levelsA);
+  B.enemies = teamUnits(B, 'enemy', teamB, levelsB);
   return B;
 }
 
 const alive = arr => arr.filter(u => u.alive);
 const on = (B, u, k) => (u.fx[k] || 0) > B.t;
-const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const pick = (B, arr) => arr[Math.floor(B.rng() * arr.length)];
+const heroRules = (B, u) => u.side === 'hero' || B.pvp;
 function atkOf(B, u) { return u.atk * (on(B, u, 'buff') ? 1.4 : 1) * (on(B, u, 'weak') ? 0.75 : 1); }
 function foesOf(B, u) { return alive(u.side === 'hero' ? B.enemies : B.heroes); }
 function friendsOf(B, u) { return alive(u.side === 'hero' ? B.heroes : B.enemies); }
@@ -116,11 +141,11 @@ function damage(B, src, tgt, amount, opts = {}) {
   let dmg = amount;
   if (on(B, tgt, 'vuln')) dmg *= 1.3;
   let crit = false;
-  if (src && src.side === 'hero' && !opts.pure && Math.random() < 0.12) { dmg *= 1.6; crit = true; }
-  dmg = Math.max(1, Math.round(dmg * (0.92 + Math.random() * 0.16)));
+  if (src && heroRules(B, src) && !opts.pure && B.rng() < 0.12) { dmg *= 1.6; crit = true; }
+  dmg = Math.max(1, Math.round(dmg * (0.92 + B.rng() * 0.16)));
   if (tgt.shield > 0) { const a = Math.min(tgt.shield, dmg); tgt.shield -= a; dmg -= a; if (dmg === 0) { B.events.push({ type: 'block', uid: tgt.uid }); return 0; } }
   tgt.hp -= dmg;
-  tgt.energy = Math.min(100, tgt.energy + (tgt.side === 'hero' ? 3 : 2));
+  tgt.energy = Math.min(100, tgt.energy + (heroRules(B, tgt) ? 3 : 2));
   B.events.push({ type: 'dmg', uid: tgt.uid, amount: dmg, crit, poison: !!opts.poison });
   if (tgt.hp <= 0) { tgt.hp = 0; tgt.alive = false; B.events.push({ type: 'die', uid: tgt.uid }); }
   return dmg;
@@ -137,35 +162,27 @@ function heroTarget(B, u) {
   const foes = foesOf(B, u);
   if (!foes.length) return null;
   if (u.role === 'assassin') return lowest(foes);
-  if (u.role === 'archer' || u.role === 'mage') return pick(foes);
+  if (u.role === 'archer' || u.role === 'mage') return pick(B, foes);
   return foes[0];
 }
 
 function enemyTarget(B, u) {
   const hs = alive(B.heroes);
   const tanks = hs.filter(h => h.role === 'tank');
-  if (tanks.length && Math.random() < 0.7) return pick(tanks);
+  if (tanks.length && B.rng() < 0.7) return pick(B, tanks);
   const front = hs.filter(h => h.role === 'warrior' || h.role === 'assassin' || h.role === 'tank');
-  if (front.length && Math.random() < 0.5) return pick(front);
-  return pick(hs);
+  if (front.length && B.rng() < 0.5) return pick(B, front);
+  return pick(B, hs);
 }
 
 function basicAttack(B, u) {
-  if (u.side === 'hero') {
-    const t = heroTarget(B, u);
-    if (!t) return;
-    B.events.push({ type: 'atk', uid: u.uid, target: t.uid });
-    damage(B, u, t, atkOf(B, u));
-    if (u.role === 'healer') heal(B, lowest(friendsOf(B, u)), atkOf(B, u) * 0.5);
-    u.energy = Math.min(100, u.energy + 14);
-  } else {
-    const t = enemyTarget(B, u);
-    if (!t) return;
-    B.events.push({ type: 'atk', uid: u.uid, target: t.uid });
-    damage(B, u, t, atkOf(B, u));
-    if (u.role === 'healer') heal(B, lowest(friendsOf(B, u)), atkOf(B, u) * 0.5);
-    u.energy = Math.min(100, u.energy + 10);
-  }
+  const hr = heroRules(B, u);
+  const t = hr ? heroTarget(B, u) : enemyTarget(B, u);
+  if (!t) return;
+  B.events.push({ type: 'atk', uid: u.uid, target: t.uid });
+  damage(B, u, t, atkOf(B, u));
+  if (u.role === 'healer') heal(B, lowest(friendsOf(B, u)), atkOf(B, u) * 0.5);
+  u.energy = Math.min(100, u.energy + (hr ? 14 : 10));
 }
 
 const SKILLS = {
@@ -188,7 +205,7 @@ const SKILLS = {
 };
 
 function castSkill(B, u) {
-  if (!u.alive || u.energy < 100 || B.over || !foesOf(B, u).length) return false;
+  if (!u || !u.alive || u.energy < 100 || B.over || !foesOf(B, u).length) return false;
   u.energy = 0;
   B.events.push({ type: 'skill', uid: u.uid, id: u.id, side: u.side });
   SKILLS[u.id](B, u);
@@ -202,9 +219,19 @@ function checkEnd(B) {
   else if (!alive(B.heroes).length) B.over = 'lose';
 }
 
-function step(B, dt) {
+// Inputs are [tick, code]: code > 0 casts the skill of unit `code`; -1 / -2 turn hero auto on / off.
+function applyInput(B, code) {
+  if (code === -1) B.autoBy.hero = true;
+  else if (code === -2) B.autoBy.hero = false;
+  else { const u = B.heroes.find(x => x.uid === code); if (u) castSkill(B, u); }
+}
+
+// Advance exactly one fixed tick.
+function step(B) {
   if (B.over) return;
-  B.t += dt;
+  B.tick++;
+  B.t = B.tick * TICK;
+  const dt = TICK;
   for (const u of [...B.heroes, ...B.enemies]) {
     if (!u.alive) continue;
     if (on(B, u, 'poison') && B.t >= u.poisonNext) { u.poisonNext += 1; damage(B, null, u, u.poisonDps, { pure: true, poison: true }); if (!u.alive) continue; }
@@ -219,13 +246,28 @@ function step(B, dt) {
         for (const h of alive(B.heroes)) damage(B, u, h, atkOf(B, u) * 0.9);
       }
     }
-    if (u.energy >= 100 && (u.side === 'enemy' || B.auto)) castSkill(B, u);
+    if (u.energy >= 100 && B.autoBy[u.side]) castSkill(B, u);
   }
   checkEnd(B);
-  if (B.t > 120 && !B.over) B.over = 'lose'; // time limit
+  if (B.tick >= MAX_TICKS && !B.over) B.over = B.pvp ? 'draw' : 'lose';
+}
+
+// Server-side verification of a stage battle: replay it from its seed and the player's inputs.
+function replayStage(team, levels, idx, seed, inputs) {
+  const B = createBattle(team, levels, idx, seed);
+  const q = (Array.isArray(inputs) ? inputs : []).filter(x => Array.isArray(x) && Number.isInteger(x[0]) && Number.isInteger(x[1])).sort((a, b) => a[0] - b[0]);
+  let i = 0, skills = 0;
+  while (!B.over) {
+    while (i < q.length && q[i][0] <= B.tick) applyInput(B, q[i++][1]);
+    for (const e of B.events) if (e.type === 'skill' && e.side === 'hero') skills++;
+    B.events.length = 0;
+    step(B);
+  }
+  for (const e of B.events) if (e.type === 'skill' && e.side === 'hero') skills++;
+  return { result: B.over, ticks: B.tick, skills };
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { RARITY, ROLES, HEROES, HERO_BY_ID, STARTERS, WORLDS, TOTAL_STAGES, STAGES_PER_WORLD, MAX_LEVEL,
-    heroStats, upgradeCost, stageReward, stageEnemies, createBattle, step, castSkill };
+  module.exports = { RARITY, ROLES, HEROES, HERO_BY_ID, STARTERS, WORLDS, TOTAL_STAGES, STAGES_PER_WORLD, MAX_LEVEL, COIN_BONUS, TICK,
+    heroStats, upgradeCost, stageReward, stageEnemies, createBattle, createPvpBattle, step, castSkill, applyInput, replayStage };
 }
