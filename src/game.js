@@ -67,8 +67,10 @@ const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 
 function haptic(kind) { try { const w = Online.tg(); if (w && w.HapticFeedback) w.HapticFeedback.impactOccurred(kind || 'light'); } catch (e) {} }
 
-function showCoins(prev) {
+function showCoins(prev, prevGems) {
   const el = $('#coins'); el.querySelector('span').textContent = n(S.coins);
+  const g = $('#gems'); g.querySelector('span').textContent = n(S.gems || 0);
+  if (prevGems !== undefined && prevGems !== S.gems) { g.classList.remove('bump'); void g.offsetWidth; g.classList.add('bump'); }
   if (prev !== undefined && prev !== S.coins) {
     if (S.coins > prev) Sound.play('coin');
     el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
@@ -81,11 +83,11 @@ const teamPower = team => ECON.teamPower(S, team);
 // clock and dice) and returns the updated profile; offline the rules run locally.
 async function act(action) {
   await Online.ready;
-  const prev = S.coins;
+  const prev = S.coins, prevGems = S.gems;
   let result;
   if (Online.state.profile) { const r = await Online.act(action); Object.assign(S, r.profile); result = r.result; }
   else result = ECON.act(S, action, { now: Date.now(), rng: Math.random });
-  save(); showCoins(prev);
+  save(); showCoins(prev, prevGems);
   return result;
 }
 const errText = e => T().err[e && e.message] || T().err.network;
@@ -117,8 +119,9 @@ function canGoBack() { return !$('#modal').hidden || !!BT || S.tab !== 'map'; }
 function goBack() {
   if (!$('#modal').hidden) return (modalBack || closeModal)();
   if (BT) return BT.ended ? undefined : confirmLeave();
-  if (S.tab !== 'map') show('map');
+  if (S.tab !== 'map') show(PARENT_TAB[S.tab] || 'map');
 }
+const PARENT_TAB = { clan: 'rank', lab: 'heroes' };
 function syncNav() {
   const can = canGoBack(), w = Online.tg();
   const back = $('#back'); if (back) back.hidden = S.tab === 'map';
@@ -142,8 +145,8 @@ window.addEventListener('popstate', () => {
 // ---------- tabs ----------
 function show(tab) {
   S.tab = tab; save();
-  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === (tab === 'lab' ? 'heroes' : tab)));
-  ({ map: renderMap, arena: renderArena, lab: renderLab, heroes: renderHeroes, chest: renderChest, quests: renderQuests, rank: renderRank })[tab]();
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === (PARENT_TAB[tab] || tab)));
+  ({ map: renderMap, arena: renderArena, lab: renderLab, heroes: renderHeroes, chest: renderChest, quests: renderQuests, rank: renderRank, clan: renderClan })[tab]();
   updateBadge();
   window.scrollTo(0, 0);
   syncNav();
@@ -253,36 +256,54 @@ function heroModal(id) {
 const CHESTS = [
   { key: 'basic', ico: '🎁', c: '#3fa2ff', ...ECON.CHESTS.basic },
   { key: 'royal', ico: '👑', c: '#ffc531', ...ECON.CHESTS.royal },
+  { key: 'gem', ico: '💎', c: '#c77dff', ...ECON.CHESTS.gem },
 ];
+const chestCan = c => (c.currency === 'gems' ? S.gems || 0 : S.coins) >= c.cost;
+const chestBtn = (c, again) => c.currency === 'gems' ? T()[again ? 'againGems' : 'openGems'](n(c.cost)) : T()[again ? 'again' : 'open'](n(c.cost));
 const chestName = c => T()[c.key + 'Chest'];
 function renderChest() {
-  const t = T();
+  const t = T(), rate = ECON.gemRate(S), warp = ECON.afkRate(S) * ECON.WARP_HOURS;
   $('#screen').innerHTML = `<div class="h2">${t.chestTitle}</div>
     <p class="muted">${t.chestNote}</p>
     ${CHESTS.map(c => `<div class="panel chest" style="--c:${c.c}"><div class="ico">${c.ico}</div><div style="flex:1">
       <div class="t">${chestName(c)}</div>
       <div class="rates">${Object.entries(c.rates).filter(([, v]) => v).map(([r, v]) => `<span style="color:${RARITY[r].color}">${L().rarity[r]} ${pct(v)}</span>`).join('')}</div>
-      <button class="btn ${c.key === 'royal' ? 'gold' : ''} wide" data-k="${c.key}" ${S.coins < c.cost ? 'disabled' : ''}>${t.open(n(c.cost))}</button>
+      <button class="btn ${c.key === 'royal' ? 'gold' : c.key === 'gem' ? 'gem' : ''} wide" data-k="${c.key}" ${chestCan(c) ? '' : 'disabled'}>${chestBtn(c)}</button>
     </div></div>`).join('')}
+    <div class="panel"><div class="t">${t.exTitle}</div><p class="muted">${t.exNote(n(rate))}</p>
+      <div class="stakes exch">${[10, 50, 200].map(g => `<button class="chip" data-ex="${g}" ${(S.gems || 0) < g ? 'disabled' : ''}>💎 ${n(g)} → 🪙 ${n(g * rate)}</button>`).join('')}</div>
+      <div class="t" style="margin-top:12px">${t.warpTitle}</div><p class="muted">${t.warpNote(n(ECON.WARP_HOURS), n(warp))}</p>
+      <button class="btn wide gem" id="warp" ${(S.gems || 0) < ECON.WARP_COST ? 'disabled' : ''}>${t.warpBtn(n(ECON.WARP_COST))}</button></div>
     ${Online.state.server && Online.state.packs.length ? `<div class="h2">${t.shop}</div>
       <p class="muted">${t.shopNote}</p>
-      <div class="shop">${Online.state.packs.map(p => `<button class="pack" data-pack="${esc(p.id)}"><div class="pi">${p.coins >= 30000 ? '💰' : p.coins >= 10000 ? '🪙🪙' : '🪙'}</div>
-        <div class="pc">${n(p.coins)}</div><div class="ps">⭐ ${n(p.stars)}</div></button>`).join('')}</div>` : ''}
-    <p class="muted center" style="margin-top:18px">${t.coinTip}</p>`;
+      <div class="shop">${Online.state.packs.map(p => `<button class="pack" data-pack="${esc(p.id)}"><div class="pi">${p.gems >= 500 ? '💎💎💎' : p.gems >= 150 ? '💎💎' : '💎'}</div>
+        <div class="pc">${n(p.gems)}</div><div class="ps">⭐ ${n(p.stars)}</div></button>`).join('')}</div>` : ''}
+    <p class="muted" style="margin-top:18px">${t.gemTip}</p>
+    <p class="muted">${t.coinTip}</p>`;
   document.querySelectorAll('[data-k]').forEach(b => b.onclick = () => openChest(CHESTS.find(c => c.key === b.dataset.k)));
   document.querySelectorAll('[data-pack]').forEach(b => b.onclick = async () => {
     b.disabled = true;
     try {
       const r = await Online.buy(b.dataset.pack);
-      if (r.profile) { const prev = S.coins; Object.assign(S, r.profile); save(); showCoins(prev); }
-      if (r.coins) giftModal('⭐', t.bought, r.coins);
+      if (r.profile) { const prev = S.coins, pg = S.gems; Object.assign(S, r.profile); save(); showCoins(prev, pg); }
+      if (r.coins || r.gems) giftModal('⭐', t.bought, r.coins, '', r.gems);
       else if (r.status === 'paid') giftModal('⏳', t.paid, 0, t.paidNote);
     } catch (e) { giftModal('⚠️', t.buyErr, 0, t.buyErrNote); }
     b.disabled = false;
   });
+  document.querySelectorAll('[data-ex]').forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    const r = await tryAct({ type: 'exchange', gems: +b.dataset.ex });
+    if (r) { Sound.play('coin'); giftModal('💱', t.exchanged, r.coins); } else renderChest();
+  });
+  $('#warp').onclick = async () => {
+    $('#warp').disabled = true;
+    const r = await tryAct({ type: 'warp' });
+    if (r) { Sound.play('coin'); giftModal('⏩', t.warpTitle, r.coins); } else renderChest();
+  };
 }
 async function openChest(c) {
-  if (S.coins < c.cost) return;
+  if (!chestCan(c)) return;
   const r = await tryAct({ type: 'chest', key: c.key });
   if (r) chestReveal(c, r);
 }
@@ -297,7 +318,7 @@ function chestReveal(c, r) {
     <div class="big latin" style="font-size:26px">${h.name}</div>
     <div class="muted">${heroText(h.id).title} · ${ROLES[h.role].icon} ${L().role[h.role]}</div>
     <p style="font-weight:700">${msg}</p>
-    <div class="btns"><button class="btn ghost" id="cl">${t.ok}</button><button class="btn ${c.key === 'royal' ? 'gold' : ''}" id="again" ${S.coins < c.cost ? 'disabled' : ''}>${t.again(n(c.cost))}</button></div>
+    <div class="btns"><button class="btn ghost" id="cl">${t.ok}</button><button class="btn ${c.key === 'royal' ? 'gold' : c.key === 'gem' ? 'gem' : ''}" id="again" ${chestCan(c) ? '' : 'disabled'}>${chestBtn(c, true)}</button></div>
   </div>`, box => {
     box.querySelector('#cl').onclick = () => { closeModal(); refresh(); };
     box.querySelector('#again').onclick = () => openChest(c);

@@ -13,7 +13,10 @@ function fail(code) { const e = new Error(code); e.code = 400; throw e; }
 const rid = n => crypto.randomBytes(n).toString('hex');
 const roomCode = () => Array.from(crypto.randomBytes(6), b => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 32]).join('');
 
-module.exports = function createArena({ db, persist, notify = () => {} }) {
+const PVP_WIN_GEMS = 2;
+const AI_NAMES = ['Neon Ronin', 'Frost Byte', 'Crypto Kraken', 'Shadow Bot', 'Lucky Lynx', 'Iron Gecko', 'Moon Mantis', 'Pixel Paladin', 'Turbo Tiger', 'Volt Viper'];
+
+module.exports = function createArena({ db, persist, notify = () => {}, onPoints = () => {} }) {
   const tickets = new Map();   // ticket id (secret) -> ticket
   const queues = new Map();    // stake -> waiting tickets
   const rooms = new Map();     // invite code -> waiting host ticket
@@ -76,7 +79,7 @@ module.exports = function createArena({ db, persist, notify = () => {} }) {
   }
   function matchInfo(m, t) {
     const opp = t === m.a ? m.b : m.a;
-    return { side: t.side, stake: m.stake, pot: m.stake * 2, startIn: Math.max(0, m.startAt - now()),
+    return { side: t.side, ai: m.ai, stake: m.stake, pot: m.stake * 2, startIn: Math.max(0, m.startAt - now()),
       you: { name: t.name, power: t.power }, opp: { name: opp.name, power: opp.power },
       units: [...m.B.heroes, ...m.B.enemies].map(u => ({ uid: u.uid, side: u.side, id: u.id, name: u.name, maxHp: u.maxHp })) };
   }
@@ -84,7 +87,7 @@ module.exports = function createArena({ db, persist, notify = () => {} }) {
   function startMatch(a, b) {
     unlist(a); unlist(b);
     const B = E.createPvpBattle(a.team, a.levels, b.team, b.levels, crypto.randomInt(2 ** 32));
-    const m = { id: rid(8), a, b, B, stake: a.stake, startAt: now() + COUNTDOWN_MS, inputs: [], ev: [], timer: null };
+    const m = { id: rid(8), ai: a.aiLevel || null, a, b, B, stake: a.stake, startAt: now() + COUNTDOWN_MS, inputs: [], ev: [], timer: null };
     a.side = 'hero'; b.side = 'enemy';
     for (const t of [a, b]) { t.match = m; t.status = 'playing'; send(t, 'match', matchInfo(m, t)); }
     setTimeout(() => { m.timer = setInterval(() => tick(m), E.TICK * 1000); }, COUNTDOWN_MS);
@@ -113,19 +116,58 @@ module.exports = function createArena({ db, persist, notify = () => {} }) {
   function finish(m) {
     clearInterval(m.timer);
     const winner = m.B.over === 'win' ? m.a : m.B.over === 'lose' ? m.b : null;
+    if (m.ai) return finishAi(m, winner);
     const pot = m.stake * 2;
     for (const t of [m.a, m.b]) {
       const u = db.users[t.uid], p = u && u.profile;
       delete db.escrow[t.id];
       let result;
       if (!winner) { result = 'draw'; if (p) p.coins += m.stake; }
-      else if (t === winner) { result = 'win'; if (p) { p.coins += pot; p.stats.pvpWins = (p.stats.pvpWins || 0) + 1; ECON.track(p, 'wins', 1, now()); } }
+      else if (t === winner) {
+        result = 'win';
+        if (p) { p.coins += pot; p.gems = (p.gems || 0) + PVP_WIN_GEMS; p.stats.pvpWins = (p.stats.pvpWins || 0) + 1; ECON.track(p, 'wins', 1, now()); }
+        onPoints(t.uid, 5);
+      }
       else { result = 'lose'; if (p) p.stats.pvpLosses = (p.stats.pvpLosses || 0) + 1; }
       t.status = 'done';
-      t.end = { result, stake: m.stake, pot, coins: p ? p.coins : 0, opp: (t === m.a ? m.b : m.a).name };
+      t.end = { result, stake: m.stake, pot, gemsWon: result === 'win' ? PVP_WIN_GEMS : 0, coins: p ? p.coins : 0, gems: p ? p.gems : 0, opp: (t === m.a ? m.b : m.a).name };
       send(t, 'end', t.end);
       if (!t.client) notify(t.uid, t.end);
     }
+    persist();
+  }
+
+  // ---------- AI rival ----------
+  // An AI team of random heroes whose power is scaled to the player's (easy 80%, normal 100%, hard 125%).
+  function aiTeam(p, level) {
+    const pool = E.BASE_HEROES.map(h => h.id);
+    const team = [];
+    while (team.length < 5) { const id = pool.splice(crypto.randomInt(pool.length), 1)[0]; team.push(id); }
+    const target = ECON.teamPower(p) * ECON.AI_LEVELS[level].power;
+    let lo = 1, hi = E.MAX_LEVEL;
+    const power = L => ECON.teamPower({ owned: Object.fromEntries(team.map(id => [id, L])) }, team);
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (power(mid) >= target) hi = mid; else lo = mid + 1; }
+    return { team, levels: Object.fromEntries(team.map(id => [id, lo])), power: Math.round(power(lo)) };
+  }
+  function finishAi(m, winner) {
+    const t = m.a, u = db.users[t.uid], p = u && u.profile;
+    const result = !winner ? 'draw' : winner === t ? 'win' : 'lose';
+    let reward = { coins: 0, gems: 0 };
+    if (p && result === 'win') {
+      p.stats.aiWins = (p.stats.aiWins || 0) + 1;
+      ECON.track(p, 'wins', 1, now());
+      onPoints(t.uid, 1);
+      if (ECON.aiLeft(p, now()) > 0) {
+        reward = ECON.aiReward(p, m.ai);
+        p.coins += reward.coins; p.gems = (p.gems || 0) + reward.gems;
+        const d = ECON.day(now());
+        p.aiDay = p.aiDay && p.aiDay.date === d ? { date: d, wins: p.aiDay.wins + 1 } : { date: d, wins: 1 };
+      }
+    }
+    t.status = 'done'; m.b.status = 'done';
+    t.end = { result, ai: m.ai, reward, aiLeft: p ? ECON.aiLeft(p, now()) : 0, coins: p ? p.coins : 0, gems: p ? p.gems : 0, opp: m.b.name };
+    send(t, 'end', t.end);
+    tickets.delete(m.b.id);
     persist();
   }
 
@@ -182,6 +224,23 @@ module.exports = function createArena({ db, persist, notify = () => {} }) {
       if (code === -1 || code === -2) t.auto = code === -1;
       else if (Number.isInteger(code)) m.inputs.push({ side: t.side, code });
       return { ok: true };
+    },
+    'POST /api/pvp/ai': (body, u) => {
+      const level = ECON.AI_LEVELS[body.level] ? body.level : 'normal';
+      const p = u.profile;
+      if (!p) fail('no_profile');
+      if (!p.team.length) fail('bad_team');
+      if (busyTicket(u.id)) fail('busy');
+      const t = { id: rid(16), uid: u.id, name: u.name, stake: 0, mode: 'ai', team: [...p.team],
+        levels: Object.fromEntries(p.team.map(id => [id, p.owned[id]])), power: Math.round(ECON.teamPower(p)),
+        status: 'waiting', client: null, auto: false, created: now(), lastSeen: now() };
+      const ai = aiTeam(p, level);
+      const bot = { id: rid(16), uid: null, ai: true, name: '🤖 ' + AI_NAMES[crypto.randomInt(AI_NAMES.length)], stake: 0, ...ai,
+        status: 'waiting', client: null, auto: true, created: now(), lastSeen: now() };
+      tickets.set(t.id, t); tickets.set(bot.id, bot);
+      t.aiLevel = level;
+      startMatch(t, bot);
+      return { ticket: t.id, aiLeft: ECON.aiLeft(p, now()) };
     },
     'POST /api/pvp/state': (body, u) => {
       const t = busyTicket(u.id);

@@ -83,21 +83,21 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   r = await post('/api/act', { initData: initData(alice), action: { type: 'team', team: ['notcoin'] } }); assert.equal(r.status, 400, 'cannot field unowned hero');
 
   // Stars purchase flow
-  r = await post('/api/invoice', { initData: initData(alice), pack: 'coins_m' });
+  r = await post('/api/invoice', { initData: initData(alice), pack: 'gems_m' });
   assert.equal(r.body.link, 'https://t.me/$invoice-test');
   const inv = calls.find(c => c.method === 'createInvoiceLink').data;
-  assert.equal(inv.currency, 'XTR'); assert.match(inv.title, /10,000 coins/); assert.equal(inv.prices[0].amount, 75); assert.equal(inv.payload, '111:coins_m');
+  assert.equal(inv.currency, 'XTR'); assert.match(inv.title, /170 💎/); assert.equal(inv.prices[0].amount, 75); assert.equal(inv.payload, '111:gems_m');
   r = await post('/api/invoice', { initData: initData(alice), pack: 'nope' }); assert.equal(r.status, 400);
 
-  queue.push({ update_id: 1, pre_checkout_query: { id: 'pc1', from: alice, currency: 'XTR', total_amount: 75, invoice_payload: '111:coins_m' } });
-  queue.push({ update_id: 2, pre_checkout_query: { id: 'pc2', from: alice, currency: 'XTR', total_amount: 1, invoice_payload: '111:coins_m' } });
-  queue.push({ update_id: 3, message: { chat: { id: 111 }, from: alice, successful_payment: { telegram_payment_charge_id: 'ch1', total_amount: 75, invoice_payload: '111:coins_m' } } });
-  queue.push({ update_id: 4, message: { chat: { id: 111 }, from: alice, successful_payment: { telegram_payment_charge_id: 'ch1', total_amount: 75, invoice_payload: '111:coins_m' } } });
+  queue.push({ update_id: 1, pre_checkout_query: { id: 'pc1', from: alice, currency: 'XTR', total_amount: 75, invoice_payload: '111:gems_m' } });
+  queue.push({ update_id: 2, pre_checkout_query: { id: 'pc2', from: alice, currency: 'XTR', total_amount: 1, invoice_payload: '111:gems_m' } });
+  queue.push({ update_id: 3, message: { chat: { id: 111 }, from: alice, successful_payment: { telegram_payment_charge_id: 'ch1', total_amount: 75, invoice_payload: '111:gems_m' } } });
+  queue.push({ update_id: 4, message: { chat: { id: 111 }, from: alice, successful_payment: { telegram_payment_charge_id: 'ch1', total_amount: 75, invoice_payload: '111:gems_m' } } });
   queue.push({ update_id: 5, message: { chat: { id: 333 }, from: { id: 333, first_name: 'Cara' }, text: '/start' } });
   await sleep(1500);
   const pcs = calls.filter(c => c.method === 'answerPreCheckoutQuery').map(c => c.data);
   assert.deepEqual(pcs.map(p => p.ok), [true, false], 'wrong amount rejected');
-  r = await post('/api/claim', { initData: initData(alice) }); assert.equal(r.body.coins, 10000, 'duplicate payment credited once');
+  r = await post('/api/claim', { initData: initData(alice) }); assert.equal(r.body.gems, 170, 'duplicate payment credited once'); assert.equal(r.body.coins, 0);
   const aliceAfterPay = r.body.profile.coins;
   const starts = calls.filter(c => c.method === 'sendMessage' && c.data.chat_id === 333);
   assert.equal(starts[0].data.reply_markup.inline_keyboard[0][0].web_app.url, 'https://game.example');
@@ -219,6 +219,55 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   console.log('   quick match:', ed.data.result, 'for Dan; Carol left early and was notified by the bot:',
     calls.some(c => c.method === 'sendMessage' && c.data.chat_id === 555));
   assert.equal(Object.keys(srv.db.escrow).length, 0, 'no stakes left in escrow');
+
+  // ---------- AI rival: no stake, daily reward ----------
+  srv.db.users['555'].profile.cleared = 10;
+  const g0 = srv.db.users['555'].profile.gems, k0 = await coinsOf(carol);
+  r = await post('/api/pvp/ai', { initData: initData(carol), level: 'hard' }); assert.equal(r.status, 200, JSON.stringify(r.body));
+  const aiT = r.body.ticket; const lai = listen(aiT);
+  const mai = await lai.wait('match'); assert.equal(mai.data.ai, 'hard');
+  r = await post('/api/pvp/input', { initData: initData(carol), ticket: aiT, code: -1 });
+  const eai = await lai.wait('end'); lai.close();
+  assert.ok(eai.data.ai); assert.ok(['win', 'lose', 'draw'].includes(eai.data.result));
+  if (eai.data.result === 'win') {
+    assert.ok(eai.data.reward.coins > 0); assert.equal(eai.data.reward.gems, 1); assert.equal(eai.data.aiLeft, 4);
+    assert.equal(await coinsOf(carol), k0 + eai.data.reward.coins); assert.equal(srv.db.users['555'].profile.gems, g0 + 1);
+  } else assert.equal(await coinsOf(carol), k0, 'losing to the AI costs nothing');
+  for (let k = 0; k < 4; k++) { // easy rivals: check the reward path once Carol wins
+    const before = await coinsOf(carol);
+    r = await post('/api/pvp/ai', { initData: initData(carol), level: 'easy' });
+    const l2 = listen(r.body.ticket); await post('/api/pvp/input', { initData: initData(carol), ticket: r.body.ticket, code: -1 });
+    const e2 = (await l2.wait('end')).data; l2.close();
+    if (e2.result !== 'win') continue;
+    assert.ok(e2.reward.coins > 0); assert.equal(e2.reward.gems, 0); assert.ok(e2.aiLeft < 5);
+    assert.equal(await coinsOf(carol), before + e2.reward.coins);
+    console.log('   AI rival (easy) win pays', e2.reward.coins, 'coins, wins left today:', e2.aiLeft); break;
+  }
+  console.log('   AI rival (hard):', eai.data.result, JSON.stringify(eai.data.reward || {}));
+
+  // ---------- clans ----------
+  srv.db.users['555'].profile.coins = 2500;
+  r = await post('/api/clan/create', { initData: initData(carol), name: 'x', emblem: '🐉' }); assert.equal(r.body.error, 'bad_name');
+  r = await post('/api/clan/create', { initData: initData(carol), name: 'Dragons', emblem: '🐉' });
+  assert.equal(r.status, 200, JSON.stringify(r.body)); assert.equal(r.body.profile.coins, 500); const clanId = r.body.clan.id;
+  r = await post('/api/clan/create', { initData: initData(dan), name: 'dragons' }); assert.equal(r.body.error, 'name_taken');
+  r = await post('/api/clan/join', { initData: initData(dan), id: clanId }); assert.equal(r.body.clan.members, 2);
+  r = await post('/api/clan/join', { initData: initData(dan), id: clanId }); assert.equal(r.body.error, 'in_clan');
+  r = await post('/api/clan/list', { initData: initData(alice), q: 'drag' }); assert.equal(r.body.clans[0].name, 'Dragons');
+  r = await post('/api/clan/claim', { initData: initData(dan) }); assert.equal(r.body.error, 'not_ready');
+  srv.db.users['666'].profile.cleared = 3;
+  await post('/api/act', { initData: initData(dan), action: { type: 'stageStart', stage: 3 } });
+  srv.db.users['666'].profile.pending.levels = { pinkbull: 100, egor: 100, gramcat: 100, memegram: 100, babyshark: 100 };
+  r = await post('/api/act', { initData: initData(dan), action: { type: 'stageEnd', inputs: [[0, -1]] } }); assert.equal(r.body.result.first, true);
+  r = await post('/api/clan/me', { initData: initData(dan) }); assert.ok(r.body.clan.points >= 2, 'first clear gives clan points');
+  srv.db.clans[clanId].last = { week: 'old', points: 400, claimed: [] };
+  const dg = srv.db.users['666'].profile.gems;
+  r = await post('/api/clan/claim', { initData: initData(dan) }); assert.equal(r.body.gems, 25); assert.equal(r.body.profile.gems, dg + 25);
+  r = await post('/api/clan/claim', { initData: initData(dan) }); assert.equal(r.body.error, 'claimed');
+  r = await post('/api/clan/kick', { initData: initData(dan), id: '555' }); assert.equal(r.body.error, 'not_leader');
+  r = await post('/api/clan/kick', { initData: initData(carol), id: '666' }); assert.equal(r.body.clan.members, 1);
+  r = await post('/api/clan/leave', { initData: initData(carol) }); assert.ok(!srv.db.clans[clanId], 'empty clan removed');
+  console.log('   clans: create, join, points, weekly chest, kick, leave');
 
   r = await fetch(base + '/api/status').then(x => x.json());
   assert.equal(r.webappUrlOk, true); assert.ok(r.updatesHandled >= 6); assert.equal(r.lastHandleError, null);

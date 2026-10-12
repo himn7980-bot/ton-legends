@@ -69,7 +69,13 @@ const Online = (() => {
     }
     return es;
   }
+  const clan = (op, body) => call('clan/' + op, body || {});
   const duelLink = code => (state.bot ? `https://t.me/${state.bot}?startapp=duel_${code}` : null);
+  function shareClan(id, text) {
+    const w = tg(); if (!state.bot || !w) return false;
+    w.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(`https://t.me/${state.bot}?startapp=clan_${id}`)}&text=${encodeURIComponent(text)}`);
+    return true;
+  }
   function shareDuel(code, text) {
     const link = duelLink(code), w = tg();
     if (!link || !w) return false;
@@ -82,11 +88,10 @@ const Online = (() => {
     const w = tg(); if (!w || !state.server) throw new Error('offline');
     const { link } = await call('invoice', { pack: packId });
     const status = await new Promise(res => w.openInvoice(link, res));
-    if (status !== 'paid') return { status, coins: 0 };
-    let coins = 0;
-    let profile = null;
-    for (let i = 0; i < 5 && !coins; i++) { await new Promise(r => setTimeout(r, 1200)); const c = await claim(); coins = c.coins || 0; profile = c.profile; }
-    return { status, coins, profile };
+    if (status !== 'paid') return { status, coins: 0, gems: 0 };
+    let coins = 0, gems = 0, profile = null;
+    for (let i = 0; i < 5 && !coins && !gems; i++) { await new Promise(r => setTimeout(r, 1200)); const c = await claim(); coins = c.coins || 0; gems = c.gems || 0; profile = c.profile; }
+    return { status, coins, gems, profile };
   }
 
   function inviteLink() {
@@ -101,5 +106,5 @@ const Online = (() => {
   }
 
   return { state, ready, markReady: () => markReady(), tg, user, startParam, connect, hello, cloudLoad, cloudSave, submitScore, leaderboard, claim, buy,
-    inviteLink, share, loadProfile, act, pvp, stream, duelLink, shareDuel };
+    inviteLink, share, loadProfile, act, pvp, clan, stream, duelLink, shareDuel, shareClan };
 })();

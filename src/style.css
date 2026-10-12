@@ -357,3 +357,30 @@ button:disabled { opacity: .45; cursor: default; }
 .pick-grid { margin-top: 10px; }
 .card.pick.low { opacity: .55; }
 .card.pick.low .lv { background: var(--red); }
+
+/* ---------- gems, AI rival, clans ---------- */
+:root { --gem: #d49bff; }
+.coins { padding: 6px 11px; white-space: nowrap; }
+.coins.gems { color: var(--gem); cursor: pointer; }
+@media (max-width: 390px) { .logo { font-size: 16px; } .coins { padding: 5px 8px; font-size: 13px; } .hdr-r { gap: 5px; } }
+.btn.gem { background: linear-gradient(180deg, #d9a3ff, #9b4dff); color: #22003f; box-shadow: 0 4px 0 #5f22a8, 0 6px 18px rgba(180,100,255,.35); }
+.ai-levels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+.ai-levels .btn { padding: 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 14px; }
+.ai-levels .btn small { font-size: 11px; font-weight: 700; opacity: .85; }
+.clan-entry { cursor: pointer; }
+.clan-head { display: flex; gap: 14px; align-items: center; }
+.clan-emb { font-size: 44px; width: 64px; height: 64px; display: grid; place-items: center; background: var(--panel2); border: 1px solid var(--line); border-radius: 18px; flex: none; }
+.emblems { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; margin: 10px 0; }
+.emblems button { font-size: 20px; padding: 6px 0; border-radius: 10px; background: var(--panel2); border: 1px solid var(--line); }
+.emblems button.on { border-color: var(--gold); background: #3a3000; }
+.clan-in { width: 100%; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel2); color: var(--text); font: inherit; font-size: 16px; user-select: text; }
+.crow { display: flex; gap: 10px; align-items: center; padding: 10px 4px; border-bottom: 1px solid var(--line); }
+.crow:last-child { border-bottom: 0; }
+.crow .ce { font-size: 26px; }
+.crow .cn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.crow .cs { font-size: 12px; color: var(--muted); }
+.crow .kick { background: none; color: var(--red); font-size: 12px; padding: 4px 6px; }
+.tiers { font-size: 12px; color: var(--muted); display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; margin-top: 8px; }
+.tiers .on { color: var(--gold); font-weight: 700; }
+.stakes.exch { grid-template-columns: repeat(3, 1fr); }
+.stakes.exch .chip { white-space: normal; padding: 8px 4px; }

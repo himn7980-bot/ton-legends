@@ -16,9 +16,10 @@ function updateBadge() {
   if (b) b.classList.toggle('dot', ECON.claimable(S, now()) > 0);
 }
 
-function giftModal(icon, title, coins, note) {
+function giftModal(icon, title, coins, note, gems) {
   openModal(`<div class="center"><div style="font-size:60px">${icon}</div><div class="big">${title}</div>
     ${coins ? `<div class="big" style="color:var(--gold)">+🪙 ${n(coins)}</div>` : ''}
+    ${gems ? `<div class="big" style="color:var(--gem)">+💎 ${n(gems)}</div>` : ''}
     ${note ? `<p class="muted">${note}</p>` : ''}
     <button class="btn wide" id="gm-ok" style="margin-top:10px">${T().great}</button></div>`, box => box.querySelector('#gm-ok').onclick = () => { closeModal(); refresh(); });
 }
@@ -28,7 +29,7 @@ async function claimDaily() {
   if (!dailyCanClaim()) return;
   const r = await tryAct({ type: 'daily' });
   if (!r) return;
-  if (r.chest) chestReveal(CHESTS.find(c => c.key === 'royal'), r.chest);
+  if (r.chest) { chestReveal(CHESTS.find(c => c.key === 'royal'), r.chest); if (r.gems) toast(`+💎 ${n(r.gems)}`); }
   else giftModal('📅', T().dayReward(n(r.day)), r.coins);
 }
 function dailyHtml(panel = true) {
@@ -37,7 +38,7 @@ function dailyHtml(panel = true) {
   return `<div class="${panel ? 'panel' : ''}"><div class="row"><div class="t">${t.dailyTitle}</div><span class="muted">${t.dailySub}</span></div>
     <div class="days">${DAILY_REWARDS.map((r, i) => {
       const d = i + 1, got = can ? d < nextDay : d <= nextDay, cur = can && d === nextDay;
-      return `<div class="day ${got ? 'got' : ''} ${cur ? 'cur' : ''}"><small>${t.day(n(d))}</small><b>${r === 'royal' ? '👑' : '🪙'}</b><small>${r === 'royal' ? t.chestShort : n(r)}</small></div>`;
+      return `<div class="day ${got ? 'got' : ''} ${cur ? 'cur' : ''}"><small>${t.day(n(d))}</small><b>${r === 'royal' ? '👑' : '🪙'}</b><small>${r === 'royal' ? `${t.chestShort} +💎${n(ECON.DAY7_GEMS)}` : n(r)}</small></div>`;
     }).join('')}</div>
     <button class="btn wide ${can ? 'gold' : 'ghost'}" id="daily" ${can ? '' : 'disabled'}>${can ? t.claimToday : t.comeBack}</button></div>`;
 }
@@ -60,23 +61,24 @@ function renderQuests() {
     ${ACHIEVEMENTS.map(a => {
       const tier = achTier(a), done = tier >= a.tiers.length, goal = a.tiers[Math.min(tier, a.tiers.length - 1)];
       return questRow('ach-' + a.id, a.icon, t.ach[a.id](n(goal)) + (a.tiers.length > 1 ? ` <span class="muted">(${n(Math.min(tier + 1, a.tiers.length))}/${n(a.tiers.length)})</span>` : ''),
-        Math.min(goal, a.stat(S)), goal, a.r[Math.min(tier, a.r.length - 1)], done);
+        Math.min(goal, a.stat(S)), goal, a.r[Math.min(tier, a.r.length - 1)], done, ECON.achGems(Math.min(tier, a.r.length - 1)));
     }).join('')}`;
   $('#daily').onclick = claimDaily;
   $('#afk').onclick = async () => { if (await tryAct({ type: 'afk' })) renderQuests(); };
   document.querySelectorAll('[data-q]').forEach(b => b.onclick = async () => {
     const [kind, id] = b.dataset.q.split('-');
     b.disabled = true;
-    await tryAct({ type: kind === 'dq' ? 'quest' : 'ach', id });
+    const r = await tryAct({ type: kind === 'dq' ? 'quest' : 'ach', id });
+    if (r && r.gems) toast(`+🪙 ${n(r.coins)} · +💎 ${n(r.gems)}`);
     renderQuests();
   });
 }
-function questRow(key, icon, title, prog, goal, reward, claimed) {
+function questRow(key, icon, title, prog, goal, reward, claimed, gems) {
   const ready = !claimed && prog >= goal;
   return `<div class="quest ${claimed ? 'claimed' : ''}"><div class="qi">${icon}</div><div class="qb">
     <div class="qt">${title}</div><div class="bar xp"><i style="width:${prog / goal * 100}%"></i></div>
     <div class="muted" style="font-size:11px">${n(prog)} / ${n(goal)}</div></div>
-    <button class="btn ${ready ? 'gold' : 'ghost'} qbtn" data-q="${key}" ${ready ? '' : 'disabled'}>${claimed ? '✓' : `🪙 ${n(reward)}`}</button></div>`;
+    <button class="btn ${ready ? 'gold' : 'ghost'} qbtn" data-q="${key}" ${ready ? '' : 'disabled'}>${claimed ? '✓' : `🪙 ${n(reward)}${gems ? `<br>💎 ${n(gems)}` : ''}`}</button></div>`;
 }
 
 // ---------- leaderboard / profile tab ----------
@@ -89,12 +91,14 @@ function renderRank() {
     <div class="stats">
       <div>${t.wins}<b>${n(S.stats.wins)}</b></div><div>${t.arenaWins}<b>${n(S.stats.pvpWins || 0)}</b></div><div>${t.bossesBeaten}<b>${n(S.stats.bosses)}</b></div>
     </div>
+    ${Online.state.profile ? `<div class="panel row clan-entry" id="to-clan"><div class="t">${t.clanTitle}</div><button class="btn">${t.openClan} →</button></div>` : ''}
     ${Online.inviteLink() ? `<div class="panel"><div class="t">${t.invite}</div>
       <p class="muted">${t.inviteNote}</p>
       <button class="btn wide" id="invite">${t.sendInvite}</button></div>` : ''}
     <div class="h2">${t.leaderboard}</div>
     <div id="board">${Online.state.server ? `<p class="muted center">${t.loading}</p>` : `<div class="panel center muted">${t.boardOffline}</div>`}</div>`;
   if ($('#invite')) $('#invite').onclick = () => Online.share(t.inviteText);
+  if ($('#to-clan')) $('#to-clan').onclick = () => show('clan');
   if (Online.state.server) Online.leaderboard().then(d => {
     const el = $('#board'); if (!el || S.tab !== 'rank') return;
     if (!d || !d.top) { el.innerHTML = `<div class="panel center muted">${t.boardErr}</div>`; return; }
@@ -146,7 +150,7 @@ function langModal() {
 function guideModal() {
   const t = T();
   openModal(`<div class="big center" style="font-size:22px">${t.guideTitle}</div>
-    ${t.guideSections.map(([h, p]) => `<div class="guide-sec"><div class="t">${h}</div><p class="muted">${p}</p></div>`).join('')}
+    ${[...t.guideSections.map((sec, i) => (t.guideFix && t.guideFix[i]) || sec), ...(t.guideExtra || [])].map(([h, p]) => `<div class="guide-sec"><div class="t">${h}</div><p class="muted">${p}</p></div>`).join('')}
     <button class="btn wide" id="g-ok">${t.close}</button>`, box => box.querySelector('#g-ok').onclick = closeModal);
 }
 
@@ -157,6 +161,7 @@ document.addEventListener('pointerdown', e => {
 }, { capture: true });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) updateBadge(); });
 $('#settings').onclick = settingsModal;
+$('#gems').onclick = () => { if (!BT) show('chest'); };
 $('#back').onclick = goBack;
 
 window.initTelegram = async () => {
@@ -178,7 +183,7 @@ window.initTelegram = async () => {
       const c = await Online.claim();
       if (c.profile) Object.assign(S, c.profile);
       save(); showCoins(prev);
-      if (c.coins > 0) giftModal('🎁', T().giftTitle, c.coins, T().giftNote);
+      if (c.coins > 0 || c.gems > 0) giftModal('🎁', T().giftTitle, c.coins, T().giftNote, c.gems);
     } catch (e) {}
   } else {
     // No server: fall back to the Telegram cloud copy of the offline save.

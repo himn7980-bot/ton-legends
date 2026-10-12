@@ -8,7 +8,18 @@
   const CHESTS = {
     basic: { cost: 300, rates: { C: 55, R: 32, E: 11, L: 2 } },
     royal: { cost: 1200, rates: { C: 0, R: 50, E: 38, L: 12 } },
+    gem: { cost: 120, currency: 'gems', rates: { C: 0, R: 40, E: 42, L: 18 }, holo: 0.10 },
   };
+  // Gems: the rare currency. Earned slowly (achievements, day-7 reward, arena, AI, clan chest) or bought with Stars.
+  // One-way exchange to coins at a rate that grows with progress; coins can never become gems.
+  const START_GEMS = 20, DAY7_GEMS = 15, WARP_COST = 30, WARP_HOURS = 4;
+  const gemRate = p => Math.round(50 * (1 + p.cleared / 25));
+  const achGems = tier => 5 * (tier + 1);
+  // AI duels: no stake; the first AI_DAILY wins each day pay a reward based on progress.
+  const AI_DAILY = 5;
+  const AI_LEVELS = { easy: { power: 0.8, coins: 0.5, gems: 0 }, normal: { power: 1, coins: 1, gems: 0 }, hard: { power: 1.25, coins: 2, gems: 1 } };
+  const aiLeft = (p, now) => (p.aiDay && p.aiDay.date === day(now) ? Math.max(0, AI_DAILY - p.aiDay.wins) : AI_DAILY);
+  const aiReward = (p, level) => ({ coins: Math.round(E.stageReward(Math.max(0, p.cleared - 1)) * AI_LEVELS[level].coins), gems: AI_LEVELS[level].gems });
   const DAILY_QUESTS = [
     { id: 'wins', goal: 3, r: 150 },
     { id: 'skills', goal: 15, r: 120 },
@@ -26,10 +37,10 @@
   const DAILY_REWARDS = [200, 300, 400, 500, 700, 900, 'royal'];
   const AFK_CAP_H = 8;
   const HOLO_CHANCE = 0.03; // a chest card has a 3% chance to come out as a shimmering Holo variant (cosmetic)
-  const KEYS = ['coins', 'owned', 'team', 'cleared', 'stats', 'daily', 'dq', 'ach', 'afkSince', 'pending', 'serials', 'holo', 'replays'];
+  const KEYS = ['coins', 'gems', 'owned', 'team', 'cleared', 'stats', 'daily', 'dq', 'ach', 'afkSince', 'pending', 'serials', 'holo', 'replays', 'aiDay'];
 
   function newProfile(now) {
-    return { coins: 300, owned: Object.fromEntries(E.STARTERS.map(id => [id, 1])), team: [...E.STARTERS], cleared: 0,
+    return { coins: 300, gems: START_GEMS, aiDay: null, owned: Object.fromEntries(E.STARTERS.map(id => [id, 1])), team: [...E.STARTERS], cleared: 0,
       stats: { wins: 0, losses: 0, chests: 0, upgrades: 0, skills: 0, bosses: 0, pvpWins: 0, pvpLosses: 0 },
       daily: { last: null, streak: 0 }, dq: { date: null, p: {}, c: {} }, ach: {}, afkSince: now, pending: null, serials: {}, holo: {}, replays: {} };
   }
@@ -41,6 +52,7 @@
   }
   function normalize(p, now) {
     const d = newProfile(now);
+    if (typeof p.gems !== 'number') p.gems = START_GEMS;
     migrateIds(p.owned); migrateIds(p.serials); migrateIds(p.holo);
     if (Array.isArray(p.team)) p.team = p.team.map(id => (E.LEGACY_FUSION_IDS || {})[id] || id);
     return { ...d, ...p, stats: { ...d.stats, ...(p.stats || {}) }, daily: { ...d.daily, ...(p.daily || {}) }, dq: { ...d.dq, ...(p.dq || {}) },
@@ -86,7 +98,7 @@
     const pool = E.HEROES.filter(h => h.rarity === rarity);
     const h = pool[Math.floor(rng() * pool.length)];
     track(p, 'chests', 1, now);
-    const holo = !p.holo[h.id] && rng() < HOLO_CHANCE;
+    const holo = !p.holo[h.id] && rng() < (c.holo || HOLO_CHANCE);
     if (holo) p.holo[h.id] = true;
     if (!p.owned[h.id]) {
       p.owned[h.id] = 1;
@@ -121,15 +133,16 @@
       case 'chest': {
         const c = CHESTS[a.key];
         if (!c) fail('bad_chest');
-        if (p.coins < c.cost) fail('no_coins');
-        p.coins -= c.cost;
+        const cur = c.currency || 'coins';
+        if ((p[cur] || 0) < c.cost) fail(cur === 'gems' ? 'no_gems' : 'no_coins');
+        p[cur] -= c.cost;
         return openChest(p, a.key, rng, now);
       }
       case 'daily': {
         if (!dailyCanClaim(p, now)) fail('claimed');
         p.daily.streak = dailyNext(p, now); p.daily.last = day(now);
         const r = DAILY_REWARDS[p.daily.streak - 1];
-        if (r === 'royal') return { day: p.daily.streak, chest: openChest(p, 'royal', rng, now) };
+        if (r === 'royal') { p.gems += DAY7_GEMS; return { day: p.daily.streak, gems: DAY7_GEMS, chest: openChest(p, 'royal', rng, now) }; }
         p.coins += r;
         return { day: p.daily.streak, coins: r };
       }
@@ -150,7 +163,21 @@
         if (!x) fail('not_ready');
         const tier = achTier(p, x);
         if (tier >= x.tiers.length || x.stat(p) < x.tiers[tier]) fail('not_ready');
-        const coins = x.r[tier]; p.ach[x.id] = tier + 1; p.coins += coins;
+        const coins = x.r[tier], gems = achGems(tier); p.ach[x.id] = tier + 1; p.coins += coins; p.gems += gems;
+        return { coins, gems };
+      }
+      case 'exchange': {
+        const g = Math.floor(Number(a.gems));
+        if (!(g >= 1 && g <= 100000)) fail('bad_action');
+        if (p.gems < g) fail('no_gems');
+        const coins = g * gemRate(p);
+        p.gems -= g; p.coins += coins;
+        return { gems: g, coins };
+      }
+      case 'warp': {
+        if (p.gems < WARP_COST) fail('no_gems');
+        const coins = afkRate(p) * WARP_HOURS;
+        p.gems -= WARP_COST; p.coins += coins;
         return { coins };
       }
       case 'fuse': {
@@ -211,6 +238,6 @@
     return p;
   }
 
-  return { migrateIds, HOLO_CHANCE, CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
+  return { START_GEMS, DAY7_GEMS, WARP_COST, WARP_HOURS, gemRate, achGems, AI_DAILY, AI_LEVELS, aiLeft, aiReward, migrateIds, HOLO_CHANCE, CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
     dqReward, dailyCanClaim, dailyNext, afkRate, afkAmount, achTier, coinBonus, replayFactor, stageCoins, teamPower, claimable, act, importLocal };
 });

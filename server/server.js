@@ -15,6 +15,7 @@ const path = require('path');
 const crypto = require('crypto');
 const ECON = require('../src/economy.js');
 const createArena = require('./pvp.js');
+const createClans = require('./clans.js');
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const WEBAPP_URL = (process.env.WEBAPP_URL || process.env.RENDER_EXTERNAL_URL || '').trim().replace(/\/$/, '');
@@ -34,11 +35,15 @@ const E = require('../src/engine.js');
 const REF_INVITER = 500, REF_NEWCOMER = 300;
 
 // Coin packs sold for Telegram Stars (currency XTR). Server is the source of truth for prices.
+// Gem packs sold for Telegram Stars (currency XTR). Coins come from gems via the in-game exchange.
 const PACKS = [
-  { id: 'coins_s', coins: 3000, stars: 25 },
-  { id: 'coins_m', coins: 10000, stars: 75 },
-  { id: 'coins_l', coins: 30000, stars: 200 },
+  { id: 'gems_s', gems: 50, stars: 25 },
+  { id: 'gems_m', gems: 170, stars: 75 },
+  { id: 'gems_l', gems: 500, stars: 200 },
 ];
+// Older coin packs: only honoured if a payment for one arrives after the switch.
+const OLD_PACKS = [{ id: 'coins_s', coins: 3000, stars: 25 }, { id: 'coins_m', coins: 10000, stars: 75 }, { id: 'coins_l', coins: 30000, stars: 200 }];
+const findPack = id => PACKS.find(p => p.id === id) || OLD_PACKS.find(p => p.id === id);
 
 // Bot texts: Persian for Telegram users with a Persian UI, English for everyone else.
 const TEXT = {
@@ -46,6 +51,7 @@ const TEXT = {
     start: '⚔️ Welcome to TON Legends!\n\nCollect hero cards, build your team and battle boss cards across 5 worlds.\n\nTap the button below to start 👇',
     play: '🎮 Play', open: '🎮 Open game', menu: '🎮 Play',
     paid: c => `✅ Payment successful! ${c.toLocaleString('en-US')} coins were added. Open the game to collect them.`,
+    paidGems: g => `✅ Payment successful! ${g} 💎 gems were added to your account.`,
     packTitle: c => `${c.toLocaleString('en-US')} coins`, packDesc: c => `${c.toLocaleString('en-US')} coins for TON Legends`,
     cmd: 'Play TON Legends',
     arena: e => e.result === 'win' ? `🏆 You won the arena duel vs ${e.opp}! +${e.pot.toLocaleString('en-US')} coins.`
@@ -55,6 +61,7 @@ const TEXT = {
     start: '⚔️ به TON Legends خوش آمدی!\n\nکارت‌های قهرمان را جمع کن، تیمت را بچین و در ۵ دنیا با کارت‌های رئیس بجنگ.\n\nبرای شروع روی دکمه‌ی زیر بزن 👇',
     play: '🎮 شروع بازی', open: '🎮 ورود به بازی', menu: '🎮 بازی',
     paid: c => `✅ پرداخت موفق! ${c.toLocaleString('fa-IR')} سکه به حسابت اضافه شد. بازی را باز کن تا دریافت کنی.`,
+    paidGems: g => `✅ پرداخت موفق! ${g.toLocaleString('fa-IR')} جم 💎 به حسابت اضافه شد.`,
     packTitle: c => `${c.toLocaleString('fa-IR')} سکه`, packDesc: c => `${c.toLocaleString('fa-IR')} سکه برای بازی TON Legends`,
     cmd: 'شروع بازی TON Legends',
     arena: e => e.result === 'win' ? `🏆 دوئل آرنا را از ${e.opp} بردی! +${e.pot.toLocaleString('fa-IR')} سکه.`
@@ -79,7 +86,7 @@ const MORE = {
 for (const [code, [start, play, cmd, coins, paid, duel, win, lose, draw]] of Object.entries(MORE)) {
   const fmt = n => n.toLocaleString('en-US');
   TEXT[code] = { ...TEXT.en, start, play, open: play, menu: play, cmd,
-    paid: c => `✅ ${paid}: +${fmt(c)} ${coins}.`, packTitle: c => `${fmt(c)} ${coins}`, packDesc: c => `TON Legends · ${fmt(c)} ${coins}`,
+    paid: c => `✅ ${paid}: +${fmt(c)} ${coins}.`, paidGems: g => `✅ ${paid}: +${fmt(g)} 💎`, packTitle: c => `${fmt(c)} ${coins}`, packDesc: c => `TON Legends · ${fmt(c)} ${coins}`,
     arena: e => `${e.result === 'win' ? '🏆' : e.result === 'lose' ? '💔' : '🤝'} ${duel} ${e.opp}: ${e.result === 'win' ? `${win} +${fmt(e.pot)} ${coins}` : e.result === 'lose' ? `${lose} -${fmt(e.stake)} ${coins}` : draw}` };
 }
 const tx = lang => TEXT[String(lang || '').toLowerCase().slice(0, 2)] || TEXT.en;
@@ -125,9 +132,10 @@ function userRec(tgUser) {
 }
 // Coins from purchases/referrals go straight into the server profile (or wait until it exists);
 // `gift` remembers how much to announce to the player next time they open the game.
-function credit(u, coins) {
-  if (u.profile) u.profile.coins += coins; else u.pending += coins;
-  u.gift = (u.gift || 0) + coins;
+function credit(u, coins, gems = 0) {
+  if (u.profile) { u.profile.coins += coins; u.profile.gems = (u.profile.gems || 0) + gems; }
+  else { u.pending += coins; u.pendingGems = (u.pendingGems || 0) + gems; }
+  u.gift = (u.gift || 0) + coins; u.giftGems = (u.giftGems || 0) + gems;
 }
 const rng = () => crypto.randomInt(2 ** 32) / 2 ** 32;
 // Limited editions: each fusion card has a worldwide supply; copies are numbered #1…#supply.
@@ -244,7 +252,7 @@ async function handleUpdate(up) {
   if (up.pre_checkout_query) {
     const q = up.pre_checkout_query;
     const [uid, packId] = String(q.invoice_payload).split(':');
-    const pack = PACKS.find(p => p.id === packId);
+    const pack = findPack(packId);
     const ok = !!pack && uid === String(q.from.id) && q.currency === 'XTR' && q.total_amount === pack.stars;
     await tg('answerPreCheckoutQuery', ok ? { pre_checkout_query_id: q.id, ok: true } : { pre_checkout_query_id: q.id, ok: false, error_message: 'Invalid order' });
     return;
@@ -256,15 +264,15 @@ async function handleUpdate(up) {
     const chargeId = p.telegram_payment_charge_id;
     if (db.payments[chargeId]) return; // idempotent
     const [uid, packId] = String(p.invoice_payload).split(':');
-    const pack = PACKS.find(x => x.id === packId);
+    const pack = findPack(packId);
     if (!pack) return;
     const u = userRec(m.from);
     if (String(u.id) !== uid) return;
-    credit(u, pack.coins);
+    credit(u, pack.coins || 0, pack.gems || 0);
     db.payments[chargeId] = { uid, pack: packId, stars: p.total_amount, at: Date.now() };
     persist();
     const L = tx(m.from.language_code);
-    await tg('sendMessage', { chat_id: m.chat.id, text: L.paid(pack.coins),
+    await tg('sendMessage', { chat_id: m.chat.id, text: pack.gems ? L.paidGems(pack.gems) : L.paid(pack.coins),
       reply_markup: { inline_keyboard: [[{ text: L.open, web_app: { url: WEBAPP_URL } }]] } });
     return;
   }
@@ -363,7 +371,8 @@ function leaderboard(meId) {
   return { top, total: all.length, me: idx >= 0 ? { rank: idx + 1, stage: all[idx].stage } : null };
 }
 
-const arena = createArena({ db, persist, notify: (uid, end) => {
+const clans = createClans({ db, persist, profileOut: u => (u.profile ? ECON.pickKeys(u.profile) : null) });
+const arena = createArena({ db, persist, onPoints: clans.addPoints, notify: (uid, end) => {
   const u = db.users[uid];
   const L = tx(u && u.lang);
   if (end.result === 'cancelled') return;
@@ -376,26 +385,28 @@ const routes = {
   'POST /api/hello': (body, u) => { applyReferral(u, body.startParam); return { ok: true }; },
   // The server keeps each Telegram player's coins and heroes. First visit imports the offline save (clamped).
   'POST /api/profile': (body, u) => {
-    if (!u.profile) { u.profile = ECON.importLocal(body.local, Date.now()); u.profile.coins += u.pending; u.pending = 0; }
+    if (!u.profile) { u.profile = ECON.importLocal(body.local, Date.now()); u.profile.coins += u.pending; u.profile.gems += u.pendingGems || 0; u.pending = 0; u.pendingGems = 0; }
     return { profile: profileOut(u) };
   },
   'POST /api/act': (body, u) => {
     if (!u.profile) throw Object.assign(new Error('no_profile'), { code: 400 });
     const result = ECON.act(u.profile, body.action, { now: Date.now(), rng, mint });
     payReferral(u);
+    if (body.action && body.action.type === 'stageEnd' && result && result.result === 'win' && result.first) clans.addPoints(u.id, 2);
     return { profile: profileOut(u), result };
   },
   'POST /api/score': () => ({ ok: true }), // kept for older clients; leaderboard now uses server profiles
   'POST /api/leaderboard': (body, u) => leaderboard(u.id),
-  'POST /api/claim': (body, u) => { const coins = u.gift || 0; u.gift = 0; return { ok: true, coins, profile: u.profile ? profileOut(u) : null }; },
+  'POST /api/claim': (body, u) => { const coins = u.gift || 0, gems = u.giftGems || 0; u.gift = 0; u.giftGems = 0; return { ok: true, coins, gems, profile: u.profile ? profileOut(u) : null }; },
   ...arena.routes,
+  ...clans.routes,
   'POST /api/invoice': async (body, u) => {
     const pack = PACKS.find(p => p.id === body.pack);
     if (!pack) throw Object.assign(new Error('unknown pack'), { code: 400 });
-    const L = tx(body.lang);
+    const title = `${pack.gems} 💎`;
     const link = await tg('createInvoiceLink', {
-      title: `TON Legends · ${L.packTitle(pack.coins)}`, description: L.packDesc(pack.coins),
-      payload: `${u.id}:${pack.id}`, currency: 'XTR', prices: [{ label: L.packTitle(pack.coins), amount: pack.stars }],
+      title: `TON Legends · ${title}`, description: `TON Legends · ${title}`,
+      payload: `${u.id}:${pack.id}`, currency: 'XTR', prices: [{ label: title, amount: pack.stars }],
     });
     return { link };
   },

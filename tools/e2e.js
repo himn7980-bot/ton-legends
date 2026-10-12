@@ -47,11 +47,12 @@ const tgScript = (user, startParam) => `
     p.on('pageerror', e => errs.push(`${user.first_name}: ${e.message}`));
     await p.route(/fonts\.g/, r => r.abort());
     await p.route(/telegram-web-app\.js/, r => r.fulfill({ contentType: 'application/javascript', body: tgScript(user, startParam) }));
-    await p.route('**/__pay', r => { queue.push({ update_id: Date.now(), message: { chat: { id: user.id }, from: user, successful_payment: { telegram_payment_charge_id: 'c' + Date.now(), total_amount: 25, invoice_payload: `${user.id}:coins_s` } } }); r.fulfill({ body: 'ok' }); });
+    await p.route('**/__pay', r => { queue.push({ update_id: Date.now(), message: { chat: { id: user.id }, from: user, successful_payment: { telegram_payment_charge_id: 'c' + Date.now(), total_amount: 25, invoice_payload: `${user.id}:gems_s` } } }); r.fulfill({ body: 'ok' }); });
     await p.goto(base + '/'); await p.waitForFunction(() => Online.state.profile === true, null, { timeout: 15000 });
     await p.waitForTimeout(300);
     return p;
   }
+  const ECON = require('../src/economy.js');
   const serverProfile = uid => srv.db.users[String(uid)].profile;
   const dismiss = async p => { for (let i = 0; i < 4; i++) { if (await p.$('#modal:not([hidden])')) { await p.click('#m-close'); await p.waitForTimeout(250); } } };
 
@@ -64,10 +65,24 @@ const tgScript = (user, startParam) => `
   assert.equal(serverProfile(777).cleared, 2, 'server verified both stage wins');
   assert.equal(await p1.evaluate(() => S.coins), serverProfile(777).coins, 'client shows server coins');
   console.log('✓ stage wins verified by the server replay; coins', serverProfile(777).coins);
-  const before = serverProfile(777).coins;
-  await p1.click('[data-tab=chest]'); await p1.click('[data-pack=coins_s]'); await p1.waitForSelector('#gm-ok', { timeout: 15000 }); await p1.click('#gm-ok');
-  assert.equal(serverProfile(777).coins, before + 3000); assert.equal(await p1.evaluate(() => S.coins), before + 3000);
-  console.log('✓ Stars purchase credited on the server (+3000)');
+  const before = serverProfile(777).gems;
+  await p1.click('[data-tab=chest]'); await p1.click('[data-pack=gems_s]'); await p1.waitForSelector('#gm-ok', { timeout: 15000 });
+  await p1.screenshot({ path: OUT + '/g1-bought.png' }); await p1.click('#gm-ok');
+  assert.equal(serverProfile(777).gems, before + 50); assert.equal(await p1.evaluate(() => S.gems), before + 50);
+  assert.equal(await p1.textContent('#gems span'), String(before + 50));
+  console.log('✓ Stars purchase credited on the server (+50 gems)');
+  // gems → coins exchange and time warp
+  const c0 = serverProfile(777).coins, g0 = serverProfile(777).gems, rate = ECON.gemRate(serverProfile(777));
+  await p1.screenshot({ path: OUT + '/g2-shop.png', fullPage: true });
+  await p1.click('[data-ex="10"]'); await p1.waitForSelector('#gm-ok'); await p1.click('#gm-ok');
+  assert.equal(serverProfile(777).coins, c0 + 10 * rate); assert.equal(serverProfile(777).gems, g0 - 10);
+  serverProfile(777).gems += 200; // e.g. from achievements; arrives with the next server reply
+  await p1.click('#warp'); await p1.waitForSelector('#gm-ok'); await p1.click('#gm-ok');
+  assert.equal(serverProfile(777).gems, g0 + 200 - 10 - ECON.WARP_COST);
+  await p1.click('[data-k=gem]'); await p1.waitForSelector('#cl'); await p1.screenshot({ path: OUT + '/g3-gemchest.png' }); await p1.click('#cl');
+  assert.equal(serverProfile(777).gems, g0 + 200 - 10 - ECON.WARP_COST - ECON.CHESTS.gem.cost, 'gem chest paid in gems');
+  assert.equal(await p1.textContent('#gems span'), String(serverProfile(777).gems));
+  console.log('✓ exchange (1 💎 = 🪙', rate + '), time warp');
   // Cheating attempt: editing coins locally changes nothing on the server.
   await p1.evaluate(() => { S.coins = 999999; save(); });
   await p1.click('[data-tab=heroes]'); await p1.click('.card[data-id=egor]'); await p1.click('#up'); await p1.waitForTimeout(400);
@@ -88,7 +103,6 @@ const tgScript = (user, startParam) => `
   await p1.screenshot({ path: OUT + '/a2-waiting.png' });
 
   const omid = { id: 888, first_name: 'Omid' };
-  const ECON = require('../src/economy.js');
   srv.db.users['888'] = { id: '888', pending: 0, gift: 0, refs: 0, created: Date.now(), profile: { ...ECON.newProfile(Date.now()), coins: 2500 } };
   const p2 = await player(omid, 'duel_' + code); // opened from the invite link
   await p2.waitForSelector('#dj-yes'); await p2.waitForTimeout(200);
@@ -117,6 +131,39 @@ const tgScript = (user, startParam) => `
   console.log(`✓ duel finished: Sara ${s1 - s0 >= 0 ? '+' : ''}${s1 - s0}, Omid ${o1 - o0 >= 0 ? '+' : ''}${o1 - o0} (pot conserved, both screens match the server)`);
   await p1.click('#pr-arena'); await p2.click('#pr-map');
   assert.equal(Object.keys(srv.db.escrow).length, 0);
+
+  // ---- AI rival from the arena screen ----
+  await p1.click('[data-tab=arena]'); await p1.waitForTimeout(200);
+  await p1.screenshot({ path: OUT + '/ai1-arena.png', fullPage: true });
+  const k0 = serverProfile(777).coins;
+  await p1.click('[data-ai=easy]');
+  await p1.waitForSelector('#battle:not([hidden]) .hcard', { timeout: 10000 });
+  await p1.waitForTimeout(4000); await p1.screenshot({ path: OUT + '/ai2-fight.png' });
+  await p1.waitForSelector('#pr-again', { timeout: 150000 });
+  await p1.screenshot({ path: OUT + '/ai3-result.png' });
+  const won = serverProfile(777).stats.aiWins || 0;
+  console.log(`✓ AI duel: ${won ? 'won, +' + (serverProfile(777).coins - k0) + ' coins' : 'lost, no coins lost'} (${serverProfile(777).coins >= k0})`);
+  assert.ok(serverProfile(777).coins >= k0, 'AI duel never costs coins');
+  await p1.click('#pr-arena');
+
+  // ---- clans: Sara creates one, Lina joins from the invite link ----
+  serverProfile(777).coins += 2500;
+  await p1.click('[data-tab=rank]'); await p1.click('#to-clan'); await p1.waitForSelector('#cl-create');
+  await p1.fill('#cl-name', 'Night Owls'); await p1.click('[data-emb="🦅"]'); await p1.click('#cl-create');
+  await p1.waitForSelector('#cl-invite'); await p1.click('#cl-invite');
+  const clanId = Object.keys(srv.db.clans)[0];
+  assert.ok((await p1.evaluate(() => window.__shared)).includes(encodeURIComponent(`startapp=clan_${clanId}`)), 'clan link shared');
+  const lina = { id: 999, first_name: 'Lina' };
+  const p3 = await player(lina, 'clan_' + clanId);
+  await p3.waitForSelector('#cj-yes'); await p3.screenshot({ path: OUT + '/c1-invite.png' }); await p3.click('#cj-yes');
+  await p3.waitForSelector('#cl-leave'); await p3.waitForTimeout(200);
+  assert.equal(srv.db.clans[clanId].members.length, 2);
+  await p3.screenshot({ path: OUT + '/c2-clan.png', fullPage: true });
+  await p3.evaluate(() => window.__bbcb()); await p3.waitForTimeout(150);
+  assert.equal(await p3.evaluate(() => S.tab), 'rank', 'back from the clan goes to Ranks');
+  await p1.click('#m-close').catch(() => {}); await p1.click('[data-tab=rank]'); await p1.click('#to-clan'); await p1.waitForSelector('.crow');
+  await p1.screenshot({ path: OUT + '/c3-leader.png', fullPage: true });
+  console.log('✓ clan created, invite link opened, member joined');
 
   // ---- Telegram BackButton still drives navigation ----
   await p2.click('[data-tab=heroes]'); await p2.waitForTimeout(150);
