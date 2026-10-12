@@ -89,16 +89,31 @@ if (!BOT_TOKEN) { console.error('BOT_TOKEN is required'); process.exit(1); }
 // ---------- storage (single JSON file, atomic writes) ----------
 let db = { users: {}, payments: {} };
 try { db = { ...db, ...JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')) }; } catch (e) {}
-let saveTimer = null;
+// Writes are batched: at most one async write per second, and never two at once (atomic tmp + rename).
+let saveTimer = null, saving = false, dirty = false;
 function persist() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
-    const tmp = DATA_FILE + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(db));
-    fs.renameSync(tmp, DATA_FILE);
-  }, 300);
+  dirty = true;
+  if (saveTimer || saving) return;
+  saveTimer = setTimeout(flushDb, 1000);
 }
+async function flushDb() {
+  saveTimer = null;
+  if (!dirty) return;
+  dirty = false; saving = true;
+  try {
+    await fs.promises.mkdir(path.dirname(DATA_FILE), { recursive: true });
+    const tmp = DATA_FILE + '.tmp';
+    await fs.promises.writeFile(tmp, JSON.stringify(db));
+    await fs.promises.rename(tmp, DATA_FILE);
+  } catch (e) { console.error('save failed', e.message); dirty = true; }
+  saving = false;
+  if (dirty) persist();
+}
+// Save before the process exits (e.g. on redeploy).
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => {
+  try { const tmp = DATA_FILE + '.tmp'; fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true }); fs.writeFileSync(tmp, JSON.stringify(db)); fs.renameSync(tmp, DATA_FILE); } catch (e) {}
+  process.exit(0);
+});
 function userRec(tgUser) {
   const id = String(tgUser.id);
   const u = db.users[id] || (db.users[id] = { id, pending: 0, gift: 0, refBy: null, refs: 0, created: Date.now(), profile: null });
@@ -272,14 +287,22 @@ async function handleUpdate(up) {
   }
 }
 
+const REF_MIN_STAGES = 5;
+function payReferral(u) {
+  if (!u.refBy || u.refPaid || !u.profile || u.profile.cleared < REF_MIN_STAGES) return;
+  const inviter = db.users[u.refBy];
+  u.refPaid = true;
+  if (inviter) credit(inviter, REF_INVITER);
+}
 function applyReferral(u, startParam) {
   if (!startParam || !startParam.startsWith('ref_') || u.refBy) return false;
   const inviterId = startParam.slice(4);
   const inviter = db.users[inviterId];
   if (!inviter || inviterId === u.id) return false;
   if (u.created < Date.now() - 10 * 60e3 && u.profile && u.profile.cleared > 0) return false; // only fresh players count
+  // The newcomer's gift is immediate; the inviter is paid once the newcomer has really played (see payReferral).
   u.refBy = inviterId; credit(u, REF_NEWCOMER);
-  inviter.refs++; credit(inviter, REF_INVITER);
+  inviter.refs++;
   persist();
   return true;
 }
@@ -359,6 +382,7 @@ const routes = {
   'POST /api/act': (body, u) => {
     if (!u.profile) throw Object.assign(new Error('no_profile'), { code: 400 });
     const result = ECON.act(u.profile, body.action, { now: Date.now(), rng, mint });
+    payReferral(u);
     return { profile: profileOut(u), result };
   },
   'POST /api/score': () => ({ ok: true }), // kept for older clients; leaderboard now uses server profiles
@@ -424,4 +448,4 @@ async function start() {
 }
 
 if (require.main === module) start();
-module.exports = { server, verifyInitData, handleUpdate, pollLoop, setupBot, db, PACKS, stop: () => { polling = false; arena.stop(); server.close(); } };
+module.exports = { flushDb, server, verifyInitData, handleUpdate, pollLoop, setupBot, db, PACKS, stop: () => { polling = false; arena.stop(); server.close(); } };

@@ -59,19 +59,18 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   // referral: bob joins through alice's link
   await post('/api/hello', { initData: initData(bob), startParam: 'ref_111' });
   await post('/api/hello', { initData: initData(bob), startParam: 'ref_111' }); // second time: no double bonus
-  r = await post('/api/claim', { initData: initData(alice) }); assert.equal(r.body.coins, 500);
-  r = await post('/api/claim', { initData: initData(alice) }); assert.equal(r.body.coins, 0);
+  r = await post('/api/claim', { initData: initData(alice) }); assert.equal(r.body.coins, 0, 'inviter is paid only after the friend plays 5 stages');
   r = await post('/api/claim', { initData: initData(bob) }); assert.equal(r.body.coins, 300);
 
   // server profiles: first visit imports the offline save, clamped
   r = await post('/api/profile', { initData: initData(alice), local: { coins: 1e9, cleared: 12, owned: { volya: 30, egor: 7 } } });
-  assert.equal(r.body.profile.coins, 5000 + 500, 'clamped save + referral reward'); assert.equal(r.body.profile.owned.volya, 5); assert.equal(r.body.profile.cleared, 12);
+  assert.equal(r.body.profile.coins, 5000, 'clamped save'); assert.equal(r.body.profile.owned.volya, 5); assert.equal(r.body.profile.cleared, 12);
   r = await post('/api/profile', { initData: initData(alice), local: { coins: 1 } });
-  assert.equal(r.body.profile.coins, 5500, 'import happens only once');
+  assert.equal(r.body.profile.coins, 5000, 'import happens only once');
   r = await post('/api/profile', { initData: initData(bob), local: { cleared: 999, coins: 3000 } });
-  assert.equal(r.body.profile.cleared, 50);
+  assert.equal(r.body.profile.cleared, 200);
   r = await post('/api/leaderboard', { initData: initData(alice) });
-  assert.deepEqual(r.body.top.map(x => [x.name, x.stage]), [['Bob <script>', 50], ['Alice', 12]]);
+  assert.deepEqual(r.body.top.map(x => [x.name, x.stage]), [['Bob <script>', 200], ['Alice', 12]]);
   assert.deepEqual(r.body.me, { rank: 2, stage: 12 });
 
   // economy actions are validated and stage wins are verified by replaying the battle
@@ -79,7 +78,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   r = await post('/api/act', { initData: initData(alice), action: { type: 'stageStart', stage: 40 } }); assert.equal(r.status, 400, 'locked stage');
   r = await post('/api/act', { initData: initData(alice), action: { type: 'stageStart', stage: 0 } }); assert.ok(r.body.result.seed >= 0);
   r = await post('/api/act', { initData: initData(alice), action: { type: 'stageEnd', inputs: [[0, -1]] } });
-  assert.equal(r.body.result.result, 'win'); assert.equal(r.body.profile.coins, 5500 + r.body.result.coins);
+  assert.equal(r.body.result.result, 'win'); assert.equal(r.body.profile.coins, 5000 + r.body.result.coins);
   r = await post('/api/act', { initData: initData(alice), action: { type: 'upgrade', id: 'pinkbull' } }); assert.equal(r.body.profile.owned.pinkbull, 2);
   r = await post('/api/act', { initData: initData(alice), action: { type: 'team', team: ['notcoin'] } }); assert.equal(r.status, 400, 'cannot field unowned hero');
 
@@ -107,8 +106,18 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   await sleep(800);
   assert.match(calls.filter(c => c.method === 'sendMessage' && c.data.chat_id === 444)[0].data.text, /خوش آمدی/);
 
-  await sleep(400);
+  await srv.flushDb();
   assert.ok(JSON.parse(fs.readFileSync(dataFile, 'utf8')).payments.ch1, 'persisted to disk');
+  // referral payout once Bob has cleared 5 stages
+  srv.db.users['222'].profile.cleared = 4;
+  await post('/api/act', { initData: initData(bob), action: { type: 'stageStart', stage: 4 } });
+  srv.db.users['222'].profile.pending.levels = { pinkbull: 100, egor: 100, gramcat: 100, memegram: 100, babyshark: 100 };
+  r = await post('/api/act', { initData: initData(bob), action: { type: 'stageEnd', inputs: [[0, -1]] } }); assert.equal(r.body.result.result, 'win');
+  r = await post('/api/claim', { initData: initData(alice) }); assert.equal(r.body.coins, 500, 'inviter paid after 5 stages');
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'stageStart', stage: 0 } });
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'stageEnd', inputs: [[0, -1]] } });
+  assert.equal(r.body.result.first, false); assert.ok(r.body.result.coins < 100, 'replay pays half');
+
   // fusion: limited, numbered editions
   srv.db.users['111'].profile.owned.notcoin = 8; srv.db.users['111'].profile.owned.pinkbull = 8; srv.db.users['111'].profile.coins += 10000;
   r = await post('/api/act', { initData: initData(alice), action: { type: 'fuse', id: 'f1' } });

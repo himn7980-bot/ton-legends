@@ -48,31 +48,54 @@ const FUSIONS = FD.FUSION_DATA.map(([num, parts, name, role]) => ({
   role: role || HEROES.find(h => h.id === parts[0]).role,
 }));
 const LEGACY_FUSION_IDS = FD.LEGACY_FUSION_IDS;
+const FUSION_K = { duo: [1.2, 1.05, 0.6], trio: [1.3, 1.1, 0.45] };
 const FUSION_RULES = { 2: { minLevel: 8, cost: 4000, supply: 300 }, 3: { minLevel: 12, cost: 15000, supply: 30 } };
 const BASE_HEROES = HEROES.slice();
 HEROES.push(...FUSIONS);
 const HERO_BY_ID = Object.fromEntries(HEROES.map(h => [h.id, h]));
 const STARTERS = ['pinkbull', 'egor', 'gramcat', 'memegram', 'babyshark'];
-const MAX_LEVEL = 30;
+const MAX_LEVEL = 100;
 const COIN_BONUS = { egor: 0.10, teddy: 0.20 };
 
 // Each world is guarded by a themed squad of rival cards and a boss card that matches the world's art.
-const WORLDS = [
-  { key: 'ocean',  bg: 'linear-gradient(180deg,#0a4f8a,#0d7cc2 45%,#e9d39a)', boss: 'babyshark', foes: ['utya', 'pengu', 'dog', 'gramcat'] },
-  { key: 'cave',   bg: 'linear-gradient(180deg,#071a3a,#123d7a 50%,#1b1f2e)', boss: 'egor',      foes: ['memegram', 'yoda', 'pengu', 'gramcat'] },
-  { key: 'city',   bg: 'linear-gradient(180deg,#05061a,#1a1f6b 55%,#3a1a5c)', boss: 'notcoin',   foes: ['paws', 'pinkbull', 'teddy', 'volya'] },
-  { key: 'temple', bg: 'linear-gradient(180deg,#2a0b2e,#8a1f2a 55%,#3b2318)', boss: 'yaya',      foes: ['dog', 'yoda', 'noctis', 'teddy'] },
-  { key: 'lab',    bg: 'linear-gradient(180deg,#06210f,#145c2c 55%,#2d1f0e)', boss: 'virus',     foes: ['noctis', 'volya', 'paws', 'pinkbull'] },
-];
+// 20 worlds = 5 themes × 4 chapters (I–IV). Chapter I is the original campaign; each later chapter brings a
+// stronger squad, and the bosses of chapters III and IV are fusion cards (duo, then trio).
+const fz = (...parts) => FUSIONS.find(f => f.parts.length === parts.length && parts.every(p => f.parts.includes(p))).id;
+const THEMES = {
+  ocean:  { bg: 'linear-gradient(180deg,#0a4f8a,#0d7cc2 45%,#e9d39a)',
+    foes: [['utya', 'pengu', 'dog', 'gramcat'], ['pengu', 'utya', 'babyshark', 'volya'], ['utya', 'babyshark', 'noctis', 'pengu'], [fz('pengu', 'utya'), 'pengu', fz('babyshark', 'yaya'), 'utya']],
+    boss: ['babyshark', 'pengu', fz('babyshark', 'pengu'), fz('babyshark', 'pengu', 'utya')] },
+  cave:   { bg: 'linear-gradient(180deg,#071a3a,#123d7a 50%,#1b1f2e)',
+    foes: [['memegram', 'yoda', 'pengu', 'gramcat'], ['yoda', 'egor', 'virus', 'memegram'], ['memegram', 'yoda', 'paws', 'egor'], [fz('memegram', 'yoda'), 'yoda', fz('egor', 'paws'), 'memegram']],
+    boss: ['egor', 'memegram', fz('egor', 'memegram'), fz('egor', 'memegram', 'yoda')] },
+  city:   { bg: 'linear-gradient(180deg,#05061a,#1a1f6b 55%,#3a1a5c)',
+    foes: [['paws', 'pinkbull', 'teddy', 'volya'], ['notcoin', 'paws', 'volya', 'teddy'], ['volya', 'pinkbull', 'noctis', 'paws'], [fz('pinkbull', 'teddy'), 'paws', fz('notcoin', 'volya'), 'volya']],
+    boss: ['notcoin', 'pinkbull', fz('pinkbull', 'notcoin'), fz('pinkbull', 'notcoin', 'teddy')] },
+  temple: { bg: 'linear-gradient(180deg,#2a0b2e,#8a1f2a 55%,#3b2318)',
+    foes: [['dog', 'yoda', 'noctis', 'teddy'], ['yaya', 'dog', 'teddy', 'noctis'], ['teddy', 'yaya', 'yoda', 'dog'], [fz('gramcat', 'dog'), 'teddy', fz('volya', 'dog'), 'yaya']],
+    boss: ['yaya', 'teddy', fz('yaya', 'teddy'), fz('babyshark', 'yaya', 'teddy')] },
+  lab:    { bg: 'linear-gradient(180deg,#06210f,#145c2c 55%,#2d1f0e)',
+    foes: [['noctis', 'volya', 'paws', 'pinkbull'], ['virus', 'noctis', 'volya', 'paws'], ['noctis', 'virus', 'notcoin', 'volya'], [fz('virus', 'yoda'), 'virus', fz('paws', 'noctis'), 'noctis']],
+    boss: ['virus', 'noctis', fz('noctis', 'virus'), fz('paws', 'noctis', 'virus')] },
+};
+const CHAPTER_TINT = ['', 'linear-gradient(180deg,rgba(90,0,140,.30),rgba(0,0,0,.25)),', 'linear-gradient(180deg,rgba(150,10,40,.35),rgba(0,0,0,.35)),',
+  'linear-gradient(180deg,rgba(0,0,0,.55),rgba(60,0,90,.45)),'];
+const WORLDS = [];
+for (let ch = 0; ch < 4; ch++) {
+  for (const key of ['ocean', 'cave', 'city', 'temple', 'lab']) {
+    const th = THEMES[key];
+    WORLDS.push({ key, chapter: ch, bg: CHAPTER_TINT[ch] + th.bg, boss: th.boss[ch], foes: th.foes[ch] });
+  }
+}
 const STAGES_PER_WORLD = 10;
 const TOTAL_STAGES = WORLDS.length * STAGES_PER_WORLD;
 
 function heroStats(id, level) {
   const h = HERO_BY_ID[id], r = ROLES[h.role];
   if (h.fusion) {
-    // Fusion level 1 = its parts at the level required to fuse them; then boosted: duo ×1.5 HP / ×1.25 ATK, trio ×1.8 / ×1.4.
+    // Fusion level 1 = its parts at the level required to fuse them, then boosted (FUSION_K: [HP, ATK, skill power]).
     const offset = (h.parts.length === 3 ? 12 : 8) - 1;
-    const ps = h.parts.map(p => heroStats(p, level + offset)), k = ps.length === 3 ? [1.8, 1.4] : [1.5, 1.25];
+    const ps = h.parts.map(p => heroStats(p, level + offset)), k = ps.length === 3 ? [FUSION_K.trio[0], FUSION_K.trio[1]] : [FUSION_K.duo[0], FUSION_K.duo[1]];
     const avg = key => ps.reduce((a, s) => a + s[key], 0) / ps.length;
     return { hp: Math.round(avg('hp') * k[0]), atk: Math.round(avg('atk') * k[1]), spd: r.spd };
   }
@@ -90,10 +113,11 @@ function stageReward(idx) {
   return Math.round((80 + 25 * idx) * (boss ? 3 : 1));
 }
 
-const ENEMY_HP = 0.56, ENEMY_ATK = 0.23;
+const ENEMY_HP = 0.56, ENEMY_ATK = 0.23, SC2 = 0.13;
 function stageEnemies(idx) {
   const w = WORLDS[Math.floor(idx / STAGES_PER_WORLD)], local = idx % STAGES_PER_WORLD;
-  const sc = 2.4 + 0.32 * idx;
+  // Difficulty: steep through the first 50 stages (unchanged), then a gentler slope matched to levels up to 100.
+  const sc = idx < 50 ? 2.4 + 0.32 * idx : 18.08 + SC2 * (idx - 50);
   const card = (id, boss) => {
     const b = heroStats(id, 1), r = ROLES[HERO_BY_ID[id].role];
     const hpM = boss ? 3.2 : 1, atkM = boss ? 1.35 : 1;
@@ -224,7 +248,11 @@ const SKILLS = {
   dog(B, u) { for (const f of friendsOf(B, u)) if (f !== u) f.energy = Math.min(100, f.energy + 50); },
   teddy(B, u) { const t = lowest(friendsOf(B, u)); heal(B, t, atkOf(B, u) * 3.5); t.shield += atkOf(B, u) * 2; B.events.push({ type: 'shield', uid: t.uid }); },
 };
-for (const f of FUSIONS) SKILLS[f.id] = (B, u) => { for (const p of f.parts) if (foesOf(B, u).length) SKILLS[p](B, u); };
+// A fusion fires every part's skill, each at reduced power (otherwise 3 skills per cast would dwarf everything).
+for (const f of FUSIONS) SKILLS[f.id] = (B, u) => {
+  const atk = u.atk; u.atk *= f.parts.length === 3 ? FUSION_K.trio[2] : FUSION_K.duo[2];
+  try { for (const p of f.parts) if (foesOf(B, u).length) SKILLS[p](B, u); } finally { u.atk = atk; }
+};
 
 function castSkill(B, u) {
   if (!u || !u.alive || u.energy < 100 || B.over || !foesOf(B, u).length) return false;

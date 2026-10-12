@@ -47,7 +47,7 @@ const I18N = {
       help1: '🃏 Build a team of 5 hero cards.',
       help2: '⚔️ Cards fight automatically. When a card <b style="color:var(--gold)">glows ⚡</b>, tap it to use its special skill. Enemy cards use skills too!',
       help3: '🪙 Win coins, <b>upgrade</b> your heroes and open <b>chests</b> to collect new cards.',
-      help4: '🗺️ 5 worlds, 50 stages — and a boss card waits at the end of each world!',
+      help4: '🗺️ 20 worlds, 200 stages — and a boss card waits at the end of each world!',
       letsGo: "Let's go!",
       dailyTitle: '📅 Daily login reward', dailySub: 'Come back every day!', day: d => `Day ${d}`, chestShort: 'Chest',
       claimToday: "Claim today's reward", comeBack: 'Come back tomorrow ⏳', dayReward: d => `Day ${d} reward`,
@@ -90,7 +90,7 @@ const I18N = {
         ['💎 Rarity', 'Common, Rare, Epic and Legendary cards drop from chests. Mythic (duo) and Cosmic (trio) cards can only be crafted in the Fusion Lab. 3% of chest cards come out as shimmering Holo variants — pure bragging rights.'],
         ['🧪 Fusion Lab', "Level up two or three heroes and fuse them into a Fusion card. Its skill fires all of its parts' skills together. Each fusion is a numbered limited edition: 300 copies of each duo and only 30 of each trio — worldwide."],
         ['🥊 Arena', 'Duel real players live. Both put the same coin stake into the pot; the winner takes it all and a draw refunds both. If you leave mid-duel, your cards keep fighting on auto.'],
-        ['🪙 Coins & Stars', 'Earn coins from stages (×2 on first clear), daily rewards, quests, achievements and the idle chest. Spend them on upgrades, chests and fusions. Coin packs can also be bought with Telegram Stars; coins cannot be cashed out.'],
+        ['🪙 Coins & Stars', 'Earn coins from stages (×2 on first clear), daily rewards, quests, achievements and the idle chest. Spend them on upgrades, chests and fusions. Coin packs can also be bought with Telegram Stars; coins cannot be cashed out. Replaying a stage you already cleared pays half of the previous time (50%, 25%, 12.5%…).'],
         ['📅 Every day', 'Claim the 7-day login reward (day 7 = a free Royal Chest), finish the 4 daily quests and collect the idle chest — your heroes earn coins even while you are away.'],
         ['🛡️ Fair play', 'Inside Telegram your coins and cards live on the game server. Every win is re-checked by replaying the battle, so nobody can cheat their way to the top.'],
       ],
@@ -146,7 +146,7 @@ const I18N = {
       help1: '🃏 تیمی ۵ نفره از کارت‌های قهرمان بچین.',
       help2: '⚔️ کارت‌ها خودکار می‌جنگند. وقتی کارتی <b style="color:var(--gold)">می‌درخشد ⚡</b> روی آن بزن تا مهارت ویژه‌اش فعال شود. کارت‌های دشمن هم مهارت دارند!',
       help3: '🪙 با پیروزی سکه بگیر، قهرمان‌ها را <b>ارتقا</b> بده و از <b>صندوق</b> کارت جدید باز کن.',
-      help4: '🗺️ ۵ دنیا و ۵۰ مرحله، و در آخر هر دنیا یک کارت رئیس منتظرت است!',
+      help4: '🗺️ ۲۰ دنیا و ۲۰۰ مرحله، و در آخر هر دنیا یک کارت رئیس منتظرت است!',
       letsGo: 'بزن بریم!',
       dailyTitle: '📅 جایزه‌ی ورود روزانه', dailySub: 'هر روز سر بزن!', day: d => `روز ${d}`, chestShort: 'صندوق',
       claimToday: 'دریافت جایزه‌ی امروز', comeBack: 'فردا برگرد ⏳', dayReward: d => `جایزه‌ی روز ${d}`,
@@ -189,7 +189,7 @@ const I18N = {
         ['💎 کمیابی', 'کارت‌های معمولی، کمیاب، حماسی و افسانه‌ای از صندوق درمی‌آیند. کارت‌های اسطوره‌ای (دوتایی) و کیهانی (سه‌تایی) فقط در آزمایشگاه ترکیب ساخته می‌شوند. ۳٪ کارت‌های صندوق به‌صورت «هولو»ی درخشان درمی‌آیند — فقط برای پز دادن!'],
         ['🧪 آزمایشگاه ترکیب', 'دو یا سه قهرمان را ارتقا بده و ترکیبشان کن. مهارت کارت ترکیبی، مهارت همه‌ی اجزایش را با هم اجرا می‌کند. هر ترکیب نسخه‌ی محدود و شماره‌دار است: از هر ترکیب دوتایی ۳۰۰ عدد و از هر سه‌تایی فقط ۳۰ عدد در کل دنیا.'],
         ['🥊 آرنا', 'به‌صورت زنده با بازیکن‌های واقعی دوئل کن. هر دو مبلغ یکسانی وسط می‌گذارید؛ برنده همه را برمی‌دارد و در مساوی سکه‌ها برمی‌گردد. اگر وسط دوئل خارج شوی، کارت‌هایت خودکار می‌جنگند.'],
-        ['🪙 سکه و استارز', 'از مرحله‌ها (اولین برد ×۲)، جایزه‌ی روزانه، ماموریت‌ها، دستاوردها و صندوق استراحت سکه بگیر و خرج ارتقا، صندوق و ترکیب کن. بسته‌های سکه را با Telegram Stars هم می‌شود خرید؛ سکه‌ها قابل نقد کردن نیستند.'],
+        ['🪙 سکه و استارز', 'از مرحله‌ها (اولین برد ×۲)، جایزه‌ی روزانه، ماموریت‌ها، دستاوردها و صندوق استراحت سکه بگیر و خرج ارتقا، صندوق و ترکیب کن. بسته‌های سکه را با Telegram Stars هم می‌شود خرید؛ سکه‌ها قابل نقد کردن نیستند. تکرار مرحله‌ای که قبلاً رد کرده‌ای هر بار نصف دفعه‌ی قبل جایزه می‌دهد (۵۰٪، ۲۵٪، ۱۲٫۵٪…).'],
         ['📅 هر روز', 'جایزه‌ی ورود ۷ روزه را بگیر (روز هفتم = صندوق سلطنتی رایگان)، ۴ ماموریت روزانه را تمام کن و صندوق استراحت را جمع کن — قهرمان‌هایت حتی وقتی نیستی سکه جمع می‌کنند.'],
         ['🛡️ بازی منصفانه', 'داخل تلگرام سکه‌ها و کارت‌هایت روی سرور بازی است. هر برد با شبیه‌سازی دوباره‌ی نبرد بررسی می‌شود، پس هیچ‌کس نمی‌تواند با تقلب بالا برود.'],
       ],
@@ -231,7 +231,7 @@ const heroText = id => {
   const [title, skill, desc] = L().hero[id];
   return { title, skill, desc };
 };
-const worldName = w => L().world[WORLDS[w].key];
+const worldName = w => L().world[WORLDS[w].key] + ['', ' II', ' III', ' IV'][WORLDS[w].chapter || 0];
 function setLang(lang) {
   LANG = I18N[lang] ? lang : 'en';
   document.documentElement.lang = LANG;

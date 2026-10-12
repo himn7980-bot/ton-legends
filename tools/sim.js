@@ -1,24 +1,26 @@
-// Balance check: for each stage, find the lowest uniform team level that wins >= 60% of auto battles.
+// Balance check: for sampled stages, the lowest uniform team level that wins >= 60% of auto battles (binary search).
+// usage: node tools/sim.js [step=5]
 const E = require('../src/engine.js');
+const fz = (...p) => E.FUSIONS.find(f => f.parts.length === p.length && p.every(x => f.parts.includes(x))).id;
 const teams = {
   starters: E.STARTERS,
-  strong: ['notcoin', 'volya', 'noctis', 'babyshark', 'yaya'],
+  legends: ['notcoin', 'volya', 'noctis', 'babyshark', 'yaya'],
+  fusions: [fz('pinkbull', 'notcoin', 'teddy'), fz('noctis', 'paws', 'virus'), fz('egor', 'memegram', 'yoda'), fz('babyshark', 'yaya', 'teddy'), fz('pinkbull', 'notcoin')],
 };
+const step = +process.argv[2] || 5;
+function winRate(team, lv, idx, n = 12) {
+  const levels = Object.fromEntries(team.map(id => [id, lv]));
+  let w = 0;
+  for (let i = 0; i < n; i++) { const B = E.createBattle(team, levels, idx); B.autoBy.hero = true; while (!B.over) { E.step(B); B.events.length = 0; } if (B.over === 'win') w++; }
+  return w / n;
+}
 for (const [name, team] of Object.entries(teams)) {
   const out = [];
-  for (let idx = 0; idx < E.TOTAL_STAGES; idx += 1) {
-    let need = '>' + E.MAX_LEVEL;
-    for (let lv = 1; lv <= E.MAX_LEVEL; lv++) {
-      const levels = Object.fromEntries(team.map(id => [id, lv]));
-      let wins = 0;
-      for (let i = 0; i < 20; i++) {
-        const B = E.createBattle(team, levels, idx); B.autoBy.hero = true;
-        while (!B.over) { E.step(B); B.events.length = 0; }
-        if (B.over === 'win') wins++;
-      }
-      if (wins >= 12) { need = lv; break; }
-    }
-    out.push(`${idx + 1}:${need}`);
+  for (let idx = step - 1; idx < E.TOTAL_STAGES; idx += step) {
+    let lo = 1, hi = E.MAX_LEVEL;
+    if (winRate(team, hi, idx) < 0.6) { out.push(`${idx + 1}:>${hi}`); continue; }
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (winRate(team, mid, idx) >= 0.6) hi = mid; else lo = mid + 1; }
+    out.push(`${idx + 1}:${lo}`);
   }
-  console.log(name, out.join(' '));
+  console.log(name.padEnd(9), out.join(' '));
 }

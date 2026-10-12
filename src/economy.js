@@ -17,21 +17,21 @@
   ];
   const ACHIEVEMENTS = [
     { id: 'win', stat: p => p.stats.wins, tiers: [10, 50, 200, 500], r: [300, 1000, 3000, 8000] },
-    { id: 'world', stat: p => Math.floor(p.cleared / E.STAGES_PER_WORLD), tiers: [1, 2, 3, 4, 5], r: [500, 1500, 3000, 6000, 12000] },
+    { id: 'world', stat: p => Math.floor(p.cleared / E.STAGES_PER_WORLD), tiers: [1, 2, 3, 5, 8, 10, 13, 16, 20], r: [500, 1500, 3000, 6000, 12000, 20000, 35000, 60000, 100000] },
     { id: 'heroes', stat: p => Object.keys(p.owned).length, tiers: [8, 12, 16], r: [800, 2500, 8000] },
-    { id: 'level', stat: p => Math.max(...Object.values(p.owned)), tiers: [5, 10, 20, 30], r: [300, 1000, 4000, 10000] },
+    { id: 'level', stat: p => Math.max(...Object.values(p.owned)), tiers: [5, 10, 20, 30, 50, 75, 100], r: [300, 1000, 4000, 10000, 25000, 50000, 100000] },
     { id: 'chest', stat: p => p.stats.chests, tiers: [5, 25, 100], r: [500, 2000, 6000] },
     { id: 'skill', stat: p => p.stats.skills, tiers: [50, 300, 1000], r: [300, 1500, 5000] },
   ];
   const DAILY_REWARDS = [200, 300, 400, 500, 700, 900, 'royal'];
   const AFK_CAP_H = 8;
   const HOLO_CHANCE = 0.03; // a chest card has a 3% chance to come out as a shimmering Holo variant (cosmetic)
-  const KEYS = ['coins', 'owned', 'team', 'cleared', 'stats', 'daily', 'dq', 'ach', 'afkSince', 'pending', 'serials', 'holo'];
+  const KEYS = ['coins', 'owned', 'team', 'cleared', 'stats', 'daily', 'dq', 'ach', 'afkSince', 'pending', 'serials', 'holo', 'replays'];
 
   function newProfile(now) {
     return { coins: 300, owned: Object.fromEntries(E.STARTERS.map(id => [id, 1])), team: [...E.STARTERS], cleared: 0,
       stats: { wins: 0, losses: 0, chests: 0, upgrades: 0, skills: 0, bosses: 0, pvpWins: 0, pvpLosses: 0 },
-      daily: { last: null, streak: 0 }, dq: { date: null, p: {}, c: {} }, ach: {}, afkSince: now, pending: null, serials: {}, holo: {} };
+      daily: { last: null, streak: 0 }, dq: { date: null, p: {}, c: {} }, ach: {}, afkSince: now, pending: null, serials: {}, holo: {}, replays: {} };
   }
   // Fusion cards were renamed to numbers (f_golden_bull → f1); move old ids over.
   function migrateIds(obj) {
@@ -44,7 +44,7 @@
     migrateIds(p.owned); migrateIds(p.serials); migrateIds(p.holo);
     if (Array.isArray(p.team)) p.team = p.team.map(id => (E.LEGACY_FUSION_IDS || {})[id] || id);
     return { ...d, ...p, stats: { ...d.stats, ...(p.stats || {}) }, daily: { ...d.daily, ...(p.daily || {}) }, dq: { ...d.dq, ...(p.dq || {}) },
-      ach: { ...(p.ach || {}) }, serials: { ...(p.serials || {}) }, holo: { ...(p.holo || {}) } };
+      ach: { ...(p.ach || {}) }, serials: { ...(p.serials || {}) }, holo: { ...(p.holo || {}) }, replays: { ...(p.replays || {}) } };
   }
   const pickKeys = p => Object.fromEntries(KEYS.map(k => [k, p[k]]));
 
@@ -62,7 +62,10 @@
   const afkAmount = (p, now) => Math.floor(Math.min(AFK_CAP_H * 3600e3, now - (p.afkSince || now)) / 3600e3 * afkRate(p));
   const achTier = (p, a) => p.ach[a.id] || 0;
   const coinBonus = team => team.reduce((b, id) => b + (E.COIN_BONUS[id] || 0), 0);
-  const stageCoins = (p, idx, team, first) => Math.round(E.stageReward(idx) * (1 + coinBonus(team)) * (first ? 2 : 1));
+  // First clear pays ×2. Every win on an already-cleared stage pays half of the previous replay (50%, 25%, 12.5%…),
+  // so farming old stages dries up and progress comes from new stages, the idle chest, quests and the arena.
+  const replayFactor = (p, idx) => (idx < p.cleared ? Math.pow(0.5, (p.replays[idx] || 0) + 1) : 2);
+  const stageCoins = (p, idx, team) => Math.floor(E.stageReward(idx) * (1 + coinBonus(team)) * replayFactor(p, idx));
   const teamPower = (p, team = p.team) => team.reduce((sum, id) => { const s = E.heroStats(id, p.owned[id] || 1); return sum + s.hp / 10 + s.atk / s.spd * 2; }, 0);
 
   function claimable(p, now) {
@@ -180,8 +183,9 @@
         if (r.skills) track(p, 'skills', r.skills, now);
         if (r.result !== 'win') { p.stats.losses++; return { result: r.result, stage: pd.stage }; }
         const first = pd.stage === p.cleared;
-        const coins = stageCoins(p, pd.stage, pd.team, first);
+        const coins = stageCoins(p, pd.stage, pd.team);
         if (first) p.cleared = Math.min(E.TOTAL_STAGES, p.cleared + 1);
+        else p.replays[pd.stage] = (p.replays[pd.stage] || 0) + 1;
         p.coins += coins;
         track(p, 'wins', 1, now);
         if (pd.stage % E.STAGES_PER_WORLD === E.STAGES_PER_WORLD - 1) track(p, 'bosses', 1, now);
@@ -208,5 +212,5 @@
   }
 
   return { migrateIds, HOLO_CHANCE, CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
-    dqReward, dailyCanClaim, dailyNext, afkRate, afkAmount, achTier, coinBonus, stageCoins, teamPower, claimable, act, importLocal };
+    dqReward, dailyCanClaim, dailyNext, afkRate, afkAmount, achTier, coinBonus, replayFactor, stageCoins, teamPower, claimable, act, importLocal };
 });

@@ -168,7 +168,7 @@ function renderMap() {
   }
   const foes = stageEnemies(S.sel);
   const first = S.sel === S.cleared;
-  const reward = ECON.stageCoins(S, S.sel, S.team, first);
+  const reward = ECON.stageCoins(S, S.sel, S.team), factor = ECON.replayFactor(S, S.sel);
   $('#screen').innerHTML = `
     <div class="world" style="background:${W.bg}">
       <div class="world-head">
@@ -180,7 +180,7 @@ function renderMap() {
     </div>
     <div class="panel">
       <div class="row"><div class="h2" style="margin:0">${t.stage(stageLabel(S.sel))} ${isBossStage(S.sel) ? '· ' + t.boss : ''}</div>
-        <span class="tag gold">🪙 ${n(reward)}${first ? t.firstX2 : ''}</span></div>
+        <span class="tag gold">🪙 ${n(reward)}${first ? t.firstX2 : ` · 🔁 ${pct(factor * 100)}`}</span></div>
       <div class="muted" style="margin-top:8px">${t.enemyCards}</div>
       <div class="foes">${foes.map(f => `<div class="foe ${f.boss ? 'b' : ''}"><img src="${img(f.id)}" alt="${esc(f.name)}"></div>`).join('')}</div>
       <div class="row"><span class="muted">${t.yourTeam(n(teamPower(S.team)))}</span><button class="tag" id="edit-team">${t.editTeam}</button></div>
