@@ -1,6 +1,46 @@
 // TON Legends — UI layer
 const IMAGES = {/*IMAGES*/};
-const img = id => IMAGES[id] || `images/${id}.jpg`;
+// Card image. Fusion cards use the uploaded artwork (/art/N) when it exists; otherwise a card is drawn on the fly
+// from the parent heroes' posters (diagonal slices + frame + name), cached per fusion.
+const BASE_IMG = {}, FART = {};
+const baseSrc = id => IMAGES[id] || `images/${id}.jpg`;
+function img(id) {
+  const h = HERO_BY_ID[id];
+  if (!h || !h.fusion) return baseSrc(id);
+  if (Online.state.art && Online.state.art.has(h.num)) return `art/${h.num}?v=${Online.state.art.get(h.num)}`;
+  return FART[id] || (FART[id] = drawFusion(h)) || baseSrc(h.parts[0]);
+}
+function preloadBaseImages(done) {
+  let left = BASE_HEROES.length;
+  for (const h of BASE_HEROES) {
+    const im = new Image();
+    im.onload = im.onerror = () => { if (--left === 0) done(); };
+    im.src = baseSrc(h.id); BASE_IMG[h.id] = im;
+  }
+}
+function drawFusion(h) {
+  const ims = h.parts.map(p => BASE_IMG[p]);
+  if (ims.some(im => !im || !im.complete || !im.naturalWidth)) return null; // not loaded yet: show first part meanwhile
+  const W = 360, H = 540, k = ims.length, c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  ims.forEach((im, i) => {
+    const sc = Math.max(W / im.naturalWidth, H / im.naturalHeight), w = im.naturalWidth * sc, hh = im.naturalHeight * sc;
+    const x0 = W * i / k, x1 = W * (i + 1) / k, sl = 50;
+    g.save(); g.beginPath();
+    g.moveTo(i ? x0 + sl : 0, 0); g.lineTo(i < k - 1 ? x1 + sl : W, 0); g.lineTo(i < k - 1 ? x1 - sl : W, H); g.lineTo(i ? x0 - sl : 0, H); g.closePath(); g.clip();
+    g.drawImage(im, (W - w) / 2, -(hh - H) * 0.15, w, hh); g.restore();
+  });
+  const col = k === 2 ? '#ff5ad1' : '#46f0ff';
+  const grad = g.createLinearGradient(0, H - 170, 0, H); grad.addColorStop(0, 'rgba(8,6,20,0)'); grad.addColorStop(0.45, 'rgba(8,6,20,.85)'); grad.addColorStop(1, 'rgba(8,6,20,.95)');
+  g.fillStyle = grad; g.fillRect(0, H - 170, W, 170);
+  g.strokeStyle = col; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8);
+  g.textAlign = 'center'; g.fillStyle = col; g.font = '900 17px Vazirmatn, sans-serif';
+  g.fillText(`${k === 2 ? 'DUO' : 'TRIO'} FUSION · #${h.num}`, W / 2, H - 88);
+  g.fillStyle = '#fff'; g.font = `900 ${h.name.length > 22 ? 22 : 30}px Vazirmatn, sans-serif`;
+  g.fillText(h.name, W / 2, H - 50, W - 24);
+  return c.toDataURL('image/jpeg', 0.82);
+}
 const n = x => Math.round(x).toLocaleString(L().locale);
 const pct = x => LANG === 'fa' ? `${n(x)}٪` : `${n(x)}%`;
 const $ = s => document.querySelector(s);
@@ -266,33 +306,84 @@ function chestReveal(c, r) {
 }
 
 // ---------- fusion lab ----------
+// The player builds a fusion: pick 2 or 3 of your own heroes, see which card that combination makes and whether the
+// rules allow it (part levels, coins, worldwide copies left), then fuse. Your crafted fusions are listed below.
+let labPick = [];
+const fusionFor = parts => {
+  if (parts.length < 2) return null;
+  const key = [...parts].sort().join('+');
+  return FUSIONS.find(f => [...f.parts].sort().join('+') === key) || null;
+};
 function renderLab() {
   const t = T(), mint = Online.state.mint || {}, online = !!Online.state.profile;
-  const card = f => {
-    const rule = FUSION_RULES[f.parts.length], owned = !!S.owned[f.id];
-    const left = rule.supply - (mint[f.id] || 0), soldOut = online && left <= 0 && !owned;
-    const ready = f.parts.every(p => (S.owned[p] || 0) >= rule.minLevel);
-    const can = !owned && !soldOut && ready && S.coins >= rule.cost;
-    return `<div class="fcard ${owned ? 'owned' : ''}" style="--rc:${RARITY[f.rarity].color}">
-      <button class="fimg" data-hero="${f.id}"><img src="${img(f.id)}" alt="" loading="lazy">${owned && S.serials[f.id] ? `<span class="serial">#${n(S.serials[f.id])}</span>` : ''}</button>
-      <div class="fname latin">${f.name}</div>
-      <div class="fparts">${f.parts.map(p => { const lv = S.owned[p] || 0; return `<span class="fp ${lv >= rule.minLevel ? 'ok' : ''}"><img src="${img(p)}" alt=""><b>${lv ? n(lv) : '🔒'}</b></span>`; }).join('')}</div>
-      <div class="muted fneed">${t.needs(n(rule.minLevel))}</div>
-      ${online ? `<div class="fsupply ${soldOut ? 'out' : ''}">${soldOut ? t.soldOut : t.left(n(left), n(rule.supply))}</div>` : ''}
-      ${owned ? `<div class="tag owned-tag">✓ ${t.ownedTag}</div>` : `<button class="btn ${can ? 'gold' : 'ghost'} fbtn" data-fuse="${f.id}" ${can ? '' : 'disabled'}>${t.fuse(n(rule.cost))}</button>`}
-    </div>`;
+  labPick = labPick.filter(id => S.owned[id]);
+  const f = fusionFor(labPick), rule = FUSION_RULES[Math.max(2, labPick.length)];
+  const mine = FUSIONS.filter(x => S.owned[x.id]);
+  const slot = i => {
+    const id = labPick[i];
+    if (id) {
+      const lv = S.owned[id], ok = lv >= rule.minLevel;
+      return `<button class="altar-slot filled ${ok ? 'ok' : 'low'}" data-slot="${i}"><img src="${img(id)}" alt=""><b>${t.level(n(lv))}</b><span class="x">✕</span></button>`;
+    }
+    return `<button class="altar-slot ${i === 2 ? 'opt' : ''}" data-slot="${i}"><span class="plus">+</span><small>${i === 2 ? t.slotOptional : t.pickHero}</small></button>`;
   };
+  let result = `<p class="muted center">${t.altarHint}</p>`;
+  if (f) {
+    const owned = !!S.owned[f.id], left = rule.supply - (mint[f.id] || 0), soldOut = online && left <= 0;
+    const lvOk = f.parts.every(p => (S.owned[p] || 0) >= rule.minLevel), coinOk = S.coins >= rule.cost;
+    const can = !owned && !soldOut && lvOk && coinOk;
+    const chk = (ok, text) => `<div class="chk ${ok ? 'ok' : 'no'}">${ok ? '✓' : '✗'} ${text}</div>`;
+    result = `<div class="fresult" style="--rc:${RARITY[f.rarity].color}">
+      <button class="fr-img" data-hero="${f.id}"><img src="${img(f.id)}" alt=""><span class="fnum">#${f.num}</span></button>
+      <div class="fr-info">
+        <div class="tag" style="color:${RARITY[f.rarity].color}">${L().rarity[f.rarity]}</div>
+        <div class="fname latin">${f.name}</div>
+        <div class="muted small">${heroText(f.id).skill}</div>
+        ${chk(lvOk, t.chkLevel(n(rule.minLevel)))}
+        ${chk(coinOk, t.chkCoins(n(rule.cost)))}
+        ${online ? chk(!soldOut, soldOut ? t.soldOut : t.left(n(left), n(rule.supply))) : ''}
+        ${chk(!owned, owned ? t.ownedTag : t.chkNew)}
+      </div></div>
+      <button class="btn wide ${can ? 'gold' : 'ghost'}" id="lab-fuse" ${can ? '' : 'disabled'}>${t.fuse(n(rule.cost))}</button>`;
+  }
   $('#screen').innerHTML = `<div class="h2">${t.labTitle}</div><p class="muted">${t.labNote}</p>
-    <div class="h2">${t.duo}</div><div class="fgrid">${FUSIONS.filter(f => f.parts.length === 2).map(card).join('')}</div>
-    <div class="h2">${t.trio}</div><div class="fgrid">${FUSIONS.filter(f => f.parts.length === 3).map(card).join('')}</div>`;
+    <div class="panel altar">
+      <div class="altar-slots">${slot(0)}<span class="altar-op">+</span>${slot(1)}<span class="altar-op">+</span>${slot(2)}</div>
+      ${result}
+    </div>
+    <div class="panel rules"><div class="t">${t.rulesTitle}</div>
+      <div class="rule-row"><span>${t.duo}</span><span>${t.chkLevel(n(FUSION_RULES[2].minLevel))} · 🪙 ${n(FUSION_RULES[2].cost)} · ${t.copies(n(FUSION_RULES[2].supply))}</span></div>
+      <div class="rule-row"><span>${t.trio}</span><span>${t.chkLevel(n(FUSION_RULES[3].minLevel))} · 🪙 ${n(FUSION_RULES[3].cost)} · ${t.copies(n(FUSION_RULES[3].supply))}</span></div>
+    </div>
+    <div class="h2">${t.myFusions} <span class="muted">(${n(mine.length)}/${n(FUSIONS.length)})</span></div>
+    ${mine.length ? `<div class="grid">${mine.map(cardHtml).join('')}</div>` : `<p class="muted center">${t.noFusions}</p>`}`;
+  document.querySelectorAll('[data-slot]').forEach(b => b.onclick = () => {
+    const i = +b.dataset.slot;
+    if (labPick[i]) { labPick.splice(i, 1); renderLab(); } else heroPicker();
+  });
   document.querySelectorAll('[data-hero]').forEach(b => b.onclick = () => heroModal(b.dataset.hero));
-  document.querySelectorAll('[data-fuse]').forEach(b => b.onclick = async () => {
-    b.disabled = true;
-    const r = await tryAct({ type: 'fuse', id: b.dataset.fuse });
+  document.querySelectorAll('.grid .card').forEach(c => c.onclick = () => heroModal(c.dataset.id));
+  const fb = $('#lab-fuse');
+  if (fb) fb.onclick = async () => {
+    fb.disabled = true;
+    const r = await tryAct({ type: 'fuse', id: f.id });
     if (!r) { renderLab(); return; }
     if (r.serial) Online.state.mint[r.id] = Math.max(Online.state.mint[r.id] || 0, r.serial);
-    fusionReveal(r);
-    renderLab();
+    labPick = [];
+    fusionReveal(r); renderLab();
+  };
+}
+// Choose a hero for the next empty slot (only heroes you own; fusion cards can't be fused again).
+function heroPicker() {
+  const t = T(), need = FUSION_RULES[Math.max(2, labPick.length + 1)].minLevel;
+  const options = BASE_HEROES.filter(h => S.owned[h.id] && !labPick.includes(h.id))
+    .sort((a, b) => S.owned[b.id] - S.owned[a.id]);
+  openModal(`<div class="big center" style="font-size:20px">${t.pickHero}</div>
+    <p class="muted center small">${t.chkLevel(n(need))}</p>
+    <div class="grid pick-grid">${options.map(h => `<button class="card pick ${S.owned[h.id] >= need ? '' : 'low'}" data-pick="${h.id}" style="--rc:${RARITY[h.rarity].color}">
+      <img src="${img(h.id)}" alt=""><span class="lv">${t.level(n(S.owned[h.id]))}</span>
+      <div class="info"><div class="nm">${h.name}</div></div></button>`).join('')}</div>`, box => {
+    box.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => { labPick.push(b.dataset.pick); closeModal(); renderLab(); });
   });
 }
 function fusionReveal(r) {

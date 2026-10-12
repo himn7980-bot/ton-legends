@@ -197,6 +197,7 @@ window.initTelegram = async () => {
 // Called at the end of arena.js, once every screen's code is loaded.
 function boot() {
   setLang(S.lang || detectLang());
+  preloadBaseImages(() => { if (!BT && S.tab !== 'map') refresh(); });
   Sound.set({ sfx: S.sfx, music: S.music });
   Sound.music('menu');
   showCoins();

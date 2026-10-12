@@ -39,32 +39,15 @@ const HEROES = [
   { id: 'dog',       name: 'telegram.dog', role: 'support',  rarity: 'C' },
   { id: 'teddy',     name: 'Teddy',        role: 'support',  rarity: 'R' },
 ];
-// Fusion cards: crafted in the Fusion Lab from heroes you own. Their skill fires every part's skill at once.
-// Supply is limited worldwide (server-side), so each copy gets a serial number.
-const FUSIONS = [
-  { id: 'f_golden_bull',     name: 'Golden Bull',      role: 'tank',     parts: ['pinkbull', 'notcoin'] },
-  { id: 'f_sky_hunters',     name: 'Sky Hunters',      role: 'archer',   parts: ['gramcat', 'utya'] },
-  { id: 'f_frost_twins',     name: 'Frost Twins',      role: 'control',  parts: ['pengu', 'utya'] },
-  { id: 'f_arctic_tide',     name: 'Arctic Tide',      role: 'healer',   parts: ['babyshark', 'pengu'] },
-  { id: 'f_crystal_star',    name: 'Crystal Star',     role: 'mage',     parts: ['egor', 'memegram'] },
-  { id: 'f_shadow_paw',      name: 'Shadow Paw',       role: 'assassin', parts: ['noctis', 'paws'] },
-  { id: 'f_toxic_sage',      name: 'Toxic Sage',       role: 'mage',     parts: ['virus', 'yoda'] },
-  { id: 'f_lantern_hug',     name: 'Lantern Hug',      role: 'support',  parts: ['teddy', 'yaya'] },
-  { id: 'f_courier_cat',     name: 'Courier Cat',      role: 'archer',   parts: ['dog', 'gramcat'] },
-  { id: 'f_legend_sentinel', name: 'Legend Sentinel',  role: 'tank',     parts: ['volya', 'notcoin'] },
-  { id: 'f_bull_market',     name: 'Bull Market Boss', role: 'tank',     parts: ['pinkbull', 'teddy'] },
-  { id: 'f_cosmic_sage',     name: 'Cosmic Sage',      role: 'mage',     parts: ['memegram', 'yoda'] },
-  { id: 'f_plague_shadow',   name: 'Plague Shadow',    role: 'assassin', parts: ['noctis', 'virus'] },
-  { id: 'f_lantern_reef',    name: 'Lantern Reef',     role: 'healer',   parts: ['babyshark', 'yaya'] },
-  { id: 'f_crystal_claw',    name: 'Crystal Claw',     role: 'warrior',  parts: ['egor', 'paws'] },
-  { id: 'f_sky_courier',     name: 'Sky Courier',      role: 'warrior',  parts: ['volya', 'dog'] },
-  { id: 'f_ton_treasury',    name: 'TON Treasury',     role: 'tank',     parts: ['notcoin', 'pinkbull', 'teddy'] },
-  { id: 'f_frozen_ocean',    name: 'Frozen Ocean',     role: 'control',  parts: ['babyshark', 'pengu', 'utya'] },
-  { id: 'f_night_plague',    name: 'Night Plague',     role: 'assassin', parts: ['noctis', 'paws', 'virus'] },
-  { id: 'f_crystal_cosmos',  name: 'Crystal Cosmos',   role: 'mage',     parts: ['egor', 'memegram', 'yoda'] },
-  { id: 'f_legend_express',  name: 'Legend Express',   role: 'warrior',  parts: ['volya', 'dog', 'gramcat'] },
-  { id: 'f_lantern_festival', name: 'Lantern Festival', role: 'support', parts: ['yaya', 'teddy', 'babyshark'] },
-].map(f => ({ ...f, fusion: true, rarity: f.parts.length === 3 ? 'X' : 'M' }));
+// Fusion cards (#1–#680, every duo and trio of the 16 heroes; list in fusions-data.js). Crafted in the Fusion Lab
+// from heroes you own; their skill fires every part's skill at once. Supply is limited worldwide, so each copy is numbered.
+const FD = typeof module !== 'undefined' ? require('./fusions-data.js') : { FUSION_DATA: self.FUSION_DATA, LEGACY_FUSION_IDS: self.LEGACY_FUSION_IDS };
+const FUSIONS = FD.FUSION_DATA.map(([num, parts, name, role]) => ({
+  id: 'f' + num, num, parts, fusion: true, rarity: parts.length === 3 ? 'X' : 'M',
+  name: name || parts.map(p => HEROES.find(h => h.id === p).name).join(' × '),
+  role: role || HEROES.find(h => h.id === parts[0]).role,
+}));
+const LEGACY_FUSION_IDS = FD.LEGACY_FUSION_IDS;
 const FUSION_RULES = { 2: { minLevel: 8, cost: 4000, supply: 300 }, 3: { minLevel: 12, cost: 15000, supply: 30 } };
 const BASE_HEROES = HEROES.slice();
 HEROES.push(...FUSIONS);
@@ -307,6 +290,6 @@ function replayStage(team, levels, idx, seed, inputs) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { RARITY, ROLES, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, HERO_BY_ID, STARTERS, WORLDS, TOTAL_STAGES, STAGES_PER_WORLD, MAX_LEVEL, COIN_BONUS, TICK,
+  module.exports = { RARITY, ROLES, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, LEGACY_FUSION_IDS, HERO_BY_ID, STARTERS, WORLDS, TOTAL_STAGES, STAGES_PER_WORLD, MAX_LEVEL, COIN_BONUS, TICK,
     heroStats, upgradeCost, stageReward, stageEnemies, createBattle, createPvpBattle, step, castSkill, applyInput, replayStage };
 }

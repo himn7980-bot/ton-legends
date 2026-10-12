@@ -11,10 +11,12 @@ const fake = http.createServer((req, res) => {
   let body = '';
   req.on('data', c => body += c);
   req.on('end', () => {
+    if (req.url.includes('/file/bot')) { res.writeHead(200, { 'Content-Type': 'application/octet-stream' }); return res.end('IMG:' + req.url.split('/').pop()); }
     const method = req.url.split('/').pop();
     const data = body ? JSON.parse(body) : {};
     calls.push({ method, data });
-    const out = { getMe: { username: 'TonLegendsTestBot' }, createInvoiceLink: 'https://t.me/$invoice-test', getUpdates: queue.splice(0) }[method] ?? true;
+    const out = { getMe: { username: 'TonLegendsTestBot' }, createInvoiceLink: 'https://t.me/$invoice-test', getUpdates: queue.splice(0),
+      getFile: { file_path: 'photos/' + (data.file_id || 'x') + '.jpg' } }[method] ?? true;
     setTimeout(() => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, result: out })); }, method === 'getUpdates' && !out.length ? 200 : 0);
   });
 });
@@ -31,7 +33,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 (async () => {
   await new Promise(r => fake.listen(0, r));
   const dataFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tl-')), 'db.json');
-  Object.assign(process.env, { BOT_TOKEN: TOKEN, WEBAPP_URL: 'https://game.example', PORT: '0', DATA_FILE: dataFile, TELEGRAM_API: `http://127.0.0.1:${fake.address().port}` });
+  Object.assign(process.env, { ADMIN_IDS: '111', ART_DIR: path.join(path.dirname(dataFile), 'art'), BOT_TOKEN: TOKEN, WEBAPP_URL: 'https://game.example', PORT: '0', DATA_FILE: dataFile, TELEGRAM_API: `http://127.0.0.1:${fake.address().port}` });
   const srv = require('./server.js');
   srv.server.listen(0);
   await new Promise(r => srv.server.once('listening', r));
@@ -109,15 +111,39 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert.ok(JSON.parse(fs.readFileSync(dataFile, 'utf8')).payments.ch1, 'persisted to disk');
   // fusion: limited, numbered editions
   srv.db.users['111'].profile.owned.notcoin = 8; srv.db.users['111'].profile.owned.pinkbull = 8; srv.db.users['111'].profile.coins += 10000;
-  r = await post('/api/act', { initData: initData(alice), action: { type: 'fuse', id: 'f_golden_bull' } });
-  assert.equal(r.body.result.serial, 1); assert.equal(r.body.profile.owned.f_golden_bull, 1); assert.equal(r.body.profile.serials.f_golden_bull, 1);
-  r = await post('/api/act', { initData: initData(alice), action: { type: 'fuse', id: 'f_golden_bull' } }); assert.equal(r.status, 400, 'one copy per player');
-  r = await post('/api/act', { initData: initData(bob), action: { type: 'fuse', id: 'f_night_plague' } }); assert.equal(r.status, 400, 'parts required');
-  srv.db.mint.f_toxic_sage = 300; Object.assign(srv.db.users['222'].profile.owned, { virus: 9, yoda: 9 }); srv.db.users['222'].profile.coins += 5000;
-  r = await post('/api/act', { initData: initData(bob), action: { type: 'fuse', id: 'f_toxic_sage' } }); assert.equal(r.body.error, 'sold_out');
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'fuse', id: 'f1' } });
+  assert.equal(r.body.result.serial, 1); assert.equal(r.body.profile.owned.f1, 1); assert.equal(r.body.profile.serials.f1, 1);
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'fuse', id: 'f1' } }); assert.equal(r.status, 400, 'one copy per player');
+  r = await post('/api/act', { initData: initData(bob), action: { type: 'fuse', id: 'f466' } }); assert.equal(r.status, 400, 'parts required');
+  srv.db.mint.f106 = 300; Object.assign(srv.db.users['222'].profile.owned, { virus: 9, yoda: 9 }); srv.db.users['222'].profile.coins += 5000;
+  r = await post('/api/act', { initData: initData(bob), action: { type: 'fuse', id: 'f106' } }); assert.equal(r.body.error, 'sold_out');
   srv.db.users['222'].profile.coins -= 5000;
-  r = await fetch(base + '/api/health').then(x => x.json()); assert.equal(r.mint.f_golden_bull, 1);
+  r = await fetch(base + '/api/health').then(x => x.json()); assert.equal(r.mint.f1, 1);
   console.log('   fusion: serial #1 minted, sold-out edition refused');
+
+  // ---------- fusion art upload through the bot (admin only) ----------
+  const said = chat => calls.filter(c => c.method === 'sendMessage' && c.data.chat_id === chat).map(c => c.data.text);
+  let uid = 100;
+  const send = msg => queue.push({ update_id: uid++, message: { chat: { id: msg.from.id }, ...msg } });
+  send({ from: bob, text: '/art' });
+  send({ from: alice, text: '/art' });
+  send({ from: alice, photo: [{ file_id: 'small' }, { file_id: 'big' }] });                                   // → #1 (the card the bot asked for)
+  send({ from: alice, document: { file_id: 'doc37', file_name: '37.png', mime_type: 'image/png' } });         // → #37 from the file name
+  send({ from: alice, photo: [{ file_id: 'cap500' }], caption: '500' });                                      // → #500 from the caption
+  send({ from: alice, text: '/artlist' });
+  await sleep(1500);
+  assert.match(said(222).pop(), /Your Telegram ID is 222/);
+  const aliceSaid = said(111);
+  assert.ok(aliceSaid.some(x => /Next: #1 Golden Bull/.test(x)), aliceSaid.join('\n'));
+  assert.ok(aliceSaid.some(x => /Saved #1 Golden Bull/.test(x)));
+  assert.ok(aliceSaid.some(x => /Saved #37 /.test(x)));
+  assert.ok(aliceSaid.some(x => /Saved #500 /.test(x)));
+  assert.match(aliceSaid.pop(), /3\/680 uploaded/);
+  r = await fetch(base + '/art/1'); assert.equal(r.status, 200); assert.equal(r.headers.get('content-type'), 'image/jpeg'); assert.equal(await r.text(), 'IMG:big.jpg', 'largest photo size saved');
+  r = await fetch(base + '/art/37'); assert.equal(r.headers.get('content-type'), 'image/png');
+  r = await fetch(base + '/art/2'); assert.equal(r.status, 404);
+  r = await fetch(base + '/api/health').then(x => x.json()); assert.deepEqual(Object.keys(r.art).sort(), ['1', '37', '500']);
+  console.log('   fusion art: admin uploads by "next card", file name and caption; non-admins get their ID');
 
   // ---------- arena ----------
   const coinsOf = async who => (await post('/api/profile', { initData: initData(who) })).body.profile.coins;

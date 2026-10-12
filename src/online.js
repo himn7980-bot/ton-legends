@@ -2,7 +2,7 @@
 // Everything here degrades gracefully: outside Telegram or without the server, the game runs fully offline.
 const Online = (() => {
   const API = (window.TL_CONFIG && window.TL_CONFIG.api) || '';
-  const state = { server: false, bot: null, packs: [], profile: false, mint: {} };
+  const state = { server: false, bot: null, packs: [], profile: false, mint: {}, art: null };
   // Resolves once we know whether the server is reachable (so early taps don't race the profile sync).
   let markReady; const ready = new Promise(r => { markReady = r; }); setTimeout(() => markReady(), 6000);
 
@@ -43,7 +43,7 @@ const Online = (() => {
     if (!tg()) return state;
     try {
       const h = await call('health');
-      state.server = !!h.ok; state.bot = h.bot || null; state.packs = h.packs || []; state.mint = h.mint || {};
+      state.server = !!h.ok; state.bot = h.bot || null; state.packs = h.packs || []; state.mint = h.mint || {}; state.art = new Map(Object.entries(h.art || {}).map(([k, v]) => [+k, v]));
     } catch (e) { state.server = false; }
     return state;
   }

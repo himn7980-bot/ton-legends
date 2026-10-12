@@ -319,3 +319,41 @@ button:disabled { opacity: .45; cursor: default; }
 .lang-cur { font-weight: 700; }
 .guide-sec { border-bottom: 1px solid var(--line); padding: 10px 0; }
 .guide-sec p { margin: 6px 0 0; line-height: 1.6; color: #c4cdf0; }
+
+/* v1.5: 680-card lab browsing */
+.lab-tabs { display: flex; margin: 10px 0; }
+.lab-tabs button { flex: 1; font-size: 12px; }
+.hero-filter { display: flex; gap: 6px; overflow-x: auto; padding: 4px 2px 10px; scrollbar-width: none; }
+.hero-filter::-webkit-scrollbar { display: none; }
+.hf { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%; padding: 0; overflow: hidden; border: 2px solid var(--line); background: var(--panel2); font-size: 18px; color: var(--gold); }
+.hf img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 20%; display: block; }
+.hf.on { border-color: var(--gold); box-shadow: 0 0 10px -2px var(--gold); }
+.fnum { position: absolute; bottom: 6px; inset-inline-end: 6px; background: rgba(0,0,0,.75); border-radius: 8px; font-size: 11px; font-weight: 900; padding: 1px 6px; direction: ltr; }
+
+/* v1.6: fusion altar (player picks the heroes) */
+.altar { background: radial-gradient(circle at 50% 0%, rgba(255,90,209,.18), transparent 60%), var(--panel); }
+.altar-slots { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 4px 0 12px; }
+.altar-op { font-size: 22px; font-weight: 900; color: var(--gold); }
+.altar-slot { width: 28%; max-width: 104px; aspect-ratio: 3/4; border-radius: 14px; border: 2px dashed var(--line); background: var(--panel2); position: relative; padding: 0; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--muted); }
+.altar-slot.opt { opacity: .7; }
+.altar-slot .plus { font-size: 32px; font-weight: 900; color: var(--ton); }
+.altar-slot small { font-size: 10px; padding: 0 4px; }
+.altar-slot.filled { border-style: solid; border-color: var(--green); }
+.altar-slot.filled.low { border-color: var(--red); }
+.altar-slot.filled img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 20%; }
+.altar-slot.filled b { position: absolute; bottom: 4px; inset-inline-start: 4px; background: rgba(0,0,0,.75); font-size: 11px; padding: 0 6px; border-radius: 8px; color: #fff; }
+.altar-slot.filled.low b { background: var(--red); }
+.altar-slot .x { position: absolute; top: 4px; inset-inline-end: 4px; background: rgba(0,0,0,.7); border-radius: 50%; width: 20px; height: 20px; font-size: 11px; display: grid; place-items: center; color: #fff; }
+.fresult { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
+.fr-img { width: 42%; flex-shrink: 0; padding: 0; position: relative; border-radius: 14px; overflow: hidden; border: 2px solid var(--rc); box-shadow: 0 0 20px -4px var(--rc); }
+.fr-img img { width: 100%; display: block; aspect-ratio: 2/3; object-fit: cover; }
+.fr-info { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.chk { font-size: 12px; font-weight: 700; }
+.chk.ok { color: var(--green); }
+.chk.no { color: #ff8a95; }
+.rules .rule-row { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.rules .rule-row span:last-child { color: var(--muted); font-size: 12px; }
+.pick-grid { margin-top: 10px; }
+.card.pick.low { opacity: .55; }
+.card.pick.low .lv { background: var(--red); }

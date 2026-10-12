@@ -7,6 +7,8 @@
 //   PORT          default 3000
 //   DATA_FILE     default ./data/db.json
 //   TELEGRAM_API  default https://api.telegram.org (overridable for tests)
+//   ADMIN_IDS     comma-separated Telegram user ids allowed to upload fusion artwork through the bot (/art)
+//   ART_DIR       where uploaded fusion art is stored (default: next to DATA_FILE, i.e. on the persistent disk)
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -24,7 +26,11 @@ function logErr(key, e) { diag[key] = `${new Date().toISOString()} ${e.message}`
 const PORT = +process.env.PORT || 3000;
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data', 'db.json');
 const TG = (process.env.TELEGRAM_API || 'https://api.telegram.org') + '/bot' + BOT_TOKEN + '/';
+const TG_FILES = (process.env.TELEGRAM_API || 'https://api.telegram.org') + '/file/bot' + BOT_TOKEN + '/';
 const STATIC_DIR = path.join(__dirname, '..', 'src');
+const ADMIN_IDS = new Set(String(process.env.ADMIN_IDS || '').split(/[\s,]+/).filter(Boolean));
+const ART_DIR = process.env.ART_DIR || path.join(path.dirname(DATA_FILE), 'art');
+const E = require('../src/engine.js');
 const REF_INVITER = 500, REF_NEWCOMER = 300;
 
 // Coin packs sold for Telegram Stars (currency XTR). Server is the source of truth for prices.
@@ -110,6 +116,7 @@ function credit(u, coins) {
 }
 const rng = () => crypto.randomInt(2 ** 32) / 2 ** 32;
 // Limited editions: each fusion card has a worldwide supply; copies are numbered #1…#supply.
+if (db.mint) ECON.migrateIds(db.mint);
 function mint(id, supply) {
   db.mint = db.mint || {};
   const next = (db.mint[id] || 0) + 1;
@@ -118,6 +125,79 @@ function mint(id, supply) {
   return next;
 }
 const profileOut = u => ECON.pickKeys(u.profile);
+
+// ---------- fusion artwork (uploaded by the admin through the bot) ----------
+// Files live in ART_DIR as <number>.<ext>; the game asks /api/health which numbers exist and loads /art/<number>.
+const ART_EXT = ['.jpg', '.jpeg', '.png', '.webp'];
+const ART_MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
+let artIndex = {};
+function scanArt() {
+  artIndex = {};
+  try {
+    for (const f of fs.readdirSync(ART_DIR)) {
+      const m = /^(\d+)(\.\w+)$/.exec(f);
+      if (m && ART_EXT.includes(m[2].toLowerCase())) artIndex[m[1]] = { file: f, v: Math.floor(fs.statSync(path.join(ART_DIR, f)).mtimeMs / 1000) };
+    }
+  } catch (e) {}
+}
+scanArt();
+const artVersions = () => Object.fromEntries(Object.entries(artIndex).map(([k, x]) => [k, x.v]));
+const fusionByNum = num => E.FUSIONS.find(f => f.num === num);
+const fusionLabel = f => `#${f.num} ${f.name}${f.name.includes('×') ? '' : ` (${f.parts.map(p => E.HERO_BY_ID[p].name).join(' × ')})`}`;
+function nextMissingArt(after = 0) {
+  for (let i = 1; i <= E.FUSIONS.length; i++) { const num = ((after + i - 1) % E.FUSIONS.length) + 1; if (!artIndex[num]) return num; }
+  return null;
+}
+async function saveArt(num, fileId, ext) {
+  const f = await tg('getFile', { file_id: fileId });
+  const r = await fetch(`${TG_FILES}${f.file_path}`);
+  if (!r.ok) throw new Error('download failed ' + r.status);
+  const buf = Buffer.from(await r.arrayBuffer());
+  fs.mkdirSync(ART_DIR, { recursive: true });
+  for (const e of ART_EXT) { try { fs.unlinkSync(path.join(ART_DIR, num + e)); } catch (err) {} }
+  fs.writeFileSync(path.join(ART_DIR, num + ext), buf);
+  scanArt();
+}
+async function handleArt(m) {
+  const say = text => tg('sendMessage', { chat_id: m.chat.id, text });
+  const u = userRec(m.from), total = E.FUSIONS.length;
+  if (!ADMIN_IDS.has(String(m.from.id))) return say(`Your Telegram ID is ${m.from.id}.\nTo upload fusion art, add it to ADMIN_IDS in Render (Environment) and redeploy.`);
+  const text = (m.text || m.caption || '').trim();
+  const cmd = /^\/art(?:@\w+)?(?:\s+(\d+))?$/.exec(m.text ? text : '');
+  const doneCount = () => Object.keys(artIndex).length;
+  const promptNext = num => {
+    u.artNext = num; persist();
+    if (!num) return say(`🎉 All ${total} fusion images are uploaded!`);
+    const f = fusionByNum(num);
+    return say(`🎨 Fusion art: ${doneCount()}/${total} uploaded.\nNext: ${fusionLabel(f)}\nParts: ${f.parts.map(p => E.HERO_BY_ID[p].name).join(' + ')}\n\nSend the picture now (photo or file). To pick another card, write its number in the caption, name the file e.g. ${num}.png, or send /art <number>.`);
+  };
+  if (cmd) return promptNext(cmd[1] ? Math.min(total, Math.max(1, +cmd[1])) : nextMissingArt(0));
+  if (/^\/artdel\s+\d+$/.test(text)) {
+    const num = +text.split(/\s+/)[1];
+    for (const e of ART_EXT) { try { fs.unlinkSync(path.join(ART_DIR, num + e)); } catch (err) {} }
+    scanArt(); return say(`🗑️ #${num} removed (${doneCount()}/${total}).`);
+  }
+  if (text === '/artlist') {
+    const missing = E.FUSIONS.filter(f => !artIndex[f.num]).map(f => f.num);
+    const ranges = []; for (const x of missing) { const last = ranges[ranges.length - 1]; if (last && last[1] === x - 1) last[1] = x; else ranges.push([x, x]); }
+    return say(`🎨 ${doneCount()}/${total} uploaded.\nMissing: ${ranges.map(([a, b]) => (a === b ? a : `${a}-${b}`)).join(', ').slice(0, 3500) || 'none'}`);
+  }
+  // A picture: photo (largest size) or an image file.
+  let fileId = null, ext = '.jpg', name = '';
+  if (m.photo && m.photo.length) fileId = m.photo[m.photo.length - 1].file_id;
+  else if (m.document && /^image\//.test(m.document.mime_type || '')) {
+    fileId = m.document.file_id; name = m.document.file_name || '';
+    const e = path.extname(name).toLowerCase(); ext = ART_EXT.includes(e) ? (e === '.jpeg' ? '.jpg' : e) : '.jpg';
+  }
+  if (!fileId) return false;
+  // Which card? caption number → file name number → the card the bot asked for.
+  const num = +(/^\s*#?(\d+)/.exec(m.caption || '') || /^(\d+)/.exec(name) || [])[1] || u.artNext || nextMissingArt(0);
+  const f = fusionByNum(num);
+  if (!f) return say(`❌ ${num} is not a fusion number (1–${total}).`);
+  await saveArt(num, fileId, ext);
+  await say(`✅ Saved ${fusionLabel(f)} (${doneCount()}/${total}).`);
+  return promptNext(nextMissingArt(num));
+}
 
 // ---------- Telegram WebApp initData validation ----------
 // https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
@@ -171,6 +251,10 @@ async function handleUpdate(up) {
     const L = tx(m.from.language_code);
     await tg('sendMessage', { chat_id: m.chat.id, text: L.paid(pack.coins),
       reply_markup: { inline_keyboard: [[{ text: L.open, web_app: { url: WEBAPP_URL } }]] } });
+    return;
+  }
+  if ((typeof m.text === 'string' && /^\/art/.test(m.text)) || ((m.photo || m.document) && ADMIN_IDS.has(String(m.from.id)))) {
+    await handleArt(m);
     return;
   }
   if (typeof m.text === 'string' && m.text.startsWith('/start')) {
@@ -264,7 +348,7 @@ const arena = createArena({ db, persist, notify: (uid, end) => {
 } });
 
 const routes = {
-  'GET /api/health': () => ({ ok: true, bot: BOT_USERNAME, packs: PACKS, mint: db.mint || {} }),
+  'GET /api/health': () => ({ ok: true, bot: BOT_USERNAME, packs: PACKS, mint: db.mint || {}, art: artVersions() }),
   'GET /api/status': () => ({ ...diag, bot: BOT_USERNAME, users: Object.keys(db.users).length, node: process.version }),
   'POST /api/hello': (body, u) => { applyReferral(u, body.startParam); return { ok: true }; },
   // The server keeps each Telegram player's coins and heroes. First visit imports the offline save (clamped).
@@ -298,6 +382,13 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') return send(res, 204, {});
   const key = `${req.method} ${url.pathname}`;
   if (key === 'GET /api/pvp/stream') return arena.stream(req, res, url.searchParams.get('ticket'));
+  const artM = req.method === 'GET' && /^\/art\/(\d+)$/.exec(url.pathname);
+  if (artM) {
+    const a = artIndex[artM[1]];
+    if (!a) { res.writeHead(404); return res.end(); }
+    res.writeHead(200, { 'Content-Type': ART_MIME[path.extname(a.file).toLowerCase()], 'Cache-Control': 'public, max-age=604800' });
+    return fs.createReadStream(path.join(ART_DIR, a.file)).pipe(res);
+  }
   const handler = routes[key];
   if (!handler) return url.pathname.startsWith('/api/') ? send(res, 404, { error: 'not found' }) : serveStatic(req, res);
   try {
