@@ -388,3 +388,7 @@ button:disabled { opacity: .45; cursor: default; }
 .hcard, .card, .slot, .fimg { min-width: 0; }
 .b-enemies .hcard { flex: none; }
 .hcard .hc-name, .card .nm { max-width: 100%; }
+.lock-note { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px dashed var(--line); color: var(--muted); font-weight: 700; font-size: 13px; text-align: center; }
+.next-unlock { margin: 10px 0 0; padding: 9px 12px; border-radius: 12px; background: rgba(255,197,49,.08); border: 1px solid rgba(255,197,49,.25); color: var(--gold); font-size: 13px; font-weight: 700; text-align: center; }
+.unlocked { margin: 10px 0 0; padding: 10px; border-radius: 12px; background: rgba(75,227,122,.1); border: 1px solid rgba(75,227,122,.35); color: var(--green); font-weight: 700; }
+.chk.warn { color: #ffb34d; }

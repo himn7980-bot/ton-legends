@@ -184,6 +184,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
   const own = (u, id) => { const t = tickets.get(String(id || '')); if (!t || t.uid !== u.id) fail('no_ticket'); return t; };
   const routes = {
     'POST /api/pvp/find': (body, u) => {
+      if (u.profile && !ECON.unlocked(u.profile, 'pvp')) fail('locked_feature');
       const t = open(u, body.stake, 'queue');
       const q = (queues.get(t.stake) || []).filter(x => x.status === 'waiting' && x.uid !== u.id);
       if (q.length) {
@@ -193,6 +194,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
       return { ticket: t.id, coins: u.profile.coins };
     },
     'POST /api/pvp/room': (body, u) => {
+      if (u.profile && !ECON.unlocked(u.profile, 'pvp')) fail('locked_feature');
       const t = open(u, body.stake, 'room');
       do { t.code = roomCode(); } while (rooms.has(t.code));
       rooms.set(t.code, t);
@@ -226,6 +228,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
       return { ok: true };
     },
     'POST /api/pvp/ai': (body, u) => {
+      if (u.profile && !ECON.unlocked(u.profile, 'ai')) fail('locked_feature');
       const level = ECON.AI_LEVELS[body.level] ? body.level : 'normal';
       const p = u.profile;
       if (!p) fail('no_profile');

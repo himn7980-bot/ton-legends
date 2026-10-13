@@ -2,6 +2,7 @@
 const http = require('http');
 const crypto = require('crypto');
 const assert = require('assert');
+const E = require('../src/engine.js');
 const os = require('os'), path = require('path'), fs = require('fs');
 
 const TOKEN = '123456:TEST_TOKEN';
@@ -119,14 +120,35 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert.equal(r.body.result.first, false); assert.ok(r.body.result.coins < 100, 'replay pays half');
 
   // fusion: limited, numbered editions
-  srv.db.users['111'].profile.owned.notcoin = 8; srv.db.users['111'].profile.owned.pinkbull = 8; srv.db.users['111'].profile.coins += 10000;
+  srv.db.users['111'].profile.owned.notcoin = 12; srv.db.users['111'].profile.owned.pinkbull = 12; srv.db.users['111'].profile.coins += 10000;
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'fuse', id: 'f1' } }); assert.equal(r.body.error, 'locked_feature', 'duo fusions open in world 4');
+  const aliceCleared = srv.db.users['111'].profile.cleared; srv.db.users['111'].profile.cleared = 30;
   r = await post('/api/act', { initData: initData(alice), action: { type: 'fuse', id: 'f1' } });
   assert.equal(r.body.result.serial, 1); assert.equal(r.body.profile.owned.f1, 1); assert.equal(r.body.profile.serials.f1, 1);
+  assert.equal(r.body.profile.owned.notcoin, 3, 'parts pay 9 levels'); assert.equal(r.body.profile.owned.pinkbull, 3);
+  // team rule: at most 2 fusion cards, only one trio
+  Object.assign(srv.db.users['111'].profile.owned, { f2: 1, f3: 1 });
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'team', team: ['f1', 'f2', 'f3'] } }); assert.equal(r.body.error, 'fusion_limit');
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'team', team: ['f1', 'f2', 'pinkbull'] } }); assert.equal(r.status, 200);
+  delete srv.db.users['111'].profile.owned.f2; delete srv.db.users['111'].profile.owned.f3;
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'team', team: ['f1', 'pinkbull'] } }); assert.equal(r.status, 200);
+  // a trio needs world 8 and a duo made from two of its heroes
+  const trio = E.FUSIONS.find(f => f.parts.length === 3 && ['pinkbull', 'notcoin', 'teddy'].every(p => f.parts.includes(p)));
+  Object.assign(srv.db.users['111'].profile.owned, { pinkbull: 20, notcoin: 20, teddy: 20 }); srv.db.users['111'].profile.coins += 30000;
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'fuse', id: trio.id } }); assert.equal(r.body.error, 'locked_feature');
+  srv.db.users['111'].profile.cleared = 70;
+  const noDuo = E.FUSIONS.find(f => f.parts.length === 3 && ['egor', 'gramcat', 'teddy'].every(p => f.parts.includes(p)));
+  Object.assign(srv.db.users['111'].profile.owned, { egor: 20, gramcat: 20 });
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'fuse', id: noDuo.id } }); assert.equal(r.body.error, 'need_duo');
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'fuse', id: trio.id } }); assert.equal(r.body.result.serial, 1, JSON.stringify(r.body));
+  assert.equal(r.body.profile.owned.teddy, 1, 'trio parts pay 19 levels');
+  srv.db.users['111'].profile.cleared = aliceCleared;
   r = await post('/api/act', { initData: initData(alice), action: { type: 'fuse', id: 'f1' } }); assert.equal(r.status, 400, 'one copy per player');
   r = await post('/api/act', { initData: initData(bob), action: { type: 'fuse', id: 'f466' } }); assert.equal(r.status, 400, 'parts required');
-  srv.db.mint.f106 = 300; Object.assign(srv.db.users['222'].profile.owned, { virus: 9, yoda: 9 }); srv.db.users['222'].profile.coins += 5000;
+  srv.db.users['222'].profile.cleared = Math.max(30, srv.db.users['222'].profile.cleared);
+  srv.db.mint.f106 = 300; Object.assign(srv.db.users['222'].profile.owned, { virus: 12, yoda: 12 }); srv.db.users['222'].profile.coins += 7000;
   r = await post('/api/act', { initData: initData(bob), action: { type: 'fuse', id: 'f106' } }); assert.equal(r.body.error, 'sold_out');
-  srv.db.users['222'].profile.coins -= 5000;
+  srv.db.users['222'].profile.coins -= 7000;
   r = await fetch(base + '/api/health').then(x => x.json()); assert.equal(r.mint.f1, 1);
   console.log('   fusion: serial #1 minted, sold-out edition refused');
 
@@ -175,6 +197,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     })();
     return { events, close: () => ctl.abort(), done, wait: async type => { for (let k = 0; k < 400; k++) { const e = events.find(x => x.type === type); if (e) return e; await sleep(100); } throw new Error('timeout waiting for ' + type + ' got ' + JSON.stringify(events.map(x => x.type))); } };
   }
+  r = await post('/api/pvp/room', { initData: initData(alice), stake: 100 }); assert.equal(r.body.error, 'locked_feature', 'PvP opens in world 3');
+  srv.db.users['111'].profile.cleared = 20; srv.db.users['222'].profile.cleared = Math.max(20, srv.db.users['222'].profile.cleared);
   r = await post('/api/pvp/find', { initData: initData(alice), stake: 777 }); assert.equal(r.status, 400, 'only fixed stakes');
   r = await post('/api/pvp/find', { initData: initData(bob), stake: 10000 }); assert.equal(r.status, 400, 'cannot stake more than you have');
 
@@ -206,6 +230,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const carol = { id: 555, first_name: 'Carol' }, dan = { id: 666, first_name: 'Dan' };
   await post('/api/profile', { initData: initData(carol), local: { coins: 300 } });
   await post('/api/profile', { initData: initData(dan), local: { coins: 300 } });
+  srv.db.users['555'].profile.cleared = 20; srv.db.users['666'].profile.cleared = 20;
   r = await post('/api/pvp/find', { initData: initData(carol), stake: 100 }); const cT = r.body.ticket; assert.equal(r.body.coins, 200);
   r = await post('/api/pvp/cancel', { initData: initData(carol), ticket: cT }); assert.equal(r.body.coins, 300, 'cancel refunds');
   r = await post('/api/pvp/find', { initData: initData(carol), stake: 100 }); const cT2 = r.body.ticket;
@@ -247,6 +272,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ---------- clans ----------
   srv.db.users['555'].profile.coins = 2500;
+  r = await post('/api/clan/create', { initData: initData(carol), name: 'Dragons', emblem: '🐉' }); assert.equal(r.body.error, 'locked_feature', 'creating a clan opens in world 5');
+  srv.db.users['555'].profile.cleared = 40; srv.db.users['666'].profile.cleared = 40;
   r = await post('/api/clan/create', { initData: initData(carol), name: 'x', emblem: '🐉' }); assert.equal(r.body.error, 'bad_name');
   r = await post('/api/clan/create', { initData: initData(carol), name: 'Dragons', emblem: '🐉' });
   assert.equal(r.status, 200, JSON.stringify(r.body)); assert.equal(r.body.profile.coins, 500); const clanId = r.body.clan.id;

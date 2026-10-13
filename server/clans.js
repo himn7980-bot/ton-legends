@@ -1,6 +1,7 @@
 // TON Legends — clans: create/join/leave, weekly shared points, weekly clan chest, top clans.
 // Points: new stage +2, AI win +1, arena win +5 (added via addPoints from the game server).
 const crypto = require('crypto');
+const ECON = require('../src/economy.js');
 
 const MAX_MEMBERS = 30;
 const CREATE_COST = 2000;
@@ -76,6 +77,7 @@ module.exports = function createClans({ db, persist, profileOut = () => null }) 
     'POST /api/clan/create': (body, u) => {
       if (!u.profile) fail('no_profile');
       if (clanOf(u)) fail('in_clan');
+      if (!ECON.unlocked(u.profile, 'clan')) fail('locked_feature');
       const name = cleanName(body.name);
       if (name.length < 3) fail('bad_name');
       if (Object.values(db.clans).some(c => c.name.toLowerCase() === name.toLowerCase())) fail('name_taken');

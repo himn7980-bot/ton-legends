@@ -5,8 +5,9 @@ const fz = (...p) => E.FUSIONS.find(f => f.parts.length === p.length && p.every(
 const teams = {
   starters: E.STARTERS,
   legends: ['notcoin', 'volya', 'noctis', 'babyshark', 'yaya'],
-  fusions: [fz('pinkbull', 'notcoin', 'teddy'), fz('noctis', 'paws', 'virus'), fz('egor', 'memegram', 'yoda'), fz('babyshark', 'yaya', 'teddy'), fz('pinkbull', 'notcoin')],
+  mixed: ['volya', 'babyshark', 'yaya', fz('noctis', 'paws'), fz('pinkbull', 'notcoin', 'teddy')], // the most a team may hold: 1 duo + 1 trio
 };
+const only = process.argv[3]; if (only) for (const k of Object.keys(teams)) if (k !== only) delete teams[k];
 const step = +process.argv[2] || 5;
 function winRate(team, lv, idx, n = 12) {
   const levels = Object.fromEntries(team.map(id => [id, lv]));

@@ -23,8 +23,8 @@ function renderArena() {
     </div>
     <div class="panel"><div class="row"><div class="t">${t.aiTitle}</div><span class="tag ${aiLeft ? 'gold' : ''}">${t.aiLeft(n(aiLeft), n(ECON.AI_DAILY))}</span></div>
       <p class="muted" style="margin:6px 0 0">${t.aiNote}</p>
-      <div class="ai-levels">${Object.keys(ECON.AI_LEVELS).map(lv => { const r = ECON.aiReward(S, lv);
-        return `<button class="btn ${lv === 'hard' ? 'gem' : lv === 'normal' ? 'gold' : ''}" data-ai="${lv}" ${S.team.length ? '' : 'disabled'}>${t.aiLv[lv]}<small>🪙 ${n(r.coins)}${r.gems ? ` +💎${n(r.gems)}` : ''}</small></button>`; }).join('')}</div></div>
+      ${!isOpen('ai') ? lockNote('ai') : `<div class="ai-levels">${Object.keys(ECON.AI_LEVELS).map(lv => { const r = ECON.aiReward(S, lv);
+        return `<button class="btn ${lv === 'hard' ? 'gem' : lv === 'normal' ? 'gold' : ''}" data-ai="${lv}" ${S.team.length ? '' : 'disabled'}>${t.aiLv[lv]}<small>🪙 ${n(r.coins)}${r.gems ? ` +💎${n(r.gems)}` : ''}</small></button>`; }).join('')}</div>`}</div>
     <div class="h2">${t.arenaTitle}</div>
     <p class="muted">${t.arenaNote} <b style="color:var(--gem)">+💎 ${n(2)}</b></p>
     <div class="panel">
@@ -32,8 +32,8 @@ function renderArena() {
       <div class="stakes">${STAKES.map(v => `<button class="chip ${v === S.stake ? 'on' : ''}" data-stake="${v}" ${S.coins < v ? 'disabled' : ''}>🪙 ${n(v)}</button>`).join('')}</div>
       <div class="row"><span class="muted">${t.yourTeam(n(teamPower(S.team)))}</span><button class="tag" id="pv-team">${t.editTeam}</button></div>
       <div class="mini-team">${[0, 1, 2, 3, 4].map(i => S.team[i] ? `<img src="${img(S.team[i])}" alt="">` : '<div class="empty"></div>').join('')}</div>
-      <button class="btn wide gold" id="pv-find" ${S.coins < S.stake || !S.team.length ? 'disabled' : ''}>${t.findOpp}</button>
-      <button class="btn wide" id="pv-room" style="margin-top:12px" ${S.coins < S.stake || !S.team.length ? 'disabled' : ''}>${t.challenge}</button>
+      ${!isOpen('pvp') ? lockNote('pvp') : `<button class="btn wide gold" id="pv-find" ${S.coins < S.stake || !S.team.length ? 'disabled' : ''}>${t.findOpp}</button>
+      <button class="btn wide" id="pv-room" style="margin-top:12px" ${S.coins < S.stake || !S.team.length ? 'disabled' : ''}>${t.challenge}</button>`}
     </div>
     <div class="panel"><div class="t">${t.haveCode}</div>
       <div class="code-row"><input id="pv-code" maxlength="6" placeholder="${t.codePh}" autocomplete="off" autocapitalize="characters"><button class="btn" id="pv-join">${t.join}</button></div></div>
@@ -42,8 +42,7 @@ function renderArena() {
   document.querySelectorAll('[data-stake]').forEach(b => b.onclick = () => { S.stake = +b.dataset.stake; save(); renderArena(); });
   $('#pv-team').onclick = () => show('heroes');
   document.querySelectorAll('[data-ai]').forEach(b => b.onclick = () => startAi(b.dataset.ai));
-  $('#pv-find').onclick = () => arenaOpen('find');
-  $('#pv-room').onclick = () => arenaOpen('room');
+  if ($('#pv-find')) { $('#pv-find').onclick = () => arenaOpen('find'); $('#pv-room').onclick = () => arenaOpen('room'); }
   $('#pv-join').onclick = () => { const c = $('#pv-code').value.trim().toUpperCase(); if (c) arenaJoinPrompt(c); };
 }
 
@@ -102,7 +101,7 @@ function showWaiting() {
     <div class="spinner"></div>
     <div class="big" style="font-size:22px">${PV.code ? t.waitingFriend : t.searching}</div>
     <p><span class="tag gold">${t.stake}: 🪙 ${n(PV.stake)}</span> <span class="tag gold">${t.pot(n(PV.stake * 2))}</span></p>
-    ${PV.code ? '' : `<button class="btn wide gem" id="pv-ai" style="margin:8px 0" hidden>${t.aiInstead}</button>`}
+    ${PV.code || !isOpen('ai') ? '' : `<button class="btn wide gem" id="pv-ai" style="margin:8px 0" hidden>${t.aiInstead}</button>`}
     ${PV.code ? `<div class="muted">${t.inviteCode}</div><div class="duel-code">${PV.code}</div>
       <button class="btn wide gold" id="pv-share">${t.sendDuel}</button>` : ''}
     <button class="btn wide ghost" id="pv-cancel" style="margin-top:10px">${t.cancel}</button></div>`, box => {

@@ -49,7 +49,17 @@ const FUSIONS = FD.FUSION_DATA.map(([num, parts, name, role]) => ({
 }));
 const LEGACY_FUSION_IDS = FD.LEGACY_FUSION_IDS;
 const FUSION_K = { duo: [1.2, 1.05, 0.6], trio: [1.3, 1.1, 0.45] };
-const FUSION_RULES = { 2: { minLevel: 8, cost: 4000, supply: 300 }, 3: { minLevel: 12, cost: 15000, supply: 30 } };
+// Fusing uses up `burn` levels of every part (they stay in your collection), and a trio also needs a duo of two of its parts.
+const FUSION_RULES = { 2: { minLevel: 10, cost: 6000, supply: 300, burn: 9 }, 3: { minLevel: 20, cost: 25000, supply: 30, burn: 19, needDuo: true } };
+// A battle team holds at most 2 fusion cards, and only one of them may be a trio.
+const TEAM_MAX_FUSIONS = 2, TEAM_MAX_TRIOS = 1;
+function teamError(team) {
+  const fs = team.map(id => HERO_BY_ID[id]).filter(h => h && h.fusion);
+  if (fs.length > TEAM_MAX_FUSIONS || fs.filter(h => h.parts.length === 3).length > TEAM_MAX_TRIOS) return 'fusion_limit';
+  return null;
+}
+// Duos you own whose parts are all inside `parts` (a trio needs at least one).
+const duosWithin = (owned, parts) => FUSIONS.filter(f => f.parts.length === 2 && owned[f.id] && f.parts.every(p => parts.includes(p)));
 const BASE_HEROES = HEROES.slice();
 HEROES.push(...FUSIONS);
 const HERO_BY_ID = Object.fromEntries(HEROES.map(h => [h.id, h]));
@@ -94,7 +104,7 @@ function heroStats(id, level) {
   const h = HERO_BY_ID[id], r = ROLES[h.role];
   if (h.fusion) {
     // Fusion level 1 = its parts at the level required to fuse them, then boosted (FUSION_K: [HP, ATK, skill power]).
-    const offset = (h.parts.length === 3 ? 12 : 8) - 1;
+    const offset = FUSION_RULES[h.parts.length].minLevel - 1;
     const ps = h.parts.map(p => heroStats(p, level + offset)), k = ps.length === 3 ? [FUSION_K.trio[0], FUSION_K.trio[1]] : [FUSION_K.duo[0], FUSION_K.duo[1]];
     const avg = key => ps.reduce((a, s) => a + s[key], 0) / ps.length;
     return { hp: Math.round(avg('hp') * k[0]), atk: Math.round(avg('atk') * k[1]), spd: r.spd };
@@ -103,9 +113,10 @@ function heroStats(id, level) {
   return { hp: Math.round(r.hp * m), atk: Math.round(r.atk * m), spd: r.spd };
 }
 
+// Linear per level, so the total cost of a level grows like the coins the stages pay (both ~ stage²).
 function upgradeCost(id, level) {
   const f = { C: 1, R: 1.3, E: 1.7, L: 2.2, M: 3, X: 4 }[HERO_BY_ID[id].rarity];
-  return Math.round((40 * level + 8 * level * level) * f);
+  return Math.round((60 + 90 * level) * f);
 }
 
 function stageReward(idx) {
@@ -114,12 +125,19 @@ function stageReward(idx) {
 }
 
 const ENEMY_HP = 0.56, ENEMY_ATK = 0.23, SC2 = 0.13;
+// Worlds 1–4 keep their original hand-tuned curve (made for the starter cards); calibration starts at world 5.
+const CALIBRATED_FROM = 40;
+const WORLD_K = [1.907, 1.371, 1.198, 1.137, 0.887, 1.117, 1.383, 1.18, 1.631, 1.322, 1.452, 1.587, 1.374, 2.074, 1.545, 1.704, 1.795, 1.714, 2.517, 1.626];
+const LOCAL_K = [1.596, 1.572, 1.532, 1.195, 1.246, 0.956, 0.958, 1.019, 0.848, 1.025]; // per stage inside a world (more enemy cards later in a world); see tools/calibrate.js
 function stageEnemies(idx) {
   const w = WORLDS[Math.floor(idx / STAGES_PER_WORLD)], local = idx % STAGES_PER_WORLD;
-  // Difficulty: steep through the first 50 stages (unchanged), then a gentler slope matched to levels up to 100.
-  const sc = idx < 50 ? 2.4 + 0.32 * idx : 18.08 + SC2 * (idx - 50);
+  // Difficulty follows the level a team of five non-fusion cards needs: ~5 at stage 20, ~45 at stage 100, ~95 at stage 200.
+  // The per-world factor (tools/calibrate.js) evens out how strong each world's line-up is.
+  const sc = (idx < 50 ? 2.4 + 0.32 * idx : 18.08 + SC2 * (idx - 50)) * (idx < CALIBRATED_FROM ? 1 : WORLD_K[Math.floor(idx / STAGES_PER_WORLD)] * LOCAL_K[idx % STAGES_PER_WORLD]);
   const card = (id, boss) => {
-    const b = heroStats(id, 1), r = ROLES[HERO_BY_ID[id].role];
+    const h = HERO_BY_ID[id], r = ROLES[h.role];
+    // Enemy fusion cards bring their combined skills, not the fusion level bonus (that would make chapters III–IV a wall).
+    const b = h.fusion ? h.parts.map(p => heroStats(p, 1)).reduce((a, x) => ({ hp: a.hp + x.hp / h.parts.length, atk: a.atk + x.atk / h.parts.length }), { hp: 0, atk: 0 }) : heroStats(id, 1);
     const hpM = boss ? 3.2 : 1, atkM = boss ? 1.35 : 1;
     return { id, role: HERO_BY_ID[id].role, name: HERO_BY_ID[id].name, boss: !!boss,
       hp: b.hp * ENEMY_HP * sc * hpM, atk: b.atk * ENEMY_ATK * sc * atkM * (r.spd / 1.3), spd: r.spd };
@@ -146,7 +164,7 @@ function makeUnit(B, side, o) {
     uid: B.nextUid++, side, id: o.id, name: o.name, role: o.role, boss: !!o.boss,
     maxHp: Math.round(o.hp), hp: Math.round(o.hp), atk: o.atk, spd: o.spd,
     timer: B.rng() * o.spd * 0.6, energy: side === 'hero' || B.pvp ? 20 : 0, shield: 0, fx: {}, alive: true,
-    bossCd: 7, poisonNext: 0,
+    bossCd: 7, poisonNext: 0, shieldUntil: 0, skillK: 1,
   };
 }
 function newBattle(seed, pvp) {
@@ -180,10 +198,22 @@ function foesOf(B, u) { return alive(u.side === 'hero' ? B.enemies : B.heroes); 
 function friendsOf(B, u) { return alive(u.side === 'hero' ? B.heroes : B.enemies); }
 function lowest(arr) { return arr.reduce((a, b) => (b.hp / b.maxHp < a.hp / a.maxHp ? b : a), arr[0]); }
 
+// Shields are sized from the protected card's own max HP, never stack above half of it and fade after 6 s,
+// so two shield teams can't lock a fight forever.
+const SHIELD_CAP = 0.5, SHIELD_TIME = 6;
+function addShield(B, f, amount) {
+  f.shield = Math.round(Math.min(f.maxHp * SHIELD_CAP, f.shield + amount / rage(B)));
+  f.shieldUntil = B.t + SHIELD_TIME;
+  B.events.push({ type: 'shield', uid: f.uid });
+}
+// Sudden death: after 60 s every hit grows stronger (+6% per second) and healing/shields weaker, so every fight ends.
+const ENRAGE_AT = 60;
+const rage = B => (B.t > ENRAGE_AT ? 1 + 0.06 * (B.t - ENRAGE_AT) : 1);
+
 function damage(B, src, tgt, amount, opts = {}) {
   if (!tgt || !tgt.alive) return 0;
   if (!opts.pure && on(B, tgt, 'dodge')) { B.events.push({ type: 'miss', uid: tgt.uid }); return 0; }
-  let dmg = amount;
+  let dmg = amount * rage(B);
   if (on(B, tgt, 'vuln')) dmg *= 1.3;
   let crit = false;
   if (src && heroRules(B, src) && !opts.pure && B.rng() < 0.12) { dmg *= 1.6; crit = true; }
@@ -198,7 +228,7 @@ function damage(B, src, tgt, amount, opts = {}) {
 
 function heal(B, tgt, amount) {
   if (!tgt || !tgt.alive) return;
-  const v = Math.round(Math.min(tgt.maxHp - tgt.hp, amount));
+  const v = Math.round(Math.min(tgt.maxHp - tgt.hp, amount / rage(B)));
   tgt.hp += v;
   if (v > 0) B.events.push({ type: 'heal', uid: tgt.uid, amount: v });
 }
@@ -232,7 +262,7 @@ function basicAttack(B, u) {
 
 const SKILLS = {
   pinkbull(B, u) { for (const e of foesOf(B, u)) { damage(B, u, e, atkOf(B, u) * 1.5); e.fx.stun = B.t + 1.5; } },
-  notcoin(B, u) { for (const f of friendsOf(B, u)) { f.shield += u.maxHp * 0.25; B.events.push({ type: 'shield', uid: f.uid }); } },
+  notcoin(B, u) { for (const f of friendsOf(B, u)) addShield(B, f, f.maxHp * 0.25 * (u.skillK || 1)); },
   volya(B, u) { const fs = foesOf(B, u); const t = fs.reduce((a, b) => (b.hp > a.hp ? b : a), fs[0]); damage(B, u, t, atkOf(B, u) * 4.5); },
   egor(B, u) { const t = foesOf(B, u)[0]; damage(B, u, t, atkOf(B, u) * 2.5); if (t) t.fx.vuln = B.t + 5; },
   paws(B, u) { for (let i = 0; i < 3; i++) damage(B, u, foesOf(B, u)[0], atkOf(B, u) * 1.4); },
@@ -246,12 +276,13 @@ const SKILLS = {
   babyshark(B, u) { for (const f of friendsOf(B, u)) heal(B, f, atkOf(B, u) * 2.5); },
   yaya(B, u) { for (const f of friendsOf(B, u)) { f.fx.buff = B.t + 6; heal(B, f, atkOf(B, u) * 0.8); } },
   dog(B, u) { for (const f of friendsOf(B, u)) if (f !== u) f.energy = Math.min(100, f.energy + 50); },
-  teddy(B, u) { const t = lowest(friendsOf(B, u)); heal(B, t, atkOf(B, u) * 3.5); t.shield += atkOf(B, u) * 2; B.events.push({ type: 'shield', uid: t.uid }); },
+  teddy(B, u) { const t = lowest(friendsOf(B, u)); heal(B, t, atkOf(B, u) * 3.5); addShield(B, t, t.maxHp * 0.3 * (u.skillK || 1)); },
 };
 // A fusion fires every part's skill, each at reduced power (otherwise 3 skills per cast would dwarf everything).
 for (const f of FUSIONS) SKILLS[f.id] = (B, u) => {
-  const atk = u.atk; u.atk *= f.parts.length === 3 ? FUSION_K.trio[2] : FUSION_K.duo[2];
-  try { for (const p of f.parts) if (foesOf(B, u).length) SKILLS[p](B, u); } finally { u.atk = atk; }
+  const atk = u.atk, k = f.parts.length === 3 ? FUSION_K.trio[2] : FUSION_K.duo[2];
+  u.atk *= k; u.skillK = k;
+  try { for (const p of f.parts) if (foesOf(B, u).length) SKILLS[p](B, u); } finally { u.atk = atk; u.skillK = 1; }
 };
 
 function castSkill(B, u) {
@@ -282,8 +313,10 @@ function step(B) {
   B.tick++;
   B.t = B.tick * TICK;
   const dt = TICK;
+  if (!B.enraged && B.t >= ENRAGE_AT) { B.enraged = true; B.events.push({ type: 'enrage' }); }
   for (const u of [...B.heroes, ...B.enemies]) {
     if (!u.alive) continue;
+    if (u.shield > 0 && B.t >= u.shieldUntil) u.shield = 0;
     if (on(B, u, 'poison') && B.t >= u.poisonNext) { u.poisonNext += 1; damage(B, null, u, u.poisonDps, { pure: true, poison: true }); if (!u.alive) continue; }
     if (on(B, u, 'stun')) continue;
     u.timer += dt * (on(B, u, 'slow') ? 0.55 : 1);
@@ -299,7 +332,13 @@ function step(B) {
     if (u.energy >= 100 && B.autoBy[u.side]) castSkill(B, u);
   }
   checkEnd(B);
-  if (B.tick >= MAX_TICKS && !B.over) B.over = B.pvp ? 'draw' : 'lose';
+  // Time's up: the side with more HP left (as a share of its total) wins.
+  if (B.tick >= MAX_TICKS && !B.over) {
+    const share = arr => arr.reduce((a, u) => a + u.hp, 0) / arr.reduce((a, u) => a + u.maxHp, 0);
+    const h = share(B.heroes), e = share(B.enemies);
+    B.timeout = true;
+    B.over = h > e ? 'win' : h < e || !B.pvp ? 'lose' : 'draw';
+  }
 }
 
 // Server-side verification of a stage battle: replay it from its seed and the player's inputs.
@@ -318,6 +357,6 @@ function replayStage(team, levels, idx, seed, inputs) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { RARITY, ROLES, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, LEGACY_FUSION_IDS, HERO_BY_ID, STARTERS, WORLDS, TOTAL_STAGES, STAGES_PER_WORLD, MAX_LEVEL, COIN_BONUS, TICK,
-    heroStats, upgradeCost, stageReward, stageEnemies, createBattle, createPvpBattle, step, castSkill, applyInput, replayStage };
+  module.exports = { RARITY, ROLES, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, TEAM_MAX_FUSIONS, TEAM_MAX_TRIOS, teamError, duosWithin, ENRAGE_AT, LEGACY_FUSION_IDS, HERO_BY_ID, STARTERS, WORLDS, TOTAL_STAGES, STAGES_PER_WORLD, MAX_LEVEL, COIN_BONUS, TICK,
+    WORLD_K, LOCAL_K, heroStats, upgradeCost, stageReward, stageEnemies, createBattle, createPvpBattle, step, castSkill, applyInput, replayStage };
 }

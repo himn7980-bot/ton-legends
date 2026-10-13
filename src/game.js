@@ -46,6 +46,11 @@ const pct = x => LANG === 'fa' ? `${n(x)}٪` : `${n(x)}%`;
 const $ = s => document.querySelector(s);
 const stageLabel = idx => `${n(Math.floor(idx / STAGES_PER_WORLD) + 1)}-${n(idx % STAGES_PER_WORLD + 1)}`;
 const isBossStage = idx => idx % STAGES_PER_WORLD === STAGES_PER_WORLD - 1;
+// Feature unlocks (rules in economy.js): which world opens a feature, and a "🔒 Opens in world N" note.
+const isOpen = k => ECON.unlocked(S, k);
+const unlockWorld = k => ECON.UNLOCKS[k] / STAGES_PER_WORLD + 1;
+const lockNote = k => `<div class="lock-note">🔒 ${T().lockedUntil(T().feat[k], n(unlockWorld(k)))}</div>`;
+const nextUnlock = () => Object.keys(ECON.UNLOCKS).filter(k => !isOpen(k)).sort((a, b) => ECON.UNLOCKS[a] - ECON.UNLOCKS[b])[0];
 
 // ---------- state ----------
 const SAVE_KEY = 'tonlegends_v1';
@@ -181,6 +186,7 @@ function renderMap() {
       </div>
       <div class="stages">${nodes}</div>
     </div>
+    ${nextUnlock() ? `<div class="next-unlock">🔓 ${t.nextUnlock(t.feat[nextUnlock()], n(unlockWorld(nextUnlock())))}</div>` : ''}
     <div class="panel">
       <div class="row"><div class="h2" style="margin:0">${t.stage(stageLabel(S.sel))} ${isBossStage(S.sel) ? '· ' + t.boss : ''}</div>
         <span class="tag gold">🪙 ${n(reward)}${first ? t.firstX2 : ` · 🔁 ${pct(factor * 100)}`}</span></div>
@@ -206,11 +212,12 @@ function renderHeroes() {
   $('#screen').innerHTML = `
     <div class="h2">${t.battleTeam} <span class="muted">(${n(S.team.length)}/${n(5)} · ${t.power} ${n(teamPower(S.team))})</span></div>
     <div class="team-slots">${[0, 1, 2, 3, 4].map(i => `<button class="slot" data-id="${S.team[i] || ''}">${S.team[i] ? `<img src="${img(S.team[i])}" alt="">` : '+'}</button>`).join('')}</div>
-    <button class="btn wide lab-btn" id="to-lab">${t.openLab}</button>
+    ${isOpen('duo') ? `<button class="btn wide lab-btn" id="to-lab">${t.openLab}</button>` : `<button class="btn wide ghost" disabled>${t.openLab} · 🔒 ${t.worldN(n(unlockWorld('duo')))}</button>`}
+    <p class="muted small center" style="margin:6px 0 0">${t.teamRule}</p>
     <div class="h2">${t.collection} <span class="muted">(${n(owned)}/${n(BASE_HEROES.length)}) · ${t.holoCount(n(holos), n(BASE_HEROES.length))}</span></div>
     <div class="grid">${order.map(cardHtml).join('')}</div>`;
   document.querySelectorAll('.card, .slot').forEach(c => c.onclick = () => c.dataset.id && heroModal(c.dataset.id));
-  $('#to-lab').onclick = () => show('lab');
+  if ($('#to-lab')) $('#to-lab').onclick = () => show('lab');
 }
 function cardHtml(h) {
   const t = T(), lv = S.owned[h.id], rc = RARITY[h.rarity].color;
@@ -258,6 +265,7 @@ const CHESTS = [
   { key: 'royal', ico: '👑', c: '#ffc531', ...ECON.CHESTS.royal },
   { key: 'gem', ico: '💎', c: '#c77dff', ...ECON.CHESTS.gem },
 ];
+const chestLock = c => ({ royal: 'royal', gem: 'gemChest' })[c.key];
 const chestCan = c => (c.currency === 'gems' ? S.gems || 0 : S.coins) >= c.cost;
 const chestBtn = (c, again) => c.currency === 'gems' ? T()[again ? 'againGems' : 'openGems'](n(c.cost)) : T()[again ? 'again' : 'open'](n(c.cost));
 const chestName = c => T()[c.key + 'Chest'];
@@ -268,12 +276,12 @@ function renderChest() {
     ${CHESTS.map(c => `<div class="panel chest" style="--c:${c.c}"><div class="ico">${c.ico}</div><div style="flex:1">
       <div class="t">${chestName(c)}</div>
       <div class="rates">${Object.entries(c.rates).filter(([, v]) => v).map(([r, v]) => `<span style="color:${RARITY[r].color}">${L().rarity[r]} ${pct(v)}</span>`).join('')}</div>
-      <button class="btn ${c.key === 'royal' ? 'gold' : c.key === 'gem' ? 'gem' : ''} wide" data-k="${c.key}" ${chestCan(c) ? '' : 'disabled'}>${chestBtn(c)}</button>
+      ${chestLock(c) && !isOpen(chestLock(c)) ? lockNote(chestLock(c)) : `<button class="btn ${c.key === 'royal' ? 'gold' : c.key === 'gem' ? 'gem' : ''} wide" data-k="${c.key}" ${chestCan(c) ? '' : 'disabled'}>${chestBtn(c)}</button>`}
     </div></div>`).join('')}
-    <div class="panel"><div class="t">${t.exTitle}</div><p class="muted">${t.exNote(n(rate))}</p>
+    ${!isOpen('exchange') ? `<div class="panel"><div class="t">${t.exTitle} · ${t.warpTitle}</div>${lockNote('exchange')}</div>` : `<div class="panel"><div class="t">${t.exTitle}</div><p class="muted">${t.exNote(n(rate))}</p>
       <div class="stakes exch">${[10, 50, 200].map(g => `<button class="chip" data-ex="${g}" ${(S.gems || 0) < g ? 'disabled' : ''}>💎 ${n(g)} → 🪙 ${n(g * rate)}</button>`).join('')}</div>
       <div class="t" style="margin-top:12px">${t.warpTitle}</div><p class="muted">${t.warpNote(n(ECON.WARP_HOURS), n(warp))}</p>
-      <button class="btn wide gem" id="warp" ${(S.gems || 0) < ECON.WARP_COST ? 'disabled' : ''}>${t.warpBtn(n(ECON.WARP_COST))}</button></div>
+      <button class="btn wide gem" id="warp" ${(S.gems || 0) < ECON.WARP_COST ? 'disabled' : ''}>${t.warpBtn(n(ECON.WARP_COST))}</button></div>`}
     ${Online.state.server && Online.state.packs.length ? `<div class="h2">${t.shop}</div>
       <p class="muted">${t.shopNote}</p>
       <div class="shop">${Online.state.packs.map(p => `<button class="pack" data-pack="${esc(p.id)}"><div class="pi">${p.gems >= 500 ? '💎💎💎' : p.gems >= 150 ? '💎💎' : '💎'}</div>
@@ -296,7 +304,7 @@ function renderChest() {
     const r = await tryAct({ type: 'exchange', gems: +b.dataset.ex });
     if (r) { Sound.play('coin'); giftModal('💱', t.exchanged, r.coins); } else renderChest();
   });
-  $('#warp').onclick = async () => {
+  if ($('#warp')) $('#warp').onclick = async () => {
     $('#warp').disabled = true;
     const r = await tryAct({ type: 'warp' });
     if (r) { Sound.play('coin'); giftModal('⏩', t.warpTitle, r.coins); } else renderChest();
@@ -352,7 +360,8 @@ function renderLab() {
   if (f) {
     const owned = !!S.owned[f.id], left = rule.supply - (mint[f.id] || 0), soldOut = online && left <= 0;
     const lvOk = f.parts.every(p => (S.owned[p] || 0) >= rule.minLevel), coinOk = S.coins >= rule.cost;
-    const can = !owned && !soldOut && lvOk && coinOk;
+    const kind = f.parts.length === 3 ? 'trio' : 'duo', open = isOpen(kind), duoOk = !rule.needDuo || ECON_DUOS(f.parts).length > 0;
+    const can = open && !owned && !soldOut && lvOk && coinOk && duoOk;
     const chk = (ok, text) => `<div class="chk ${ok ? 'ok' : 'no'}">${ok ? '✓' : '✗'} ${text}</div>`;
     result = `<div class="fresult" style="--rc:${RARITY[f.rarity].color}">
       <button class="fr-img" data-hero="${f.id}"><img src="${img(f.id)}" alt=""><span class="fnum">#${f.num}</span></button>
@@ -360,10 +369,13 @@ function renderLab() {
         <div class="tag" style="color:${RARITY[f.rarity].color}">${L().rarity[f.rarity]}</div>
         <div class="fname latin">${f.name}</div>
         <div class="muted small">${heroText(f.id).skill}</div>
+        ${open ? '' : chk(false, t.lockedUntil(t.feat[kind], n(unlockWorld(kind))))}
         ${chk(lvOk, t.chkLevel(n(rule.minLevel)))}
+        ${rule.needDuo ? chk(duoOk, t.chkDuo) : ''}
         ${chk(coinOk, t.chkCoins(n(rule.cost)))}
         ${online ? chk(!soldOut, soldOut ? t.soldOut : t.left(n(left), n(rule.supply))) : ''}
         ${chk(!owned, owned ? t.ownedTag : t.chkNew)}
+        <div class="chk warn">⚠️ ${t.chkBurn(n(rule.burn), n(rule.minLevel - rule.burn), n(rule.minLevel))}</div>
       </div></div>
       <button class="btn wide ${can ? 'gold' : 'ghost'}" id="lab-fuse" ${can ? '' : 'disabled'}>${t.fuse(n(rule.cost))}</button>`;
   }
@@ -373,8 +385,9 @@ function renderLab() {
       ${result}
     </div>
     <div class="panel rules"><div class="t">${t.rulesTitle}</div>
-      <div class="rule-row"><span>${t.duo}</span><span>${t.chkLevel(n(FUSION_RULES[2].minLevel))} · 🪙 ${n(FUSION_RULES[2].cost)} · ${t.copies(n(FUSION_RULES[2].supply))}</span></div>
-      <div class="rule-row"><span>${t.trio}</span><span>${t.chkLevel(n(FUSION_RULES[3].minLevel))} · 🪙 ${n(FUSION_RULES[3].cost)} · ${t.copies(n(FUSION_RULES[3].supply))}</span></div>
+      <div class="rule-row"><span>${t.duo}</span><span>${t.chkLevel(n(FUSION_RULES[2].minLevel))} · 🪙 ${n(FUSION_RULES[2].cost)} · ${t.copies(n(FUSION_RULES[2].supply))}${isOpen('duo') ? '' : ` · 🔒 ${t.worldN(n(unlockWorld('duo')))}`}</span></div>
+      <div class="rule-row"><span>${t.trio}</span><span>${t.chkLevel(n(FUSION_RULES[3].minLevel))} · 🪙 ${n(FUSION_RULES[3].cost)} · ${t.copies(n(FUSION_RULES[3].supply))}${isOpen('trio') ? '' : ` · 🔒 ${t.worldN(n(unlockWorld('trio')))}`}</span></div>
+      <p class="muted small" style="margin:8px 0 0">${t.fuseRules}</p>
     </div>
     <div class="h2">${t.myFusions} <span class="muted">(${n(mine.length)}/${n(FUSIONS.length)})</span></div>
     ${mine.length ? `<div class="grid">${mine.map(cardHtml).join('')}</div>` : `<p class="muted center">${t.noFusions}</p>`}`;
@@ -394,6 +407,7 @@ function renderLab() {
     fusionReveal(r); renderLab();
   };
 }
+const ECON_DUOS = parts => FUSIONS.filter(f => f.parts.length === 2 && S.owned[f.id] && f.parts.every(p => parts.includes(p)));
 // Choose a hero for the next empty slot (only heroes you own; fusion cards can't be fused again).
 function heroPicker() {
   const t = T(), need = FUSION_RULES[Math.max(2, labPick.length + 1)].minLevel;
@@ -595,6 +609,10 @@ function processEvents() {
         flashScreen(enemy ? '#ff2a2a' : SKILL_COLORS[ev.id]);
         break;
       }
+      case 'enrage':
+        flashScreen('#ff6a00'); haptic('heavy'); Sound.play('boss');
+        $('#b-banner').innerHTML = `<div class="banner enemy"><div class="s">${t.enrage}</div></div>`;
+        break;
       case 'bossaoe':
         anim($('#battle'), 'shake'); flashScreen('#ff0000'); haptic('heavy'); Sound.play('boss');
         $('#b-banner').innerHTML = `<div class="banner enemy"><div class="s">${t.bossAtk}</div></div>`;
@@ -606,12 +624,15 @@ function processEvents() {
 // The stage is over on screen; the server (or local rules offline) replays it and decides the reward.
 async function finishStage() {
   if (!BT || BT.mode !== 'stage') return;
-  const { idx, inputs } = BT;
+  const { idx, inputs } = BT, timeout = !!(BT.B && BT.B.timeout);
   cancelAnimationFrame(BT.raf);
   BT = null;
   Sound.music('menu');
+  const before = Object.keys(ECON.UNLOCKS).filter(isOpen);
   let res;
   try { res = await act({ type: 'stageEnd', inputs }); } catch (e) { toast(errText(e)); res = { result: 'lose', stage: idx }; }
+  res.timeout = timeout;
+  res.unlocked = Object.keys(ECON.UNLOCKS).filter(k => isOpen(k) && !before.includes(k));
   showStageResult(idx, res);
 }
 
@@ -632,6 +653,8 @@ function showStageResult(idx, res) {
       <p class="muted">${t.stage(stageLabel(idx))} ${worldDone ? t.worldDone(worldName(Math.floor(idx / STAGES_PER_WORLD))) : ''}</p>
       <div class="big" style="color:var(--gold)">+🪙 ${n(res.coins)}</div>
       ${res.first ? `<p class="muted">${t.firstBonus}</p>` : ''}
+      ${res.timeout ? `<p class="muted">⏱️ ${t.timeUp}</p>` : ''}
+      ${res.unlocked.length ? `<div class="unlocked">${res.unlocked.map(k => `<div>🔓 ${t.unlockedNew}: <b>${t.feat[k]}</b></div>`).join('')}</div>` : ''}
       <div class="btns" style="margin-top:14px">
         <button class="btn ghost" id="r-map">${t.toMap}</button>
         <button class="btn ghost" id="r-again">${t.replay}</button>
@@ -642,6 +665,7 @@ function showStageResult(idx, res) {
     openModal(`<div class="center">
       <div style="font-size:64px">💔</div>
       <div class="big">${t.defeat}</div>
+      ${res.timeout ? `<p class="muted">⏱️ ${t.timeUp}</p>` : ''}
       <p class="muted">${t.defeatTip}</p>
       <div class="btns" style="margin-top:14px">
         <button class="btn ghost" id="r-heroes">${t.heroes}</button>

@@ -65,6 +65,12 @@ const tgScript = (user, startParam) => `
   assert.equal(serverProfile(777).cleared, 2, 'server verified both stage wins');
   assert.equal(await p1.evaluate(() => S.coins), serverProfile(777).coins, 'client shows server coins');
   console.log('✓ stage wins verified by the server replay; coins', serverProfile(777).coins);
+  // Sara reaches world 5: chests, exchange, PvP, AI rival and clans unlock
+  await p1.click('[data-tab=chest]'); await p1.waitForTimeout(150);
+  assert.ok(await p1.$('.lock-note'), 'locked features show where they open');
+  await p1.screenshot({ path: OUT + '/u0-locked.png', fullPage: true });
+  serverProfile(777).cleared = 40;
+  await p1.evaluate(async () => { Object.assign(S, await Online.loadProfile(null)); save(); refresh(); });
   const before = serverProfile(777).gems;
   await p1.click('[data-tab=chest]'); await p1.click('[data-pack=gems_s]'); await p1.waitForSelector('#gm-ok', { timeout: 15000 });
   await p1.screenshot({ path: OUT + '/g1-bought.png' }); await p1.click('#gm-ok');

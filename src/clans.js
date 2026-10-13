@@ -68,13 +68,13 @@ function drawClanFinder() {
     <div class="panel"><div class="t">${t.createTitle}</div>
       <input class="clan-in" id="cl-name" maxlength="20" placeholder="${t.clanName}" autocomplete="off" style="margin-top:10px">
       <div class="emblems">${CLAN_META.emblems.map(e => `<button data-emb="${e}" class="${e === clanEmblem ? 'on' : ''}">${e}</button>`).join('')}</div>
-      <button class="btn wide gold" id="cl-create" ${S.coins < CLAN_META.cost ? 'disabled' : ''}>${t.createBtn(n(CLAN_META.cost))}</button>
-      ${S.coins < CLAN_META.cost ? `<p class="muted small">${t.err.no_coins}</p>` : ''}</div>`;
+      ${isOpen('clan') ? `<button class="btn wide gold" id="cl-create" ${S.coins < CLAN_META.cost ? 'disabled' : ''}>${t.createBtn(n(CLAN_META.cost))}</button>
+      ${S.coins < CLAN_META.cost ? `<p class="muted small">${t.err.no_coins}</p>` : ''}` : lockNote('clan')}</div>`;
   document.querySelectorAll('[data-emb]').forEach(b => b.onclick = () => {
     clanEmblem = b.dataset.emb;
     document.querySelectorAll('[data-emb]').forEach(x => x.classList.toggle('on', x === b));
   });
-  $('#cl-create').onclick = async () => {
+  if ($('#cl-create')) $('#cl-create').onclick = async () => {
     const btn = $('#cl-create'); btn.disabled = true;
     try { const r = await Online.clan('create', { name: $('#cl-name').value, emblem: clanEmblem }); syncProfile(r.profile); CLAN = r.clan; haptic('heavy'); drawMyClan(); }
     catch (e) { toast(errText(e)); btn.disabled = false; }

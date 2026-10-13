@@ -3,7 +3,7 @@
 (function (root, factory) {
   if (typeof module !== 'undefined') module.exports = factory(require('./engine.js'));
   // In the browser engine.js declares top-level consts (not window properties), so pass them explicitly.
-  else root.ECON = factory({ STAGES_PER_WORLD, STARTERS, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, LEGACY_FUSION_IDS, HERO_BY_ID, MAX_LEVEL, TOTAL_STAGES, COIN_BONUS, heroStats, upgradeCost, stageReward, replayStage });
+  else root.ECON = factory({ STAGES_PER_WORLD, STARTERS, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, LEGACY_FUSION_IDS, teamError, duosWithin, HERO_BY_ID, MAX_LEVEL, TOTAL_STAGES, COIN_BONUS, heroStats, upgradeCost, stageReward, replayStage });
 })(typeof self !== 'undefined' ? self : this, function (E) {
   const CHESTS = {
     basic: { cost: 300, rates: { C: 55, R: 32, E: 11, L: 2 } },
@@ -15,6 +15,11 @@
   const START_GEMS = 20, DAY7_GEMS = 15, WARP_COST = 30, WARP_HOURS = 4;
   const gemRate = p => Math.round(50 * (1 + p.cleared / 25));
   const achGems = tier => 5 * (tier + 1);
+  // Features open up as the player clears stages (value = stages cleared, i.e. 10 = reached world 2).
+  // Joining a friend's duel or clan from an invite is always allowed, so invite links work for new players.
+  const UNLOCKS = { royal: 10, ai: 10, pvp: 20, exchange: 20, duo: 30, gemChest: 40, clan: 40, trio: 70 };
+  const unlocked = (p, key) => (p.cleared || 0) >= UNLOCKS[key];
+  const needUnlock = (p, key) => { if (!unlocked(p, key)) fail('locked_feature'); };
   // AI duels: no stake; the first AI_DAILY wins each day pay a reward based on progress.
   const AI_DAILY = 5;
   const AI_LEVELS = { easy: { power: 0.8, coins: 0.5, gems: 0 }, normal: { power: 1, coins: 1, gems: 0 }, hard: { power: 1.25, coins: 2, gems: 1 } };
@@ -54,7 +59,13 @@
     const d = newProfile(now);
     if (typeof p.gems !== 'number') p.gems = START_GEMS;
     migrateIds(p.owned); migrateIds(p.serials); migrateIds(p.holo);
-    if (Array.isArray(p.team)) p.team = p.team.map(id => (E.LEGACY_FUSION_IDS || {})[id] || id);
+    if (Array.isArray(p.team)) {
+      p.team = p.team.map(id => (E.LEGACY_FUSION_IDS || {})[id] || id);
+      // Older saves may field more fusion cards than allowed: keep the first ones that fit.
+      const keep = [];
+      for (const id of p.team) if (!E.teamError([...keep, id])) keep.push(id);
+      p.team = keep;
+    }
     return { ...d, ...p, stats: { ...d.stats, ...(p.stats || {}) }, daily: { ...d.daily, ...(p.daily || {}) }, dq: { ...d.dq, ...(p.dq || {}) },
       ach: { ...(p.ach || {}) }, serials: { ...(p.serials || {}) }, holo: { ...(p.holo || {}) }, replays: { ...(p.replays || {}) } };
   }
@@ -119,6 +130,7 @@
       case 'team': {
         const t = Array.isArray(a.team) ? a.team : [];
         if (t.length > 5 || new Set(t).size !== t.length || t.some(id => !p.owned[id])) fail('bad_team');
+        const te = E.teamError(t); if (te) fail(te);
         p.team = [...t];
         return {};
       }
@@ -133,6 +145,8 @@
       case 'chest': {
         const c = CHESTS[a.key];
         if (!c) fail('bad_chest');
+        if (a.key === 'royal') needUnlock(p, 'royal');
+        if (a.key === 'gem') needUnlock(p, 'gemChest');
         const cur = c.currency || 'coins';
         if ((p[cur] || 0) < c.cost) fail(cur === 'gems' ? 'no_gems' : 'no_coins');
         p[cur] -= c.cost;
@@ -167,6 +181,7 @@
         return { coins, gems };
       }
       case 'exchange': {
+        needUnlock(p, 'exchange');
         const g = Math.floor(Number(a.gems));
         if (!(g >= 1 && g <= 100000)) fail('bad_action');
         if (p.gems < g) fail('no_gems');
@@ -175,6 +190,7 @@
         return { gems: g, coins };
       }
       case 'warp': {
+        needUnlock(p, 'exchange');
         if (p.gems < WARP_COST) fail('no_gems');
         const coins = afkRate(p) * WARP_HOURS;
         p.gems -= WARP_COST; p.coins += coins;
@@ -185,11 +201,15 @@
         if (!f) fail('bad_action');
         if (p.owned[f.id]) fail('claimed');
         const rule = E.FUSION_RULES[f.parts.length];
+        needUnlock(p, f.parts.length === 3 ? 'trio' : 'duo');
         if (f.parts.some(id => (p.owned[id] || 0) < rule.minLevel)) fail('need_parts');
+        if (rule.needDuo && !E.duosWithin(p.owned, f.parts).length) fail('need_duo');
         if (p.coins < rule.cost) fail('no_coins');
         // Online, the server hands out the next serial number (and refuses when the edition is sold out).
         const serial = ctx.mint ? ctx.mint(f.id, rule.supply) : null;
+        // The parts pay with their levels (they stay in the collection).
         p.coins -= rule.cost; p.owned[f.id] = 1;
+        for (const id of f.parts) p.owned[id] = Math.max(1, p.owned[id] - rule.burn);
         if (serial) p.serials[f.id] = serial;
         track(p, 'fusions', 1, now);
         return { id: f.id, serial, supply: rule.supply };
@@ -238,6 +258,6 @@
     return p;
   }
 
-  return { START_GEMS, DAY7_GEMS, WARP_COST, WARP_HOURS, gemRate, achGems, AI_DAILY, AI_LEVELS, aiLeft, aiReward, migrateIds, HOLO_CHANCE, CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
+  return { UNLOCKS, unlocked, START_GEMS, DAY7_GEMS, WARP_COST, WARP_HOURS, gemRate, achGems, AI_DAILY, AI_LEVELS, aiLeft, aiReward, migrateIds, HOLO_CHANCE, CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
     dqReward, dailyCanClaim, dailyNext, afkRate, afkAmount, achTier, coinBonus, replayFactor, stageCoins, teamPower, claimable, act, importLocal };
 });
