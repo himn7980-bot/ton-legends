@@ -257,6 +257,11 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   r = await post('/api/pvp/ai', { initData: initData(carol), level: 'hard' }); assert.equal(r.status, 200, JSON.stringify(r.body));
   const aiT = r.body.ticket; const lai = listen(aiT);
   const mai = await lai.wait('match'); assert.equal(mai.data.ai, 'hard');
+  await lai.wait('tick');
+  r = await post('/api/pvp/emote', { initData: initData(carol), ticket: aiT, e: 1 }); assert.equal(r.body.ok, true);
+  r = await post('/api/pvp/emote', { initData: initData(carol), ticket: aiT, e: 2 }); assert.equal(r.body.ok, false, 'emotes are rate-limited');
+  r = await post('/api/pvp/emote', { initData: initData(dan), ticket: aiT, e: 1 }); assert.equal(r.status, 400, 'only your own duel');
+  const em = await lai.wait('emote'); assert.equal(em.data.side, 'hero'); assert.equal(em.data.e, 1);
   r = await post('/api/pvp/input', { initData: initData(carol), ticket: aiT, code: -1 });
   const eai = await lai.wait('end'); lai.close();
   assert.ok(eai.data.ai); assert.ok(['win', 'lose', 'draw'].includes(eai.data.result));
@@ -306,29 +311,59 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   r = await post('/api/act', { initData: initData(alice), action: { type: 'faction', id: 'notcoin' } }); assert.equal(r.body.profile.faction, 'notcoin');
   r = await post('/api/act', { initData: initData(alice), action: { type: 'faction', id: 'dog' } }); assert.equal(r.body.error, 'too_soon', 'switching waits a week');
   r = await post('/api/act', { initData: initData(bob), action: { type: 'faction', id: 'dog' } });
+  const W = srv.db.war;
+  W.derby = require('./war.js').pairUp(['notcoin', 'dog', ...E.BASE_HEROES.map(h => h.id).filter(x => x !== 'notcoin' && x !== 'dog')]);
   srv.db.users['111'].profile.team = ['pinkbull'];
-  srv.war.addPoints('111', 5); // no Notcoin card in the team: 5
+  srv.war.onWin('111', 'pvp', { vs: '555' });                // 5 (no own card, opponent not the rival)
   srv.db.users['111'].profile.team = ['notcoin', 'pinkbull'];
-  srv.war.addPoints('111', 5); // with it: doubled → 10
-  srv.war.addPoints('222', 2);
+  srv.war.onWin('111', 'stageFirst', { stage: 12 });          // 2×2 = 4, world 2 territory +2
+  srv.war.onWin('111', 'pvp', { vs: '222' });                 // 5×2×3 (derby rival Bob) = 30
+  srv.war.onWin('222', 'stage', { stage: 12 });               // no points, world 2 territory +1 for dog
+  for (let i = 0; i < 3; i++) srv.war.onWin('111', 'stage', { stage: 12 }); // territory: notcoin 5 → holds world 2
   r = await post('/api/war/me', { initData: initData(alice) });
-  assert.equal(r.body.standings[0].id, 'notcoin'); assert.equal(r.body.standings[0].pts, 15); assert.equal(r.body.mine.pts, 15); assert.equal(r.body.mine.double, true);
-  assert.equal(r.body.standings.length, 16); assert.ok(r.body.endsAt > Date.now());
+  assert.equal(r.body.mine.pts, 39); assert.equal(r.body.standings[0].id, 'notcoin'); assert.equal(r.body.mine.double, true);
+  assert.equal(r.body.owners[1], 'notcoin', 'holds world 2'); assert.equal(r.body.derby.rival, 'dog'); assert.equal(r.body.derby.me, 39);
+  assert.equal(r.body.goal.progress, 6); assert.equal(r.body.goal.target, 30); assert.equal(r.body.milestone.total, 39);
+  // territory bonus is frozen into the stage: +15% coins in world 2
+  srv.db.users['111'].profile.cleared = Math.max(srv.db.users['111'].profile.cleared, 15);
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'stageStart', stage: 12 } }); assert.equal(r.body.result.terr, 0.15);
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'stageStart', stage: 2 } }); assert.equal(r.body.result.terr, 0);
+  // daily goal: 30 wins for a small community
+  r = await post('/api/war/goal', { initData: initData(alice) }); assert.equal(r.body.error, 'not_ready');
+  for (let i = 0; i < 24; i++) srv.war.onWin('111', 'ai');
+  r = await post('/api/war/goal', { initData: initData(alice) }); assert.equal(r.body.gems, 5);
+  r = await post('/api/war/goal', { initData: initData(alice) }); assert.equal(r.body.error, 'claimed');
+  r = await post('/api/war/goal', { initData: initData(dan) }); assert.equal(r.body.error, 'not_ready', 'only members who helped today');
+  // prediction (only during the first days of the week)
+  const realNow = Date.now;
+  const monday = require('./war.js').weekEnd() - 7 * 864e5;
+  Date.now = () => monday + 3600e3;
+  r = await post('/api/war/predict', { initData: initData(bob), f: 'notcoin' }); assert.equal(r.body.war.predict.pick, 'notcoin');
+  r = await post('/api/war/predict', { initData: initData(bob), f: 'dog' }); assert.equal(r.body.error, 'claimed');
+  Date.now = () => monday + 4 * 864e5;
+  r = await post('/api/war/predict', { initData: initData(carol), f: 'dog' }); assert.equal(r.body.error, 'predict_closed');
+  Date.now = realNow;
   // the week ends
-  const oldWeek = srv.db.war.week;
-  srv.db.war.week = '2000-W01'; srv.db.users['111'].war.week = '2000-W01'; srv.db.users['222'].war.week = '2000-W01';
+  const oldWeek = W.week;
+  W.week = '2000-W01'; for (const id of ['111', '222']) srv.db.users[id].war.week = '2000-W01'; srv.db.users['222'].pred.week = '2000-W01';
   const sentBefore = calls.filter(c => c.method === 'sendMessage').length;
   r = await post('/api/war/me', { initData: initData(alice) });
-  assert.equal(srv.db.war.week, oldWeek); assert.equal(r.body.last.place, 0); assert.equal(r.body.last.eligible, true); assert.equal(r.body.mine.pts, 0);
+  assert.equal(W.week, oldWeek); assert.equal(r.body.last.place, 0); assert.equal(r.body.last.derbyWon, true); assert.equal(r.body.mine.pts, 0);
+  assert.equal(r.body.captain.me, true, 'top member becomes captain'); assert.equal(r.body.cry, 'gold'); assert.equal(r.body.cryChosen, false);
+  assert.deepEqual(r.body.owners, {}, 'territories reset weekly');
   const g0w = srv.db.users['111'].profile.gems;
-  r = await post('/api/war/claim', { initData: initData(alice) }); assert.equal(r.body.gems, 30); assert.equal(r.body.profile.gems, g0w + 30);
+  r = await post('/api/war/claim', { initData: initData(alice) }); assert.equal(r.body.gems, 30 + 10, 'place + derby'); assert.equal(r.body.profile.gems, g0w + 40);
   r = await post('/api/war/claim', { initData: initData(alice) }); assert.equal(r.body.error, 'claimed');
-  r = await post('/api/war/claim', { initData: initData(bob) }); assert.equal(r.body.error, 'not_ready', 'under 10 points: no reward');
+  r = await post('/api/war/claim', { initData: initData(bob) }); assert.equal(r.body.gems, 10, 'Bob: under 10 points, but predicted the winner');
+  // the captain picks a battle cry; "might" makes the community card stronger in the next stage
+  r = await post('/api/war/cry', { initData: initData(bob), key: 'might' }); assert.equal(r.body.error, 'not_captain');
+  r = await post('/api/war/cry', { initData: initData(alice), key: 'might' }); assert.equal(r.body.war.cry, 'might');
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'stageStart', stage: 2 } }); assert.equal(r.body.result.market.notcoin, 1.05);
   await sleep(500);
   const warMsgs = calls.filter(c => c.method === 'sendMessage').slice(sentBefore).map(c => c.data);
   assert.ok(warMsgs.some(m => m.chat_id === 111 && /Notcoin community finished #1/.test(m.text)), JSON.stringify(warMsgs));
-  assert.ok(warMsgs.some(m => m.chat_id === 222 && /#2/.test(m.text)));
-  console.log('   community war: points (×2 with own card), weekly result, reward claim, bot messages');
+  assert.ok(warMsgs.some(m => m.chat_id === 111 && /captain/.test(m.text)));
+  console.log('   community war: points (own card ×2, derby ×3), territories, daily goal, prediction, captain + battle cry, weekly claim');
 
   // ---------- bot reminders ----------
   const nowR = Date.now(), bobU = srv.db.users['222'];
@@ -363,7 +398,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   Object.assign(srv.db.users['111'].profile.owned, { dog: 5 });
   srv.db.users['111'].profile.team = ['notcoin', 'dog', 'pinkbull'];
   r = await post('/api/act', { initData: initData(alice), action: { type: 'stageStart', stage: 0 } });
-  assert.deepEqual(r.body.result.market, { notcoin: 1.1 }); assert.equal(r.body.result.dip, 0.2);
+  assert.deepEqual(r.body.result.market, { notcoin: 1.155 }, 'moon x1.1 and the captain cry might x1.05'); assert.equal(r.body.result.dip, 0.2);
   assert.equal(srv.db.users['111'].profile.pending.dip, 0.2);
   // community activity drives heroes without a token: yesterday 300 points vs 100 the day before → +200% (capped at +50)
   const ECONm = require('../src/economy.js');

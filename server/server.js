@@ -380,14 +380,17 @@ function leaderboard(meId) {
 const clans = createClans({ db, persist, profileOut: u => (u.profile ? ECON.pickKeys(u.profile) : null) });
 const notifier = createNotifier({ db, persist, tg, webappUrl: () => WEBAPP_URL, logErr });
 const SHARE_DIR = path.join(path.dirname(DATA_FILE), 'share');
-const war = createWar({ db, persist, weekKey: clans.weekKey, shareDir: SHARE_DIR, profileOut: u => (u.profile ? ECON.pickKeys(u.profile) : null), onWeekEnd: last => notifier.weekEnded(last) });
+const war = createWar({ db, persist, weekKey: clans.weekKey, shareDir: SHARE_DIR, profileOut: u => (u.profile ? ECON.pickKeys(u.profile) : null), onWeekEnd: (last, captains) => notifier.weekEnded(last, captains) });
 const market = createMarket({ db, persist, api: (process.env.MARKET_API || 'https://api.coingecko.com/api/v3').replace(/\/$/, ''), logErr });
 // Clan and community-war points come from the same wins (and feed the community activity behind the market mood).
-const addPoints = (uid, pts) => {
-  clans.addPoints(uid, pts); war.addPoints(uid, pts);
-  const u = db.users[uid]; if (u && u.profile) market.addActivity(u.profile.faction, pts);
+// kind: 'stageFirst' | 'stage' | 'ai' | 'pvp'; info: { stage, vs }
+const CLAN_POINTS = { stageFirst: 2, ai: 1, pvp: 5 };
+const onWin = (uid, kind, info = {}) => {
+  if (CLAN_POINTS[kind]) clans.addPoints(uid, CLAN_POINTS[kind]);
+  const got = war.onWin(uid, kind, info);
+  const u = db.users[uid]; if (u && u.profile) market.addActivity(u.profile.faction, Math.max(1, got));
 };
-const arena = createArena({ db, persist, onPoints: addPoints, market: () => ECON.marketBoosts(market.moods()), notify: (uid, end) => {
+const arena = createArena({ db, persist, onPoints: (uid, pts, info = {}) => onWin(uid, info.kind || (pts >= 5 ? 'pvp' : 'ai'), info), market: () => ECON.marketBoosts(market.moods()), notify: (uid, end) => {
   const u = db.users[uid];
   const L = tx(u && u.lang);
   if (end.result === 'cancelled') return;
@@ -412,9 +415,9 @@ const routes = {
   },
   'POST /api/act': (body, u) => {
     if (!u.profile) throw Object.assign(new Error('no_profile'), { code: 400 });
-    const result = ECON.act(u.profile, body.action, { now: Date.now(), rng, mint, market: market.moods() });
+    const result = ECON.act(u.profile, body.action, { now: Date.now(), rng, mint, market: market.moods(), community: war.community(u.profile) });
     payReferral(u);
-    if (body.action && body.action.type === 'stageEnd' && result && result.result === 'win' && result.first) addPoints(u.id, 2);
+    if (body.action && body.action.type === 'stageEnd' && result && result.result === 'win') onWin(u.id, result.first ? 'stageFirst' : 'stage', { stage: result.stage });
     return { profile: profileOut(u), result };
   },
   'POST /api/score': () => ({ ok: true }), // kept for older clients; leaderboard now uses server profiles

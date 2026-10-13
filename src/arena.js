@@ -87,6 +87,7 @@ function watchDuel(ticket, info) {
     match: m => { if (BT && BT.mode === 'pvp') return; if (!$('#modal').hidden) closeModal(); startPvp(m); },
     tick: d => onPvpTick(d),
     end: d => onPvpEnd(d),
+    emote: d => showEmote(d),
     cancelled: () => { stopDuelStream(); if (!$('#modal').hidden) closeModal(); refresh(); },
   });
   showWaiting();
@@ -136,8 +137,25 @@ function startPvp(m) {
     onTap: u => input(u.uid), onAuto: on => input(on ? -1 : -2),
   });
   if (S.auto) input(-1);
+  // Emote bar: five quick reactions + your community mascot.
+  const bar = document.createElement('div'); bar.className = 'emote-bar';
+  bar.innerHTML = EMOTES.map((e, i) => `<button data-emo="${i}">${i === EMOTES.length - 1 ? (S.faction ? `<img src="${img(S.faction)}" alt="">` : '🚩') : e}</button>`).join('');
+  $('#battle').appendChild(bar); $('#battle').classList.add('has-emotes');
+  bar.querySelectorAll('[data-emo]').forEach(b => b.onclick = () => { if (BT && !BT.ended) { haptic('light'); Online.pvp('emote', { ticket: BT.ticket, e: +b.dataset.emo }).catch(() => {}); } });
   Sound.music('battle');
   countdown(m.startIn);
+}
+
+const EMOTES = ['😂', '🔥', '😱', '👏', '🤝', '🚩'];
+function showEmote(d) {
+  if (!BT || BT.mode !== 'pvp') return;
+  const fx = $('#b-fx'); if (!fx) return;
+  const el = document.createElement('div'), mine = d.side === BT.mySide;
+  el.className = `emote ${mine ? 'me' : 'opp'}`;
+  el.innerHTML = d.e === EMOTES.length - 1 ? (d.f ? `<img src="${img(d.f)}" alt="">` : '🚩') : (EMOTES[d.e] || '');
+  fx.appendChild(el);
+  if (!mine) { haptic('light'); Sound.play('click'); }
+  setTimeout(() => el.remove(), 2200);
 }
 
 function countdown(ms) {

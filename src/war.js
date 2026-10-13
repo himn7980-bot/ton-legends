@@ -45,51 +45,126 @@ async function renderWar() {
   drawWar();
   if (Online.state.profile) { await loadWar(); if (S.tab === 'war') drawWar(); }
 }
+let WAR_TAB = 'week';
+const CRY_ICON = { gold: '📯', might: '💪', rally: '📣' };
+const FRAME = ['', 'bronze', 'silver', 'gold', 'diamond'];
+const medal = r => (r <= 3 ? ['🥇', '🥈', '🥉'][r - 1] : '#' + n(r));
+const mini = id => `<img class="mini" src="${img(id)}" alt="">`;
+// Frame of your community card earned by the community's all-time points.
+const frameOf = id => (WAR && WAR.milestone && id === S.faction && WAR.milestone.tier ? `frame-${FRAME[WAR.milestone.tier]}` : '');
+
 function drawWar() {
-  const t = T(), f = S.faction, h = HERO_BY_ID[f], online = !!Online.state.profile;
-  const W = WAR, rank = myRank(), top = W ? Math.max(1, ...W.standings.map(x => x.pts)) : 1;
-  const left = W ? Math.max(0, W.endsAt - Date.now()) : 0, d = Math.floor(left / 864e5), hr = Math.floor(left % 864e5 / 3600e3);
-  const last = W && W.last;
-  const rewardOf = p => (W.rewards[p] || W.rest);
-  $('#screen').innerHTML = `
-    <div class="panel war-head" style="--rc:${RARITY[h.rarity].color}">
+  const t = T(), f = S.faction, h = HERO_BY_ID[f], online = !!Online.state.profile, W = WAR;
+  const rank = myRank();
+  const tabs = online && W ? `<div class="seg">${['week', 'map', 'ranks'].map(k => `<button class="${WAR_TAB === k ? 'on' : ''}" data-wt="${k}">${t.warTabs[k]}</button>`).join('')}</div>` : '';
+  const head = `<div class="panel war-head ${frameOf(f)}" style="--rc:${RARITY[h.rarity].color}">
       <img src="${img(f)}" alt="">
       <div style="flex:1;min-width:0">
         <div class="muted small">${t.yourCommunity}</div>
         <div class="big" style="font-size:22px">${t.army(h.name)}</div>
-        ${W ? `<div class="tag gold">${rank <= 3 ? ['🥇', '🥈', '🥉'][rank - 1] : '#' + n(rank)} · ${t.weekPts(n(W.standings[rank - 1].pts))}</div>` : ''}
+        ${W ? `<div class="tag gold">${medal(rank)} · ${t.weekPts(n(W.standings[rank - 1].pts))}${W.standings[rank - 1].worlds ? ` · 🏰 ${n(W.standings[rank - 1].worlds)}` : ''}</div>` : ''}
         <div class="muted small" style="margin-top:6px">${t.factionPerkShort}</div>
-      </div></div>
-    ${online && W ? `<div class="panel">
-      <div class="row"><div class="t">${t.myPts(n(W.mine.pts))}</div><span class="muted small">⏳ ${t.endsIn(n(d), n(hr))}</span></div>
+      </div></div>`;
+  let body = '';
+  if (!online || !W) body = online ? `<p class="muted center">${t.loading}</p>` : `<div class="panel center muted">${t.boardOffline}</div>`;
+  else if (WAR_TAB === 'week') body = weekTab(t, W);
+  else if (WAR_TAB === 'map') body = mapTab(t, W);
+  else body = ranksTab(t, W);
+  $('#screen').innerHTML = head + tabs + body + `<button class="btn wide ghost" id="w-change" style="margin-top:12px">${t.changeFaction(n(ECON.FACTION_SWITCH_GEMS))}</button>`;
+  document.querySelectorAll('[data-wt]').forEach(b => b.onclick = () => { WAR_TAB = b.dataset.wt; drawWar(); });
+  bindWar(t);
+}
+
+function weekTab(t, W) {
+  const C = ECON.COMMUNITY, left = Math.max(0, W.endsAt - Date.now()), d = Math.floor(left / 864e5), hr = Math.floor(left % 864e5 / 3600e3);
+  const last = W.last, g = W.goal, dv = W.derby, ms = W.milestone;
+  const cry = W.cry ? `<div class="cry-now">${CRY_ICON[W.cry]} <b>${t.cry[W.cry]}</b> · ${t.cryFx[W.cry]}</div>` : '';
+  return `
+    ${last && last.claimable ? `<div class="panel glow"><div class="t">${t.lastWeekTitle}</div>
+      <p style="margin:6px 0">${last.place >= 0 ? t.placeOf(n(last.place + 1)) : ''} ${last.derbyWon ? `· ⚔️ ${t.derbyWon}` : ''} ${last.predictOk ? `· 🔮 ${t.predictRight}` : ''}</p>
+      <button class="btn wide gem" id="w-claim">${t.warReward(n(last.reward.gems), n(last.reward.coins))}</button></div>` : ''}
+    <div class="panel"><div class="row"><div class="t">${t.myPts(n(W.mine.pts))}</div><span class="muted small">⏳ ${t.endsIn(n(d), n(hr))}</span></div>
       <p class="small" style="margin:6px 0 0;color:${W.mine.double ? 'var(--green)' : 'var(--muted)'}">${W.mine.double ? '✅ ' + t.doubleOn : '💡 ' + t.doubleOff}</p>
-      <button class="btn wide gold" id="w-rally" style="margin-top:12px">${t.rally}</button></div>` : ''}
-    ${last && last.place >= 0 ? `<div class="panel"><div class="t">${t.lastWeekTitle}</div>
+      <button class="btn wide gold" id="w-rally" style="margin-top:12px">${t.rally}</button></div>
+    <div class="panel"><div class="row"><div class="t">👑 ${t.captainTitle}</div>${W.captain ? `<span class="tag gold">${esc(W.captain.name)}</span>` : ''}</div>
+      ${W.captain ? cry : `<p class="muted small" style="margin:6px 0 0">${t.noCaptain}</p>`}
+      ${W.captain && W.captain.me ? `<p class="small" style="margin:8px 0 6px">${t.pickCry}</p><div class="cries">${Object.keys(C.CRIES).map(k => `<button class="btn ${W.cry === k && W.cryChosen ? 'gold' : 'ghost'}" data-cry="${k}">${CRY_ICON[k]} ${t.cry[k]}<small>${t.cryFx[k]}</small></button>`).join('')}</div>` : ''}</div>
+    ${g ? `<div class="panel"><div class="row"><div class="t">🎯 ${t.goalTitle}</div><span class="muted small">${n(Math.min(g.progress, g.target))} / ${n(g.target)}</span></div>
+      <div class="bar xp" style="margin:8px 0"><i style="width:${Math.min(100, g.progress / g.target * 100)}%"></i></div>
+      ${g.claimed ? `<button class="btn wide ghost" disabled>✓ ${t.err.claimed}</button>`
+        : g.progress >= g.target && g.helped ? `<button class="btn wide gem" id="w-goal">${t.goalClaim(n(C.GOAL.gems), n(C.GOAL.coins))}</button>`
+          : `<p class="muted small" style="margin:0">${t.goalNote(n(C.GOAL.gems), n(C.GOAL.coins))}</p>`}</div>` : ''}
+    ${dv ? `<div class="panel derby"><div class="t">⚔️ ${t.derbyTitle}</div>
+      <div class="derby-row"><div class="dside">${mini(S.faction)}<b>${factionName(S.faction)}</b><span>${n(dv.me)}</span></div><div class="dvs">VS</div>
+        <div class="dside">${mini(dv.rival)}<b>${factionName(dv.rival)}</b><span>${n(dv.them)}</span></div></div>
+      <div class="dbar"><i style="width:${dv.me + dv.them ? dv.me / (dv.me + dv.them) * 100 : 50}%"></i></div>
+      <p class="muted small" style="margin:8px 0">${t.derbyNote(factionName(dv.rival), n(C.DERBY_MULT), n(C.DERBY_WIN_GEMS))}</p>
+      <button class="btn wide" id="w-taunt">${t.taunt}</button></div>` : ''}
+    ${W.predict.open || W.predict.pick ? `<div class="panel"><div class="t">🔮 ${t.predictTitle}</div>
+      ${W.predict.pick ? `<p style="margin:8px 0 0">${t.yourPick} ${mini(W.predict.pick)} <b>${factionName(W.predict.pick)}</b></p>`
+        : `<p class="muted small" style="margin:6px 0">${t.predictNote(n(C.PREDICT_GEMS))}</p><div class="pick-row">${W.standings.map(x => `<button data-pred="${x.id}" title="${factionName(x.id)}">${mini(x.id)}</button>`).join('')}</div>`}</div>` : ''}
+    ${ms ? `<div class="panel"><div class="row"><div class="t">🏅 ${t.milestoneTitle}</div><span class="muted small">${n(ms.total)}${ms.next ? ' / ' + n(ms.next) : ''}</span></div>
+      ${ms.next ? `<div class="bar xp" style="margin:8px 0"><i style="width:${ms.total / ms.next * 100}%"></i></div>` : ''}
+      <div class="frames">${ECON.COMMUNITY.MILESTONES.map((m, i) => `<div class="fr ${i < ms.tier ? 'got' : ''}"><span class="fdot frame-${FRAME[i + 1]}"></span>${t.frames[i]}<small>${n(m)}</small></div>`).join('')}</div>
+      <p class="muted small" style="margin:8px 0 0">${t.milestoneNote}</p></div>` : ''}
+    ${last && !last.claimable && last.place >= 0 ? `<div class="panel"><div class="t">${t.lastWeekTitle}</div>
       <p style="margin:6px 0">${t.placeOf(n(last.place + 1))} · ${last.top.map((x, i) => `${['🥇', '🥈', '🥉'][i]} ${factionName(x.id)}`).join(' ')}</p>
-      ${last.claimed ? `<button class="btn wide ghost" disabled>✓ ${t.err.claimed}</button>`
-        : last.eligible ? `<button class="btn wide gem" id="w-claim">${t.warReward(n(last.reward.gems), n(last.reward.coins))}</button>`
-          : `<p class="muted small">${t.needPts(n(W.min))}</p>`}</div>` : ''}
-    <div class="h2">${t.warTitle}</div>
-    <p class="muted small">${t.warNote}</p>
-    ${online ? (W ? `<div class="panel board">${W.standings.map((x, i) => `<div class="wrow ${x.id === f ? 'me' : ''}">
-        <span class="rk">${i < 3 ? ['🥇', '🥈', '🥉'][i] : n(i + 1)}</span><img src="${img(x.id)}" alt="">
-        <div class="wb"><div class="wn">${factionName(x.id)} <span class="muted small">👤 ${n(x.members)}</span></div>
+      ${last.claimed ? `<p class="muted small">✓ ${t.err.claimed}</p>` : `<p class="muted small">${t.needPts(n(W.min))}</p>`}</div>` : ''}`;
+}
+
+function mapTab(t, W) {
+  return `<p class="muted small">${t.terrNote(pct(ECON.COMMUNITY.TERRITORY_BONUS * 100))}</p>
+    <div class="terr-grid">${WORLDS.map((wd, i) => { const o = W.owners[i], c = W.terr[i] || [], open = i * STAGES_PER_WORLD <= S.cleared;
+      return `<button class="terr ${o === S.faction ? 'mine' : o ? 'held' : ''}" data-tw="${i}" ${open ? '' : 'disabled'}>
+        <small>${n(i + 1)}</small>${o ? `<img src="${img(o)}" alt="">` : `<span class="none">${open ? '🏳️' : '🔒'}</span>`}
+        <span class="tn">${c[0] ? `${n(c[0].pts)}${c[1] ? ' · ' + n(c[1].pts) : ''}` : '—'}</span></button>`; }).join('')}</div>`;
+}
+
+function ranksTab(t, W) {
+  const top = Math.max(1, ...W.standings.map(x => x.pts)), rewardOf = p => (W.rewards[p] || W.rest), f = S.faction;
+  return `<p class="muted small">${t.warNote}</p>
+    <div class="panel board">${W.standings.map((x, i) => `<div class="wrow ${x.id === f ? 'me' : ''}">
+        <span class="rk">${medal(i + 1)}</span><img src="${img(x.id)}" alt="">
+        <div class="wb"><div class="wn">${factionName(x.id)} <span class="muted small">👤 ${n(x.members)}${x.worlds ? ` · 🏰 ${n(x.worlds)}` : ''}</span></div>
           <div class="bar xp"><i style="width:${x.pts / top * 100}%"></i></div></div>
-        <span class="wp">${n(x.pts)}</span></div>`).join('')}</div>` : `<p class="muted center">${t.loading}</p>`)
-      : `<div class="panel center muted">${t.boardOffline}</div>`}
-    ${W ? `<div class="panel"><div class="t">${t.rewardsTitle}</div><div class="tiers">
+        <span class="wp">${n(x.pts)}</span></div>`).join('')}</div>
+    <div class="panel"><div class="t">${t.rewardsTitle}</div><div class="tiers">
       ${[0, 1, 2].map(i => `<span>${['🥇', '🥈', '🥉'][i]} #${n(i + 1)}</span><span>💎 ${n(rewardOf(i).gems)} + 🪙 ${n(rewardOf(i).coins)}</span>`).join('')}
-      <span>#${n(4)}–${n(16)}</span><span>💎 ${n(W.rest.gems)} + 🪙 ${n(W.rest.coins)}</span></div>
-      <p class="muted small" style="margin:8px 0 0">${t.needPts(n(W.min))}</p></div>` : ''}
-    <button class="btn wide ghost" id="w-change">${t.changeFaction(n(ECON.FACTION_SWITCH_GEMS))}</button>`;
-  const rally = $('#w-rally'); if (rally) rally.onclick = () => shareCard('war');
-  const claim = $('#w-claim');
-  if (claim) claim.onclick = async () => {
-    claim.disabled = true;
+      <span>#${n(4)}–${n(16)}</span><span>💎 ${n(W.rest.gems)} + 🪙 ${n(W.rest.coins)}</span>
+      <span>⚔️ ${t.derbyTitle}</span><span>+💎 ${n(ECON.COMMUNITY.DERBY_WIN_GEMS)}</span>
+      <span>🔮 ${t.predictTitle}</span><span>+💎 ${n(ECON.COMMUNITY.PREDICT_GEMS)}</span></div>
+      <p class="muted small" style="margin:8px 0 0">${t.needPts(n(W.min))}</p></div>`;
+}
+
+function bindWar(t) {
+  const on = (sel, fn) => { const el = $(sel); if (el) el.onclick = fn; };
+  on('#w-rally', () => shareCard('war'));
+  on('#w-taunt', () => shareCard('derby'));
+  on('#w-change', () => factionPicker());
+  on('#w-claim', async e => {
+    e.target.disabled = true;
     try { const r = await Online.war('claim'); syncProfile(r.profile); Sound.play('chest'); giftModal('🏆', t.warTitle, r.coins, '', r.gems); await loadWar(); }
-    catch (e) { toast(errText(e)); claim.disabled = false; }
-  };
-  $('#w-change').onclick = () => factionPicker();
+    catch (err) { toast(errText(err)); e.target.disabled = false; }
+  });
+  on('#w-goal', async e => {
+    e.target.disabled = true;
+    try { const r = await Online.war('goal'); syncProfile(r.profile); WAR = r.war; Sound.play('coin'); giftModal('🎯', t.goalTitle, r.coins, '', r.gems); }
+    catch (err) { toast(errText(err)); e.target.disabled = false; }
+  });
+  document.querySelectorAll('[data-cry]').forEach(b => b.onclick = async () => {
+    try { WAR = (await Online.war('cry', { key: b.dataset.cry })).war; haptic('medium'); drawWar(); } catch (err) { toast(errText(err)); }
+  });
+  document.querySelectorAll('[data-pred]').forEach(b => b.onclick = () => {
+    const id = b.dataset.pred;
+    openModal(`<div class="center">${mini(id).replace('class="mini"', 'class="mini big"')}<div class="big" style="font-size:20px">${t.predictConfirm(factionName(id))}</div>
+      <div class="btns"><button class="btn ghost" id="pd-no">${t.cancel}</button><button class="btn gold" id="pd-yes">🔮 ${t.predictTitle}</button></div></div>`, box => {
+      box.querySelector('#pd-no').onclick = closeModal;
+      box.querySelector('#pd-yes').onclick = async () => {
+        try { WAR = (await Online.war('predict', { f: id })).war; closeModal(); drawWar(); } catch (err) { closeModal(); toast(errText(err)); }
+      };
+    });
+  });
+  document.querySelectorAll('[data-tw]').forEach(b => b.onclick = () => { S.world = +b.dataset.tw; S.sel = -1; save(); show('map'); });
 }
 
 // Small banner on the map: your community and its place this week.
@@ -114,16 +189,16 @@ async function drawShareCard(kind, id) {
   g.textAlign = 'center'; g.direction = L().dir || 'ltr';
   g.fillStyle = '#fff'; g.font = '900 64px Vazirmatn, sans-serif'; g.fillText('TON Legends', W / 2, 130);
   g.fillStyle = '#3fa2ff'; g.font = '700 30px Vazirmatn, sans-serif'; g.fillText('⚔️ Telegram card battles', W / 2, 180);
-  const title = kind === 'war' ? t.army(h.name) : h.name;
+  const title = kind === 'war' || kind === 'derby' ? t.army(h.name) : h.name;
   g.fillStyle = col; g.font = `900 ${title.length > 22 ? 40 : 54}px Vazirmatn, sans-serif`; g.fillText(title, W / 2, 1050, W - 40);
   g.fillStyle = '#ffc531'; g.font = '700 36px Vazirmatn, sans-serif';
-  g.fillText(kind === 'war' ? t.storyJoin : t.storyFusion, W / 2, 1120, W - 40);
-  if (kind === 'war' && WAR) { const r = myRank(); g.fillStyle = '#eef2ff'; g.font = '700 32px Vazirmatn, sans-serif'; g.fillText(`#${r} · ${t.weekPts(n(WAR.standings[r - 1].pts))}`, W / 2, 1180); }
+  g.fillText(kind === 'war' ? t.storyJoin : kind === 'derby' && WAR && WAR.derby ? t.storyDerby(factionName(WAR.derby.rival)) : t.storyFusion, W / 2, 1120, W - 40);
+  if ((kind === 'war' || kind === 'derby') && WAR) { const r = myRank(); g.fillStyle = '#eef2ff'; g.font = '700 32px Vazirmatn, sans-serif'; g.fillText(`#${r} · ${t.weekPts(n(WAR.standings[r - 1].pts))}`, W / 2, 1180); }
   return c.toDataURL('image/jpeg', 0.82);
 }
 async function shareCard(kind, id = S.faction) {
   const t = T();
-  const text = kind === 'war' ? t.rallyText(factionName(id)) : t.fusionStory(factionName(id));
+  const text = kind === 'war' ? t.rallyText(factionName(id)) : kind === 'derby' && WAR && WAR.derby ? t.tauntText(factionName(id), factionName(WAR.derby.rival)) : t.fusionStory(factionName(id));
   let shared = false;
   try {
     const w = Online.tg(), link = Online.inviteLink();

@@ -22,6 +22,16 @@
   const needUnlock = (p, key) => { if (!unlocked(p, key)) fail('locked_feature'); };
   // AI duels: no stake; the first AI_DAILY wins each day pay a reward based on progress.
   const AI_DAILY = 5;
+  // Community war extras (server/war.js keeps the weekly state; these numbers are shared with the client).
+  const COMMUNITY = {
+    TERRITORY_BONUS: 0.15,        // +stage coins in a world your community holds this week
+    TERRITORY_MIN: 5,             // points needed before a world can be held
+    CRIES: { gold: { coins: 0.10 }, might: { power: 1.05 }, rally: { points: 1.5 } }, // the captain's battle cry
+    DERBY_MULT: 3, DERBY_WIN_GEMS: 10, // arena wins vs the derby rival count triple; derby winners get gems
+    PREDICT_GEMS: 10, PREDICT_DAYS: 3, // guess the weekly winner during the first 3 days
+    GOAL: { perMember: 4, min: 30, max: 20000, gems: 5, coins: 500 }, // shared daily win target
+    MILESTONES: [1000, 10000, 100000, 1000000], // all-time points → bronze, silver, gold, diamond frames
+  };
   // Market mood: each hero's 24h change (its token's price, or its community's activity when it has no token)
   // sets today's mood. Up days make the card stronger; down days pay extra stage coins while it is in your team.
   const MOODS = [
@@ -261,11 +271,17 @@
         if (idx < 0 || idx >= E.TOTAL_STAGES || idx > p.cleared) fail('locked');
         if (!p.team.length) fail('bad_team');
         const seed = Math.floor(rng() * 2 ** 32) >>> 0;
-        // Today's market is frozen into the battle so the replay (and the coins) match what the player saw.
+        // Today's market, territory and battle cry are frozen into the battle so the replay (and the coins)
+        // match what the player saw.
         const boosts = marketBoosts(ctx.market), market = Object.fromEntries(Object.entries(boosts).filter(([id]) => p.team.some(t => t === id || (E.HERO_BY_ID[t].fusion && E.HERO_BY_ID[t].parts.includes(id)))));
+        const com = ctx.community || {}, cry = p.faction ? com.cry || null : null;
+        if (cry === 'might') market[p.faction] = +((market[p.faction] || 1) * COMMUNITY.CRIES.might.power).toFixed(4);
+        const dip = marketCoinBonus(ctx.market, p.team);
+        const terr = p.faction && com.owners && com.owners[Math.floor(idx / E.STAGES_PER_WORLD)] === p.faction ? COMMUNITY.TERRITORY_BONUS : 0;
+        const gold = cry === 'gold' ? COMMUNITY.CRIES.gold.coins : 0;
         p.pending = { stage: idx, seed, team: [...p.team], levels: Object.fromEntries(p.team.map(id => [id, p.owned[id]])), faction: p.faction || null,
-          market, dip: marketCoinBonus(ctx.market, p.team), at: now };
-        return { seed, market, dip: p.pending.dip };
+          market, dip, extra: +(dip + terr + gold).toFixed(4), at: now };
+        return { seed, market, dip, terr, gold };
       }
       case 'stageEnd': {
         const pd = p.pending;
@@ -275,7 +291,7 @@
         if (r.skills) track(p, 'skills', r.skills, now);
         if (r.result !== 'win') { p.stats.losses++; return { result: r.result, stage: pd.stage }; }
         const first = pd.stage === p.cleared;
-        const coins = stageCoins(p, pd.stage, pd.team, pd.dip || 0);
+        const coins = stageCoins(p, pd.stage, pd.team, (pd.extra !== undefined ? pd.extra : pd.dip) || 0);
         if (first) p.cleared = Math.min(E.TOTAL_STAGES, p.cleared + 1);
         else p.replays[pd.stage] = (p.replays[pd.stage] || 0) + 1;
         p.coins += coins;
@@ -303,6 +319,6 @@
     return p;
   }
 
-  return { MOODS, moodOf, marketBoosts, marketCoinBonus, FACTION_SWITCH_GEMS, FACTION_SWITCH_DAYS, FACTION_UPGRADE_DISCOUNT, FACTION_CHEST_WEIGHT, SHARE_GEMS, upgradePrice, UNLOCKS, unlocked, START_GEMS, DAY7_GEMS, WARP_COST, WARP_HOURS, gemRate, achGems, AI_DAILY, AI_LEVELS, aiLeft, aiReward, migrateIds, HOLO_CHANCE, CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
+  return { COMMUNITY, MOODS, moodOf, marketBoosts, marketCoinBonus, FACTION_SWITCH_GEMS, FACTION_SWITCH_DAYS, FACTION_UPGRADE_DISCOUNT, FACTION_CHEST_WEIGHT, SHARE_GEMS, upgradePrice, UNLOCKS, unlocked, START_GEMS, DAY7_GEMS, WARP_COST, WARP_HOURS, gemRate, achGems, AI_DAILY, AI_LEVELS, aiLeft, aiReward, migrateIds, HOLO_CHANCE, CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
     dqReward, dailyCanClaim, dailyNext, afkRate, afkAmount, achTier, coinBonus, replayFactor, stageCoins, teamPower, claimable, act, importLocal };
 });

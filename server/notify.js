@@ -49,7 +49,12 @@ module.exports = function createNotifier({ db, persist, tg, webappUrl, logErr = 
   const timer = setInterval(() => { try { sweep(); } catch (e) { logErr('lastHandleError', e); } }, 10 * 60e3);
 
   // Week over: tell everyone who took part how their community did.
-  function weekEnded(last) {
+  function weekEnded(last, captains = {}) {
+    // The new captains pick their community's battle cry.
+    for (const [f, c] of Object.entries(captains)) {
+      const name = (require('../src/engine.js').HERO_BY_ID[f] || {}).name || f;
+      enqueue(c.uid, L => L.captain(name));
+    }
     for (const u of Object.values(db.users)) {
       const p = u.profile;
       if (!p || !p.faction || !u.war || u.war.week !== last.week || u.war.pts <= 0) continue;

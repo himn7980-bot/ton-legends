@@ -16,6 +16,7 @@ const roomCode = () => Array.from(crypto.randomBytes(6), b => 'ABCDEFGHJKLMNPQRS
 const PVP_WIN_GEMS = 2;
 const AI_NAMES = ['Neon Ronin', 'Frost Byte', 'Crypto Kraken', 'Shadow Bot', 'Lucky Lynx', 'Iron Gecko', 'Moon Mantis', 'Pixel Paladin', 'Turbo Tiger', 'Volt Viper'];
 
+const EMOTES = 6; // 😂 🔥 😱 👏 🤝 + the sender's community mascot
 module.exports = function createArena({ db, persist, notify = () => {}, onPoints = () => {}, market = () => null }) {
   const tickets = new Map();   // ticket id (secret) -> ticket
   const queues = new Map();    // stake -> waiting tickets
@@ -126,7 +127,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
       else if (t === winner) {
         result = 'win';
         if (p) { p.coins += pot; p.gems = (p.gems || 0) + PVP_WIN_GEMS; p.stats.pvpWins = (p.stats.pvpWins || 0) + 1; ECON.track(p, 'wins', 1, now()); }
-        onPoints(t.uid, 5);
+        onPoints(t.uid, 5, { kind: 'pvp', vs: (t === m.a ? m.b : m.a).uid });
       }
       else { result = 'lose'; if (p) p.stats.pvpLosses = (p.stats.pvpLosses || 0) + 1; }
       t.status = 'done';
@@ -156,7 +157,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
     if (p && result === 'win') {
       p.stats.aiWins = (p.stats.aiWins || 0) + 1;
       ECON.track(p, 'wins', 1, now());
-      onPoints(t.uid, 1);
+      onPoints(t.uid, 1, { kind: 'ai' });
       if (ECON.aiLeft(p, now()) > 0) {
         reward = ECON.aiReward(p, m.ai);
         p.coins += reward.coins; p.gems = (p.gems || 0) + reward.gems;
@@ -225,6 +226,19 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
       const code = Number(body.code);
       if (code === -1 || code === -2) t.auto = code === -1;
       else if (Number.isInteger(code)) m.inputs.push({ side: t.side, code });
+      return { ok: true };
+    },
+    // Quick emotes during a duel (shown to both players). The AI rival sometimes answers.
+    'POST /api/pvp/emote': (body, u) => {
+      const t = own(u, body.ticket), m = t.match, e = Number(body.e);
+      if (!m || m.B.over || t.status !== 'playing' || !Number.isInteger(e) || e < 0 || e >= EMOTES) return { ok: false };
+      if (now() - (t.lastEmote || 0) < 1500 || (t.emotes || 0) >= 20) return { ok: false };
+      t.lastEmote = now(); t.emotes = (t.emotes || 0) + 1;
+      const data = { side: t.side, e, f: t.faction || null };
+      send(m.a, 'emote', data); send(m.b, 'emote', data);
+      if (m.ai && crypto.randomInt(100) < 45) {
+        setTimeout(() => { if (!m.B.over) send(m.a, 'emote', { side: 'enemy', e: crypto.randomInt(EMOTES - 1), f: null }); }, 900 + crypto.randomInt(900));
+      }
       return { ok: true };
     },
     'POST /api/pvp/ai': (body, u) => {

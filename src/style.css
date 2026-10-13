@@ -434,3 +434,57 @@ button:disabled { opacity: .45; cursor: default; }
 .wrow .wp.mood-moon, .wrow .wp.mood-bull { color: var(--green); }
 .wrow .wp.mood-bear, .wrow .wp.mood-crash { color: var(--red); }
 .wrow .wp.mood-calm { color: var(--muted); }
+/* ---------- community war: tabs, captain, goal, derby, prediction, territories, frames ---------- */
+.seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 4px; margin: 4px 0 12px; }
+.seg button { background: none; border-radius: 10px; padding: 9px 4px; font-weight: 700; font-size: 13px; color: var(--muted); }
+.seg button.on { background: var(--panel2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+.panel.glow { border-color: var(--gold); box-shadow: 0 0 22px -6px var(--gold); }
+.cry-now { margin-top: 8px; padding: 8px 12px; border-radius: 12px; background: rgba(255,197,49,.1); border: 1px solid rgba(255,197,49,.3); font-size: 13px; }
+.cries { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.cries .btn { padding: 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 13px; }
+.cries .btn small { font-size: 10px; font-weight: 700; opacity: .85; line-height: 1.2; }
+.derby-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.dside { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.dside b { font-size: 13px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dside span { font-weight: 900; font-size: 20px; color: var(--gold); }
+.dvs { font-weight: 900; color: var(--red); font-size: 18px; }
+.dbar { height: 10px; border-radius: 99px; background: #e0475a; overflow: hidden; margin-top: 8px; }
+.dbar i { display: block; height: 100%; background: linear-gradient(90deg, #ffd85a, #f2a700); }
+img.mini { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; object-position: 50% 20%; border: 2px solid var(--line); vertical-align: middle; }
+img.mini.big { width: 84px; height: 84px; border-width: 3px; border-color: var(--gold); margin-bottom: 8px; }
+.pick-row { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
+.pick-row button { background: none; padding: 0; }
+.pick-row img.mini { width: 100%; height: auto; aspect-ratio: 1; }
+.frames { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 4px; }
+.fr { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; font-weight: 700; color: var(--muted); opacity: .55; }
+.fr.got { opacity: 1; color: var(--text); }
+.fr small { font-size: 10px; color: var(--muted); }
+.fdot { width: 26px; height: 26px; border-radius: 8px; background: var(--panel2); border: 3px solid var(--fc, var(--line)); }
+.terr-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.terr { position: relative; background: var(--panel); border: 2px solid var(--line); border-radius: 12px; padding: 6px 2px 4px; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
+.terr small { font-size: 10px; color: var(--muted); font-weight: 700; }
+.terr img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; object-position: 50% 20%; }
+.terr .none { font-size: 24px; line-height: 40px; }
+.terr .tn { font-size: 10px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.terr.held { border-color: #e0475a; }
+.terr.mine { border-color: var(--gold); box-shadow: 0 0 14px -4px var(--gold); background: #2a2400; }
+.world-owner { margin-top: 4px; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; background: rgba(0,0,0,.35); border-radius: 99px; padding: 2px 10px 2px 4px; }
+.world-owner img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; object-position: 50% 20%; }
+.world-owner.mine { color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+/* milestone frames on the community card */
+.frame-bronze { --fc: #cd7f32; } .frame-silver { --fc: #d9dde6; } .frame-gold { --fc: #ffd700; } .frame-diamond { --fc: #7df9ff; }
+.card.frame-bronze, .card.frame-silver, .card.frame-gold, .card.frame-diamond,
+.hcard.frame-bronze, .hcard.frame-silver, .hcard.frame-gold, .hcard.frame-diamond { border-color: var(--fc) !important; box-shadow: 0 0 0 2px var(--fc), 0 0 18px -2px var(--fc); }
+.frame-diamond.card, .frame-diamond.hcard, .fdot.frame-diamond { animation: diamond 2.4s linear infinite; }
+@keyframes diamond { 0%, 100% { --fc: #7df9ff; } 50% { --fc: #e07dff; } }
+.war-head.frame-bronze img, .war-head.frame-silver img, .war-head.frame-gold img, .war-head.frame-diamond img { border-color: var(--fc); box-shadow: 0 0 18px -2px var(--fc); }
+/* duel emotes */
+.emote-bar { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(8px, env(safe-area-inset-bottom)); display: flex; gap: 6px; z-index: 6; background: rgba(0,0,0,.45); padding: 5px; border-radius: 99px; }
+.emote-bar button { width: 38px; height: 38px; border-radius: 50%; background: rgba(255,255,255,.08); font-size: 20px; padding: 0; display: grid; place-items: center; }
+.emote-bar img { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; object-position: 50% 20%; }
+.emote { position: absolute; left: 50%; font-size: 54px; transform: translateX(-50%); animation: emote 2.2s ease-out forwards; filter: drop-shadow(0 4px 10px rgba(0,0,0,.6)); }
+.emote img { width: 70px; height: 70px; border-radius: 50%; object-fit: cover; object-position: 50% 20%; border: 3px solid var(--gold); }
+.emote.opp { top: 24%; } .emote.me { bottom: 36%; }
+@keyframes emote { 0% { transform: translateX(-50%) scale(.3); opacity: 0; } 15% { transform: translateX(-50%) scale(1.15); opacity: 1; } 75% { opacity: 1; } 100% { transform: translateX(-50%) translateY(-30px) scale(.9); opacity: 0; } }
+#battle.has-emotes { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
+#battle.has-emotes .b-hint { display: none; }

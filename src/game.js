@@ -177,12 +177,15 @@ function renderMap() {
   }
   const foes = stageEnemies(S.sel);
   const first = S.sel === S.cleared;
-  const dip = ECON.marketCoinBonus(moods(), S.team), reward = ECON.stageCoins(S, S.sel, S.team, dip), factor = ECON.replayFactor(S, S.sel);
+  // Extra coins today: market dip, your community's territory and the captain's "gold" cry (the server freezes these per battle).
+  const dip = ECON.marketCoinBonus(moods(), S.team), C = ECON.COMMUNITY;
+  const terr = WAR && WAR.owners && S.faction && WAR.owners[w] === S.faction ? C.TERRITORY_BONUS : 0, gold = WAR && WAR.cry === 'gold' ? C.CRIES.gold.coins : 0;
+  const reward = ECON.stageCoins(S, S.sel, S.team, dip + terr + gold), factor = ECON.replayFactor(S, S.sel);
   $('#screen').innerHTML = `
     <div class="world" style="background:${W.bg}">
       <div class="world-head">
         <button class="arrow" data-w="${w - 1}" ${w === 0 ? 'disabled' : ''}>${rtl ? '▶' : '◀'}</button>
-        <div><div class="world-num">${t.worldOf(n(w + 1), n(WORLDS.length))}</div><div class="world-name">${worldName(w)}</div></div>
+        <div><div class="world-num">${t.worldOf(n(w + 1), n(WORLDS.length))}</div><div class="world-name">${worldName(w)}</div>${WAR && WAR.owners && WAR.owners[w] ? `<div class="world-owner ${WAR.owners[w] === S.faction ? 'mine' : ''}">🏰 <img src="${img(WAR.owners[w])}" alt="">${t.army(factionName(WAR.owners[w]))}</div>` : ''}</div>
         <button class="arrow" data-w="${w + 1}" ${nextOpen ? '' : 'disabled'}>${rtl ? '◀' : '▶'}</button>
       </div>
       <div class="stages">${nodes}</div>
@@ -192,7 +195,7 @@ function renderMap() {
     ${nextUnlock() ? `<div class="next-unlock">🔓 ${t.nextUnlock(t.feat[nextUnlock()], n(unlockWorld(nextUnlock())))}</div>` : ''}
     <div class="panel">
       <div class="row"><div class="h2" style="margin:0">${t.stage(stageLabel(S.sel))} ${isBossStage(S.sel) ? '· ' + t.boss : ''}</div>
-        <span class="tag gold">🪙 ${n(reward)}${first ? t.firstX2 : ` · 🔁 ${pct(factor * 100)}`}${dip ? ` · 📉 +${pct(dip * 100)}` : ''}</span></div>
+        <span class="tag gold">🪙 ${n(reward)}${first ? t.firstX2 : ` · 🔁 ${pct(factor * 100)}`}${dip ? ` · 📉 +${pct(dip * 100)}` : ''}${terr ? ` · 🏰 +${pct(terr * 100)}` : ''}${gold ? ` · 📯 +${pct(gold * 100)}` : ''}</span></div>
       <div class="muted" style="margin-top:8px">${t.enemyCards}</div>
       <div class="foes">${foes.map(f => `<div class="foe ${f.boss ? 'b' : ''}"><img src="${img(f.id)}" alt="${esc(f.name)}"></div>`).join('')}</div>
       <div class="row"><span class="muted">${t.yourTeam(n(teamPower(S.team)))}</span><button class="tag" id="edit-team">${t.editTeam}</button></div>
@@ -227,7 +230,7 @@ function renderHeroes() {
 function cardHtml(h) {
   const t = T(), lv = S.owned[h.id], rc = RARITY[h.rarity].color;
   const canUp = lv && lv < MAX_LEVEL && S.coins >= ECON.upgradePrice(S, h.id, lv);
-  return `<button class="card ${lv ? '' : 'locked'} ${S.holo[h.id] ? 'holo' : ''}" data-id="${h.id}" style="--rc:${rc}">
+  return `<button class="card ${lv ? '' : 'locked'} ${S.holo[h.id] ? 'holo' : ''} ${frameOf(h.id)}" data-id="${h.id}" style="--rc:${rc}">
     <img src="${img(h.id)}" alt="${h.name}" loading="lazy">
     ${lv ? `<span class="lv">${t.level(n(lv))}</span>` : '<span class="lock">🔒</span>'}
     <span class="rl">${ROLES[h.role].icon}</span>
@@ -457,7 +460,7 @@ const allUnits = () => [...BT.B.heroes, ...BT.B.enemies];
 function unitCard(u) {
   const mine = isMine(u);
   const rc = !mine ? (u.boss ? '#ff3b3b' : '#e0475a') : RARITY[HERO_BY_ID[u.id].rarity].color;
-  return `<div class="hcard ${mine ? 'hero' : 'enemy'} ${u.boss ? 'boss' : ''}" data-uid="${u.uid}" style="--rc:${rc}">
+  return `<div class="hcard ${mine ? 'hero' : 'enemy'} ${u.boss ? 'boss' : ''} ${mine ? frameOf(u.id) : ''}" data-uid="${u.uid}" style="--rc:${rc}">
     ${mine ? '<span class="ready">⚡</span>' : ''}${u.boss ? '<span class="crown">👑</span>' : ''}
     <img src="${img(u.id)}" alt=""><div class="status"></div>
     <div class="hc-name">${u.name}</div><div class="bar hp ${mine ? 'h' : ''}"><i></i><i class="sh" style="width:0"></i></div><div class="bar en"><i></i></div></div>`;
@@ -466,7 +469,7 @@ function unitCard(u) {
 // Draws the battle screen for the current BT. mine = my cards (bottom), theirs = opponent cards (top).
 function buildBattle({ title, bg, mine, theirs, oppLabel, myLabel, onTap, onAuto, showSpeed }) {
   const t = T(), el = $('#battle');
-  el.style.background = bg;
+  el.style.background = bg; el.classList.remove('has-emotes');
   el.innerHTML = `
     <div class="b-top">
       <button id="b-exit">✕</button>

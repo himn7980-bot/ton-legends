@@ -155,7 +155,10 @@ const tgScript = (user, startParam) => `
   const k0 = serverProfile(777).coins;
   await p1.click('[data-ai=easy]');
   await p1.waitForSelector('#battle:not([hidden]) .hcard', { timeout: 10000 });
-  await p1.waitForTimeout(4000); await p1.screenshot({ path: OUT + '/ai2-fight.png' });
+  await p1.waitForTimeout(3500);
+  await p1.click('[data-emo="1"]'); await p1.waitForSelector('.emote.me', { timeout: 5000 });
+  await p1.screenshot({ path: OUT + '/ai2-fight.png' });
+  console.log('✓ duel emote shown');
   await p1.waitForSelector('#pr-again', { timeout: 150000 });
   await p1.screenshot({ path: OUT + '/ai3-result.png' });
   const won = serverProfile(777).stats.aiWins || 0;
@@ -186,9 +189,11 @@ const tgScript = (user, startParam) => `
   await dismiss(p1);
   await p1.click('[data-tab=map]'); await p1.click('#to-war'); await p1.waitForSelector('#w-pick'); await p1.click('#w-pick');
   await p1.click('[data-fac=notcoin]'); await p1.click('#fac-ok');
-  await p1.waitForSelector('#w-rally', { timeout: 10000 }); await p1.waitForSelector('.wrow.me');
+  await p1.waitForSelector('#w-rally', { timeout: 10000 });
   assert.equal(serverProfile(777).faction, 'notcoin');
+  await p1.click('[data-wt=ranks]'); await p1.waitForSelector('.wrow.me');
   await p1.screenshot({ path: OUT + '/w5-war.png', fullPage: true });
+  await p1.click('[data-wt=week]'); await p1.waitForSelector('#w-rally');
   const gw = serverProfile(777).gems;
   await p1.click('#w-rally'); await p1.waitForFunction(() => window.__story, null, { timeout: 10000 });
   const story = await p1.evaluate(() => window.__story);
@@ -197,6 +202,25 @@ const tgScript = (user, startParam) => `
   await p1.waitForTimeout(500); assert.equal(serverProfile(777).gems, gw + 3, 'daily share reward');
   fs.writeFileSync(OUT + '/w6-story.jpg', Buffer.from(await (await fetch(story[0].replace(/^https?:\/\/[^/]+/, base))).arrayBuffer()));
   console.log('✓ community joined, war standings, story share card uploaded (+3 gems)');
+
+  // ---- territories, captain, daily goal, prediction ----
+  for (let i = 0; i < 5; i++) srv.war.onWin('777', 'stage', { stage: 3 }); // Notcoin holds world 1
+  for (let i = 0; i < 30; i++) srv.war.onWin('777', 'ai');                  // daily goal reached
+  srv.db.war.captains.notcoin = { uid: '777', name: 'Sara', pts: 50 };       // Sara is this week's captain
+  await p1.evaluate(async () => { await loadWar(); WAR_TAB = 'week'; show('war'); }); await p1.waitForSelector('[data-cry]');
+  await p1.click('[data-cry=might]'); await p1.waitForTimeout(400);
+  assert.equal(srv.db.war.cries.notcoin, 'might');
+  const gGoal = serverProfile(777).gems;
+  await p1.click('#w-goal'); await p1.waitForSelector('#gm-ok'); await p1.click('#gm-ok');
+  assert.equal(serverProfile(777).gems, gGoal + 5, 'daily goal reward');
+  if (await p1.$('[data-pred]')) { await p1.click('[data-pred=notcoin]'); await p1.click('#pd-yes'); await p1.waitForTimeout(300); assert.equal(srv.db.users['777'].pred.f, 'notcoin'); }
+  await p1.screenshot({ path: OUT + '/w7-week.png', fullPage: true });
+  await p1.click('[data-wt=map]'); await p1.waitForSelector('.terr.mine');
+  await p1.screenshot({ path: OUT + '/w8-territories.png', fullPage: true });
+  await p1.click('[data-tw="0"]'); await p1.waitForSelector('.world-owner.mine');
+  assert.match(await p1.textContent('.tag.gold'), /🏰/, 'territory bonus shown on the stage reward');
+  await p1.screenshot({ path: OUT + '/w9-map-owner.png' });
+  console.log('✓ captain picked a battle cry, daily goal claimed, territory held and shown on the map');
 
   // ---- Telegram BackButton still drives navigation ----
   await p2.click('[data-tab=heroes]'); await p2.waitForTimeout(150);
