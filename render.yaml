@@ -16,3 +16,6 @@ services:
         sync: false
       - key: ADMIN_IDS
         sync: false
+      # Market mood: hero=coingecko-id:SYMBOL for heroes whose token price drives their card (others use community activity)
+      - key: MARKET_TOKENS
+        value: notcoin=notcoin:NOT,dog=dogs-2:DOGS

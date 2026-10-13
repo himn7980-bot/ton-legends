@@ -2,7 +2,7 @@
 // Everything here degrades gracefully: outside Telegram or without the server, the game runs fully offline.
 const Online = (() => {
   const API = (window.TL_CONFIG && window.TL_CONFIG.api) || '';
-  const state = { server: false, bot: null, packs: [], profile: false, mint: {}, art: null };
+  const state = { server: false, bot: null, packs: [], profile: false, mint: {}, art: null, market: null };
   // Resolves once we know whether the server is reachable (so early taps don't race the profile sync).
   let markReady; const ready = new Promise(r => { markReady = r; }); setTimeout(() => markReady(), 6000);
 
@@ -43,10 +43,12 @@ const Online = (() => {
     if (!tg()) return state;
     try {
       const h = await call('health');
-      state.server = !!h.ok; state.bot = h.bot || null; state.packs = h.packs || []; state.mint = h.mint || {}; state.art = new Map(Object.entries(h.art || {}).map(([k, v]) => [+k, v]));
+      state.server = !!h.ok; state.bot = h.bot || null; state.packs = h.packs || []; state.mint = h.mint || {}; state.art = new Map(Object.entries(h.art || {}).map(([k, v]) => [+k, v])); state.market = h.market || null;
     } catch (e) { state.server = false; }
     return state;
   }
+  // Market mood changes slowly (the server refreshes it every 30 min).
+  async function refreshMarket() { try { const h = await call('health'); state.market = h.market || null; state.mint = h.mint || state.mint; } catch (e) {} return state.market; }
   async function hello() { if (!state.server) return null; try { return await call('hello', { startParam: startParam() }); } catch (e) { return null; } }
 
   let scoreTimer = null;
@@ -109,5 +111,5 @@ const Online = (() => {
   }
 
   return { state, ready, markReady: () => markReady(), tg, user, startParam, connect, hello, cloudLoad, cloudSave, submitScore, leaderboard, claim, buy,
-    inviteLink, share, loadProfile, act, pvp, clan, war, uploadShare, setNotify, stream, duelLink, shareDuel, shareClan };
+    inviteLink, share, loadProfile, act, pvp, clan, war, refreshMarket, uploadShare, setNotify, stream, duelLink, shareDuel, shareClan };
 })();

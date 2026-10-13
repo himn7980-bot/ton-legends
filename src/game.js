@@ -177,7 +177,7 @@ function renderMap() {
   }
   const foes = stageEnemies(S.sel);
   const first = S.sel === S.cleared;
-  const reward = ECON.stageCoins(S, S.sel, S.team), factor = ECON.replayFactor(S, S.sel);
+  const dip = ECON.marketCoinBonus(moods(), S.team), reward = ECON.stageCoins(S, S.sel, S.team, dip), factor = ECON.replayFactor(S, S.sel);
   $('#screen').innerHTML = `
     <div class="world" style="background:${W.bg}">
       <div class="world-head">
@@ -188,10 +188,11 @@ function renderMap() {
       <div class="stages">${nodes}</div>
     </div>
     ${warBanner()}
+    ${tickerHtml()}
     ${nextUnlock() ? `<div class="next-unlock">🔓 ${t.nextUnlock(t.feat[nextUnlock()], n(unlockWorld(nextUnlock())))}</div>` : ''}
     <div class="panel">
       <div class="row"><div class="h2" style="margin:0">${t.stage(stageLabel(S.sel))} ${isBossStage(S.sel) ? '· ' + t.boss : ''}</div>
-        <span class="tag gold">🪙 ${n(reward)}${first ? t.firstX2 : ` · 🔁 ${pct(factor * 100)}`}</span></div>
+        <span class="tag gold">🪙 ${n(reward)}${first ? t.firstX2 : ` · 🔁 ${pct(factor * 100)}`}${dip ? ` · 📉 +${pct(dip * 100)}` : ''}</span></div>
       <div class="muted" style="margin-top:8px">${t.enemyCards}</div>
       <div class="foes">${foes.map(f => `<div class="foe ${f.boss ? 'b' : ''}"><img src="${img(f.id)}" alt="${esc(f.name)}"></div>`).join('')}</div>
       <div class="row"><span class="muted">${t.yourTeam(n(teamPower(S.team)))}</span><button class="tag" id="edit-team">${t.editTeam}</button></div>
@@ -203,6 +204,7 @@ function renderMap() {
   document.querySelectorAll('.arrow').forEach(b => b.onclick = () => { S.world = +b.dataset.w; S.sel = -1; save(); renderMap(); });
   $('#edit-team').onclick = () => show('heroes');
   $('#to-war').onclick = () => show('war');
+  if ($('#ticker')) $('#ticker').onclick = marketModal;
   $('#go').onclick = () => startBattle(S.sel);
 }
 
@@ -236,7 +238,7 @@ function cardHtml(h) {
 function heroModal(id) {
   const t = T(), h = HERO_BY_ID[id], ht = heroText(id), lv = S.owned[id], R = RARITY[h.rarity];
   // Stats as they fight for you (your community's card and fusions with it are stronger).
-  const mine = factionMult(id, S.faction), boosted = l => { const x = heroStats(id, l); return { ...x, hp: Math.round(x.hp * mine), atk: Math.round(x.atk * mine) }; };
+  const mine = factionMult(id, S.faction) * marketMult(id, ECON.marketBoosts(moods())), boosted = l => { const x = heroStats(id, l); return { ...x, hp: Math.round(x.hp * mine), atk: Math.round(x.atk * mine) }; };
   const s = boosted(lv || 1);
   const cost = lv ? ECON.upgradePrice(S, id, lv) : 0, inTeam = S.team.includes(id);
   const next = lv && lv < MAX_LEVEL ? boosted(lv + 1) : null;
@@ -245,6 +247,7 @@ function heroModal(id) {
       ${S.holo[id] ? `<span class="holo-tag">${t.holo}</span>` : ''}${S.serials[id] ? `<span class="serial big-serial">#${n(S.serials[id])}/${n(FUSION_RULES[h.parts.length].supply)}</span>` : ''}</div>
     <div class="row" style="margin-top:12px"><div><div class="big latin" style="font-size:26px">${h.name}</div><div class="muted">${ht.title}</div></div>
       <div class="end"><span class="tag" style="color:${R.color}">${L().rarity[h.rarity]}</span><div class="muted" style="margin-top:6px">${ROLES[h.role].icon} ${L().role[h.role]}</div></div></div>
+    ${moodBadge(id)}
     ${mine > 1 ? `<div class="fac-badge">${id === S.faction ? `${t.yourCommunity} · ${t.factionPerkShort}` : `🚩 ${t.army(factionName(S.faction))} · +${n(Math.round((mine - 1) * 100))}%`}</div>` : ''}
     <div class="stats">
       <div>${t.hp}<b>${n(s.hp)}</b>${next ? `<span style="color:var(--green)">+${n(next.hp - s.hp)}</span>` : ''}</div>
@@ -499,7 +502,7 @@ async function startBattle(idx) {
   if (BT) return;
   const r = await tryAct({ type: 'stageStart', stage: idx });
   if (!r) return;
-  const t = T(), B = createBattle(S.team, S.owned, idx, r.seed, S.faction || null);
+  const t = T(), B = createBattle(S.team, S.owned, idx, r.seed, S.faction || null, r.market || null);
   // Taps are queued and applied at the next fixed tick, and recorded as [tick, code] so the server can replay the fight.
   BT = { mode: 'stage', B, idx, mySide: 'hero', inputs: [], queue: S.auto ? [-1] : [], acc: 0, last: performance.now(), raf: 0, ended: false };
   buildBattle({

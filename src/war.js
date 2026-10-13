@@ -137,3 +137,38 @@ async function shareCard(kind, id = S.faction) {
   const r = await tryAct({ type: 'share' });
   if (r && r.gems) toast(t.shared(n(r.gems)));
 }
+
+// ---------- market mood ----------
+const moods = () => (Online.state.market && Online.state.market.moods) || {};
+const MOOD_ICON = { moon: '🚀', bull: '🟢', calm: '😴', bear: '🔴', crash: '💥' };
+const fmtChange = c => `${c > 0 ? '+' : c < 0 ? '−' : ''}${pct(Math.abs(c) >= 10 ? Math.round(Math.abs(c)) : Math.round(Math.abs(c) * 10) / 10)}`;
+// Ticker under the war banner: the heroes with the biggest moves today (with a token first).
+function tickerHtml() {
+  const m = moods(), ids = Object.keys(m);
+  if (!ids.length) return '';
+  ids.sort((a, b) => (m[b].src === 'token') - (m[a].src === 'token') || Math.abs(m[b].change) - Math.abs(m[a].change));
+  return `<button class="ticker" id="ticker"><span class="tk-title">📈</span><div class="tk-row">${ids.slice(0, 8).map(id => {
+    const md = ECON.moodOf(m[id].change);
+    return `<span class="tk ${md.key}"><img src="${img(id)}" alt="">${m[id].sym || factionName(id)} <b>${MOOD_ICON[md.key]} ${fmtChange(m[id].change)}</b></span>`;
+  }).join('')}</div></button>`;
+}
+function moodBadge(id) {
+  const t = T(), m = moods(), h = HERO_BY_ID[id];
+  const ids = h && h.fusion ? h.parts : [id];
+  const hits = ids.map(x => ({ x, md: ECON.moodOf(m[x] && m[x].change) })).filter(o => o.md.key !== 'calm' && m[o.x]);
+  if (!hits.length) return '';
+  return hits.map(({ x, md }) => `<div class="mood-badge ${md.key}">${MOOD_ICON[md.key]} ${t.mood[md.key]}${ids.length > 1 ? ` (${factionName(x)})` : ''} · ${fmtChange(m[x].change)} · ${t.moodFx[md.key]}</div>`).join('');
+}
+async function marketModal() {
+  const t = T(), m = moods(), at = Online.state.market && Online.state.market.at;
+  const ids = BASE_HEROES.map(h => h.id).sort((a, b) => ((m[b] || {}).change || 0) - ((m[a] || {}).change || 0));
+  openModal(`<div class="big center" style="font-size:22px">${t.marketTitle}</div>
+    <p class="muted small center">${t.marketNote}</p>
+    <div class="mood-legend">${ECON.MOODS.map(md => `<div class="mood-badge ${md.key}">${MOOD_ICON[md.key]} ${t.mood[md.key]} · ${t.moodFx[md.key]}</div>`).join('')}</div>
+    <div class="panel board" style="margin-top:10px">${ids.map(id => { const x = m[id] || { change: 0, src: 'activity' }, md = ECON.moodOf(x.change);
+      return `<div class="wrow"><img src="${img(id)}" alt=""><div class="wb"><div class="wn">${factionName(id)}${x.sym ? ` <span class="muted small">$${x.sym}</span>` : ''}</div>
+        <div class="muted small">${x.src === 'token' ? t.srcToken(x.sym) : t.srcActivity}</div></div>
+        <span class="wp mood-${md.key}">${MOOD_ICON[md.key]} ${fmtChange(x.change)}</span></div>`; }).join('')}</div>
+    ${at ? `<p class="muted small center">${t.marketUpdated(n(Math.max(0, Math.round((Date.now() - at) / 60e3))))}</p>` : ''}
+    <button class="btn wide" id="mk-ok">${t.close}</button>`, box => box.querySelector('#mk-ok').onclick = closeModal);
+}

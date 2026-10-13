@@ -34,6 +34,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 (async () => {
   await new Promise(r => fake.listen(0, r));
   const dataFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tl-')), 'db.json');
+  // fake CoinGecko: NOT +12% (moon), DOGS −4% (bear)
+  const priceCalls = [];
+  const cg = http.createServer((req, res) => { priceCalls.push(req.url); res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ notcoin: { usd: 0.0042, usd_24h_change: 12.3 }, 'dogs-2': { usd: 0.0005, usd_24h_change: -4.1 } })); });
+  await new Promise(r => cg.listen(0, r));
+  process.env.MARKET_API = `http://127.0.0.1:${cg.address().port}`;
   Object.assign(process.env, { ADMIN_IDS: '111', ART_DIR: path.join(path.dirname(dataFile), 'art'), BOT_TOKEN: TOKEN, WEBAPP_URL: 'https://game.example', PORT: '0', DATA_FILE: dataFile, TELEGRAM_API: `http://127.0.0.1:${fake.address().port}` });
   const srv = require('./server.js');
   srv.server.listen(0);
@@ -346,6 +352,27 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   r = await post('/api/act', { initData: initData(alice), action: { type: 'share' } }); assert.equal(r.body.result.gems, 3);
   r = await post('/api/act', { initData: initData(alice), action: { type: 'share' } }); assert.equal(r.body.result.gems, 0, 'share reward once a day');
   console.log('   share card uploaded and served; daily share reward');
+
+  // ---------- market mood ----------
+  await srv.market.refresh();
+  assert.match(priceCalls[0], /ids=notcoin%2Cdogs-2/);
+  r = await fetch(base + '/api/health').then(x => x.json());
+  assert.equal(r.market.moods.notcoin.change, 12.3); assert.equal(r.market.moods.notcoin.sym, 'NOT'); assert.equal(r.market.moods.dog.src, 'token');
+  assert.equal(r.market.moods.pengu.src, 'activity');
+  // Alice's team has Notcoin (moon: +10% power) and telegram.dog (bear: +20% coins)
+  Object.assign(srv.db.users['111'].profile.owned, { dog: 5 });
+  srv.db.users['111'].profile.team = ['notcoin', 'dog', 'pinkbull'];
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'stageStart', stage: 0 } });
+  assert.deepEqual(r.body.result.market, { notcoin: 1.1 }); assert.equal(r.body.result.dip, 0.2);
+  assert.equal(srv.db.users['111'].profile.pending.dip, 0.2);
+  // community activity drives heroes without a token: yesterday 300 points vs 100 the day before → +200% (capped at +50)
+  const ECONm = require('../src/economy.js');
+  srv.db.market.activity[ECONm.day(Date.now(), -1)] = { pengu: 300 }; srv.db.market.activity[ECONm.day(Date.now(), -2)] = { pengu: 100 };
+  srv.market.compute();
+  assert.equal(srv.market.moods().pengu.change, 50); assert.equal(ECONm.moodOf(50).key, 'moon');
+  assert.deepEqual(require('./market.js').parseTokens('paws=paws-x:PAWS, nope=x, f1=y'), { paws: { cg: 'paws-x', sym: 'PAWS' } });
+  console.log('   market mood: token prices + community activity → battle boosts and dip bonus');
+  cg.close();
 
   r = await fetch(base + '/api/status').then(x => x.json());
   assert.equal(r.webappUrlOk, true); assert.ok(r.updatesHandled >= 6); assert.equal(r.lastHandleError, null);

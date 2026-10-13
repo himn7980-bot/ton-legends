@@ -417,3 +417,20 @@ button:disabled { opacity: .45; cursor: default; }
 .war-banner b { color: var(--gold); font-size: 13px; white-space: nowrap; }
 .fac-badge { margin-top: 10px; padding: 8px 12px; border-radius: 12px; background: rgba(255,197,49,.12); border: 1px solid rgba(255,197,49,.3); color: var(--gold); font-weight: 700; font-size: 13px; }
 .card .fac-flag { position: absolute; top: 28px; left: 5px; font-size: 15px; filter: drop-shadow(0 1px 2px #000); }
+/* ---------- market mood ---------- */
+.ticker { width: 100%; margin-top: 8px; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid var(--line); overflow: hidden; }
+.tk-row { display: flex; gap: 12px; overflow-x: auto; scrollbar-width: none; flex: 1; min-width: 0; }
+.tk-row::-webkit-scrollbar { display: none; }
+.tk { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; font-size: 12px; font-weight: 700; color: var(--muted); }
+.tk img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; object-position: 50% 20%; }
+.tk b, .mood-moon, .mood-bull { color: var(--green); }
+.tk.calm b, .mood-calm { color: var(--muted); }
+.tk.bear b, .tk.crash b, .mood-bear, .mood-crash { color: var(--red); }
+.mood-badge { margin-top: 8px; padding: 8px 12px; border-radius: 12px; font-weight: 700; font-size: 13px; background: rgba(75,227,122,.1); border: 1px solid rgba(75,227,122,.3); color: var(--green); }
+.mood-badge.bear, .mood-badge.crash { background: rgba(255,77,94,.1); border-color: rgba(255,77,94,.3); color: #ff8a96; }
+.mood-badge.calm { background: rgba(255,255,255,.04); border-color: var(--line); color: var(--muted); }
+.mood-legend { display: grid; gap: 0; }
+.mood-legend .mood-badge { margin-top: 6px; }
+.wrow .wp.mood-moon, .wrow .wp.mood-bull { color: var(--green); }
+.wrow .wp.mood-bear, .wrow .wp.mood-crash { color: var(--red); }
+.wrow .wp.mood-calm { color: var(--muted); }

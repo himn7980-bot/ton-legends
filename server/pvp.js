@@ -16,7 +16,7 @@ const roomCode = () => Array.from(crypto.randomBytes(6), b => 'ABCDEFGHJKLMNPQRS
 const PVP_WIN_GEMS = 2;
 const AI_NAMES = ['Neon Ronin', 'Frost Byte', 'Crypto Kraken', 'Shadow Bot', 'Lucky Lynx', 'Iron Gecko', 'Moon Mantis', 'Pixel Paladin', 'Turbo Tiger', 'Volt Viper'];
 
-module.exports = function createArena({ db, persist, notify = () => {}, onPoints = () => {} }) {
+module.exports = function createArena({ db, persist, notify = () => {}, onPoints = () => {}, market = () => null }) {
   const tickets = new Map();   // ticket id (secret) -> ticket
   const queues = new Map();    // stake -> waiting tickets
   const rooms = new Map();     // invite code -> waiting host ticket
@@ -86,7 +86,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
 
   function startMatch(a, b) {
     unlist(a); unlist(b);
-    const B = E.createPvpBattle(a.team, a.levels, b.team, b.levels, crypto.randomInt(2 ** 32), a.faction || null, b.faction || null);
+    const B = E.createPvpBattle(a.team, a.levels, b.team, b.levels, crypto.randomInt(2 ** 32), a.faction || null, b.faction || null, market());
     const m = { id: rid(8), ai: a.aiLevel || null, a, b, B, stake: a.stake, startAt: now() + COUNTDOWN_MS, inputs: [], ev: [], timer: null };
     a.side = 'hero'; b.side = 'enemy';
     for (const t of [a, b]) { t.match = m; t.status = 'playing'; send(t, 'match', matchInfo(m, t)); }

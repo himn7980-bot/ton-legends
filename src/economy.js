@@ -3,7 +3,7 @@
 (function (root, factory) {
   if (typeof module !== 'undefined') module.exports = factory(require('./engine.js'));
   // In the browser engine.js declares top-level consts (not window properties), so pass them explicitly.
-  else root.ECON = factory({ STAGES_PER_WORLD, STARTERS, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, LEGACY_FUSION_IDS, teamError, duosWithin, factionMult, HERO_BY_ID, MAX_LEVEL, TOTAL_STAGES, COIN_BONUS, heroStats, upgradeCost, stageReward, replayStage });
+  else root.ECON = factory({ STAGES_PER_WORLD, STARTERS, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, LEGACY_FUSION_IDS, teamError, duosWithin, factionMult, marketMult, HERO_BY_ID, MAX_LEVEL, TOTAL_STAGES, COIN_BONUS, heroStats, upgradeCost, stageReward, replayStage });
 })(typeof self !== 'undefined' ? self : this, function (E) {
   const CHESTS = {
     basic: { cost: 300, rates: { C: 55, R: 32, E: 11, L: 2 } },
@@ -22,6 +22,25 @@
   const needUnlock = (p, key) => { if (!unlocked(p, key)) fail('locked_feature'); };
   // AI duels: no stake; the first AI_DAILY wins each day pay a reward based on progress.
   const AI_DAILY = 5;
+  // Market mood: each hero's 24h change (its token's price, or its community's activity when it has no token)
+  // sets today's mood. Up days make the card stronger; down days pay extra stage coins while it is in your team.
+  const MOODS = [
+    { key: 'moon', min: 10, power: 1.10, coins: 0 },
+    { key: 'bull', min: 2, power: 1.05, coins: 0 },
+    { key: 'calm', min: -2, power: 1, coins: 0 },
+    { key: 'bear', min: -10, power: 1, coins: 0.2 },
+    { key: 'crash', min: -Infinity, power: 1, coins: 0.4 },
+  ];
+  const moodOf = change => (typeof change === 'number' && isFinite(change) ? MOODS.find(m => change >= m.min) : MOODS[2]);
+  // { id: power multiplier } for the heroes having a good day (what battles use).
+  const marketBoosts = moods => {
+    const out = {};
+    for (const [id, m] of Object.entries(moods || {})) { const md = moodOf(m && m.change); if (md.power > 1) out[id] = md.power; }
+    return out;
+  };
+  // Extra stage coins: the best "dip bonus" among the team's cards (fusions count their parts).
+  const marketCoinBonus = (moods, team) => Math.max(0, ...team.flatMap(id => (E.HERO_BY_ID[id] && E.HERO_BY_ID[id].fusion ? E.HERO_BY_ID[id].parts : [id]))
+    .map(id => moodOf(moods && moods[id] && moods[id].change).coins));
   // Communities: joining is free; switching costs gems and is allowed once a week. Your community's card is
   // cheaper to upgrade and drops more often from chests. Sharing the game once a day pays a few gems.
   const FACTION_SWITCH_GEMS = 100, FACTION_SWITCH_DAYS = 7, FACTION_UPGRADE_DISCOUNT = 0.25, FACTION_CHEST_WEIGHT = 3, SHARE_GEMS = 3;
@@ -92,7 +111,7 @@
   // First clear pays ×2. Every win on an already-cleared stage pays half of the previous replay (50%, 25%, 12.5%…),
   // so farming old stages dries up and progress comes from new stages, the idle chest, quests and the arena.
   const replayFactor = (p, idx) => (idx < p.cleared ? Math.pow(0.5, (p.replays[idx] || 0) + 1) : 2);
-  const stageCoins = (p, idx, team) => Math.floor(E.stageReward(idx) * (1 + coinBonus(team)) * replayFactor(p, idx));
+  const stageCoins = (p, idx, team, dip = 0) => Math.floor(E.stageReward(idx) * (1 + coinBonus(team) + dip) * replayFactor(p, idx));
   const teamPower = (p, team = p.team) => team.reduce((sum, id) => { const s0 = E.heroStats(id, p.owned[id] || 1), k = E.factionMult(id, p.faction), s = { hp: s0.hp * k, atk: s0.atk * k, spd: s0.spd }; return sum + s.hp / 10 + s.atk / s.spd * 2; }, 0);
 
   function claimable(p, now) {
@@ -242,18 +261,21 @@
         if (idx < 0 || idx >= E.TOTAL_STAGES || idx > p.cleared) fail('locked');
         if (!p.team.length) fail('bad_team');
         const seed = Math.floor(rng() * 2 ** 32) >>> 0;
-        p.pending = { stage: idx, seed, team: [...p.team], levels: Object.fromEntries(p.team.map(id => [id, p.owned[id]])), faction: p.faction || null, at: now };
-        return { seed };
+        // Today's market is frozen into the battle so the replay (and the coins) match what the player saw.
+        const boosts = marketBoosts(ctx.market), market = Object.fromEntries(Object.entries(boosts).filter(([id]) => p.team.some(t => t === id || (E.HERO_BY_ID[t].fusion && E.HERO_BY_ID[t].parts.includes(id)))));
+        p.pending = { stage: idx, seed, team: [...p.team], levels: Object.fromEntries(p.team.map(id => [id, p.owned[id]])), faction: p.faction || null,
+          market, dip: marketCoinBonus(ctx.market, p.team), at: now };
+        return { seed, market, dip: p.pending.dip };
       }
       case 'stageEnd': {
         const pd = p.pending;
         if (!pd) fail('no_battle');
         p.pending = null;
-        const r = E.replayStage(pd.team, pd.levels, pd.stage, pd.seed, a.inputs, pd.faction || null);
+        const r = E.replayStage(pd.team, pd.levels, pd.stage, pd.seed, a.inputs, pd.faction || null, pd.market || null);
         if (r.skills) track(p, 'skills', r.skills, now);
         if (r.result !== 'win') { p.stats.losses++; return { result: r.result, stage: pd.stage }; }
         const first = pd.stage === p.cleared;
-        const coins = stageCoins(p, pd.stage, pd.team);
+        const coins = stageCoins(p, pd.stage, pd.team, pd.dip || 0);
         if (first) p.cleared = Math.min(E.TOTAL_STAGES, p.cleared + 1);
         else p.replays[pd.stage] = (p.replays[pd.stage] || 0) + 1;
         p.coins += coins;
@@ -281,6 +303,6 @@
     return p;
   }
 
-  return { FACTION_SWITCH_GEMS, FACTION_SWITCH_DAYS, FACTION_UPGRADE_DISCOUNT, FACTION_CHEST_WEIGHT, SHARE_GEMS, upgradePrice, UNLOCKS, unlocked, START_GEMS, DAY7_GEMS, WARP_COST, WARP_HOURS, gemRate, achGems, AI_DAILY, AI_LEVELS, aiLeft, aiReward, migrateIds, HOLO_CHANCE, CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
+  return { MOODS, moodOf, marketBoosts, marketCoinBonus, FACTION_SWITCH_GEMS, FACTION_SWITCH_DAYS, FACTION_UPGRADE_DISCOUNT, FACTION_CHEST_WEIGHT, SHARE_GEMS, upgradePrice, UNLOCKS, unlocked, START_GEMS, DAY7_GEMS, WARP_COST, WARP_HOURS, gemRate, achGems, AI_DAILY, AI_LEVELS, aiLeft, aiReward, migrateIds, HOLO_CHANCE, CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
     dqReward, dailyCanClaim, dailyNext, afkRate, afkAmount, achTier, coinBonus, replayFactor, stageCoins, teamPower, claimable, act, importLocal };
 });

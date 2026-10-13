@@ -33,10 +33,13 @@ const tgScript = (user, startParam) => `
 
 (async () => {
   await new Promise(r => fake.listen(0, r));
+  // fake CoinGecko: NOT +12.3% (moon), DOGS −4.1% (bear)
+  const cg = http.createServer((req, res) => { res.writeHead(200); res.end(JSON.stringify({ notcoin: { usd: 0.004, usd_24h_change: 12.3 }, 'dogs-2': { usd: 0.0005, usd_24h_change: -4.1 } })); });
+  await new Promise(r => cg.listen(0, r)); process.env.MARKET_API = `http://127.0.0.1:${cg.address().port}`;
   Object.assign(process.env, { BOT_TOKEN: TOKEN, WEBAPP_URL: 'https://x', DATA_FILE: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tle-')), 'db.json'), TELEGRAM_API: `http://127.0.0.1:${fake.address().port}` });
   const srv = require('../server/server.js');
   srv.server.listen(0); await new Promise(r => srv.server.once('listening', r));
-  await srv.setupBot(); srv.pollLoop();
+  await srv.setupBot(); srv.pollLoop(); await srv.market.refresh();
   const base = `http://127.0.0.1:${srv.server.address().port}`;
 
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch());
@@ -54,15 +57,23 @@ const tgScript = (user, startParam) => `
   }
   const ECON = require('../src/economy.js');
   const serverProfile = uid => srv.db.users[String(uid)].profile;
-  const dismiss = async p => { for (let i = 0; i < 4; i++) { if (await p.$('#modal:not([hidden])')) { await p.click('#m-close'); await p.waitForTimeout(250); } } };
+  // help → community picker → daily reward (the last one appears ~0.4 s after the picker closes)
+  const dismiss = async p => { for (let i = 0; i < 6; i++) { await p.waitForTimeout(500); if (await p.$('#modal:not([hidden])')) await p.click('#m-close'); } };
 
   // ---- player 1: profile, verified stage wins, purchase ----
   const sara = { id: 777, first_name: 'Sara' };
   const p1 = await player(sara);
   await dismiss(p1);
+  // Notcoin is "to the moon" today: the client must build the battle with the same +10% the server replays with
+  srv.db.users['777'].profile.owned.notcoin = 1; srv.db.users['777'].profile.team = ['notcoin', 'pinkbull', 'egor', 'gramcat', 'babyshark'];
+  await p1.evaluate(async () => { Object.assign(S, await Online.loadProfile(null)); save(); refresh(); });
+  assert.ok(await p1.$('#ticker'), 'market ticker on the map'); assert.match(await p1.textContent('#ticker'), /NOT.*12/);
+  await p1.screenshot({ path: OUT + '/m1-ticker.png' });
+  await p1.click('#ticker'); await p1.waitForSelector('#mk-ok'); await p1.screenshot({ path: OUT + '/m2-market.png' }); await p1.click('#mk-ok');
   await p1.evaluate(() => { S.auto = true; S.speed = 3; save(); });
   for (let i = 0; i < 2; i++) { await p1.click('#go'); await p1.waitForSelector('#r-map', { timeout: 60000 }); await p1.click('#r-map'); }
-  assert.equal(serverProfile(777).cleared, 2, 'server verified both stage wins');
+  assert.equal(serverProfile(777).cleared, 2, 'server verified both stage wins (with the market boost)');
+  assert.deepEqual(await p1.evaluate(() => BT === null), true);
   assert.equal(await p1.evaluate(() => S.coins), serverProfile(777).coins, 'client shows server coins');
   console.log('✓ stage wins verified by the server replay; coins', serverProfile(777).coins);
   // Sara reaches world 5: chests, exchange, PvP, AI rival and clans unlock
@@ -194,5 +205,5 @@ const tgScript = (user, startParam) => `
   console.log('✓ Telegram BackButton');
 
   console.log('errors:', errs.length ? errs : 'none');
-  await b.close(); srv.stop(); fake.close(); process.exit(errs.length ? 1 : 0);
+  await b.close(); srv.stop(); fake.close(); cg.close(); process.exit(errs.length ? 1 : 0);
 })().catch(e => { console.error('✗', e.message); process.exit(1); });

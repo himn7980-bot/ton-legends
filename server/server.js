@@ -18,6 +18,7 @@ const createArena = require('./pvp.js');
 const createClans = require('./clans.js');
 const createWar = require('./war.js');
 const createNotifier = require('./notify.js');
+const createMarket = require('./market.js');
 const BOT_TEXT = require('./bot-text.js');
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
@@ -380,9 +381,13 @@ const clans = createClans({ db, persist, profileOut: u => (u.profile ? ECON.pick
 const notifier = createNotifier({ db, persist, tg, webappUrl: () => WEBAPP_URL, logErr });
 const SHARE_DIR = path.join(path.dirname(DATA_FILE), 'share');
 const war = createWar({ db, persist, weekKey: clans.weekKey, shareDir: SHARE_DIR, profileOut: u => (u.profile ? ECON.pickKeys(u.profile) : null), onWeekEnd: last => notifier.weekEnded(last) });
-// Clan and community-war points come from the same wins.
-const addPoints = (uid, pts) => { clans.addPoints(uid, pts); war.addPoints(uid, pts); };
-const arena = createArena({ db, persist, onPoints: addPoints, notify: (uid, end) => {
+const market = createMarket({ db, persist, api: (process.env.MARKET_API || 'https://api.coingecko.com/api/v3').replace(/\/$/, ''), logErr });
+// Clan and community-war points come from the same wins (and feed the community activity behind the market mood).
+const addPoints = (uid, pts) => {
+  clans.addPoints(uid, pts); war.addPoints(uid, pts);
+  const u = db.users[uid]; if (u && u.profile) market.addActivity(u.profile.faction, pts);
+};
+const arena = createArena({ db, persist, onPoints: addPoints, market: () => ECON.marketBoosts(market.moods()), notify: (uid, end) => {
   const u = db.users[uid];
   const L = tx(u && u.lang);
   if (end.result === 'cancelled') return;
@@ -390,8 +395,9 @@ const arena = createArena({ db, persist, onPoints: addPoints, notify: (uid, end)
 } });
 
 const routes = {
-  'GET /api/health': () => ({ ok: true, bot: BOT_USERNAME, packs: PACKS, mint: db.mint || {}, art: artVersions() }),
-  'GET /api/status': () => ({ ...diag, bot: BOT_USERNAME, users: Object.keys(db.users).length, node: process.version }),
+  'GET /api/health': () => ({ ok: true, bot: BOT_USERNAME, packs: PACKS, mint: db.mint || {}, art: artVersions(), market: { at: db.market.at, moods: market.moods() } }),
+  'GET /api/status': () => ({ ...diag, bot: BOT_USERNAME, users: Object.keys(db.users).length, node: process.version,
+    market: { tokens: market.tokens, prices: db.market.prices, updated: db.market.at ? new Date(db.market.at).toISOString() : null } }),
   'POST /api/hello': (body, u) => {
     applyReferral(u, body.startParam);
     // A friend's invite suggests their community to the newcomer.
@@ -406,7 +412,7 @@ const routes = {
   },
   'POST /api/act': (body, u) => {
     if (!u.profile) throw Object.assign(new Error('no_profile'), { code: 400 });
-    const result = ECON.act(u.profile, body.action, { now: Date.now(), rng, mint });
+    const result = ECON.act(u.profile, body.action, { now: Date.now(), rng, mint, market: market.moods() });
     payReferral(u);
     if (body.action && body.action.type === 'stageEnd' && result && result.result === 'win' && result.first) addPoints(u.id, 2);
     return { profile: profileOut(u), result };
@@ -480,7 +486,8 @@ async function start() {
   server.listen(PORT, () => console.log(`TON Legends server on :${PORT}`));
   await setupBot();
   pollLoop();
+  market.refresh();
 }
 
 if (require.main === module) start();
-module.exports = { notifier, war, flushDb, server, verifyInitData, handleUpdate, pollLoop, setupBot, db, PACKS, stop: () => { polling = false; arena.stop(); notifier.stop(); server.close(); } };
+module.exports = { market, notifier, war, flushDb, server, verifyInitData, handleUpdate, pollLoop, setupBot, db, PACKS, stop: () => { polling = false; arena.stop(); notifier.stop(); market.stop(); server.close(); } };
