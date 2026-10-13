@@ -58,7 +58,7 @@ const Online = (() => {
   async function leaderboard() { if (!state.server) return null; try { return await call('leaderboard', {}); } catch (e) { return null; } }
   async function claim() { if (!state.server) return { coins: 0 }; try { return await call('claim', {}); } catch (e) { return { coins: 0 }; } }
   // Server-authoritative economy: the server profile replaces the local one while online.
-  async function loadProfile(local) { const r = await call('profile', { local }); state.profile = true; return r.profile; }
+  async function loadProfile(local) { const r = await call('profile', { local }); state.profile = true; state.notify = r.notify !== false; return r.profile; }
   const act = action => call('act', { action });
   // Arena (PvP): matchmaking/room calls, plus a live event stream for the duel.
   const pvp = (op, body) => call('pvp/' + op, body || {});
@@ -70,6 +70,9 @@ const Online = (() => {
     return es;
   }
   const clan = (op, body) => call('clan/' + op, body || {});
+  const war = (op, body) => call('war/' + op, body || {});
+  const uploadShare = image => call('share', { image });
+  const setNotify = on => call('notify', { on });
   const duelLink = code => (state.bot ? `https://t.me/${state.bot}?startapp=duel_${code}` : null);
   function shareClan(id, text) {
     const w = tg(); if (!state.bot || !w) return false;
@@ -106,5 +109,5 @@ const Online = (() => {
   }
 
   return { state, ready, markReady: () => markReady(), tg, user, startParam, connect, hello, cloudLoad, cloudSave, submitScore, leaderboard, claim, buy,
-    inviteLink, share, loadProfile, act, pvp, clan, stream, duelLink, shareDuel, shareClan };
+    inviteLink, share, loadProfile, act, pvp, clan, war, uploadShare, setNotify, stream, duelLink, shareDuel, shareClan };
 })();

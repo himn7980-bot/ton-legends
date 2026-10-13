@@ -28,7 +28,7 @@ const tgScript = (user, startParam) => `
     BackButton: { show(){ window.__bb = true; }, hide(){ window.__bb = false; }, onClick(cb){ window.__bbcb = cb; } },
     enableClosingConfirmation(){}, disableClosingConfirmation(){},
     CloudStorage: { setItem(k, v, cb){ cb && cb(null, true); }, getItem(k, cb){ cb(null, ''); } },
-    openTelegramLink(u){ window.__shared = u; },
+    openTelegramLink(u){ window.__shared = u; }, shareToStory(url, o){ window.__story = [url, o]; },
     openInvoice(link, cb){ window.__invoice = link; fetch('/__pay').finally(() => setTimeout(() => cb('paid'), 300)); } } };`;
 
 (async () => {
@@ -170,6 +170,22 @@ const tgScript = (user, startParam) => `
   await p1.click('#m-close').catch(() => {}); await p1.click('[data-tab=rank]'); await p1.click('#to-clan'); await p1.waitForSelector('.crow');
   await p1.screenshot({ path: OUT + '/c3-leader.png', fullPage: true });
   console.log('✓ clan created, invite link opened, member joined');
+
+  // ---- community war: Sara joins Notcoin from the map banner, rallies with a story ----
+  await dismiss(p1);
+  await p1.click('[data-tab=map]'); await p1.click('#to-war'); await p1.waitForSelector('#w-pick'); await p1.click('#w-pick');
+  await p1.click('[data-fac=notcoin]'); await p1.click('#fac-ok');
+  await p1.waitForSelector('#w-rally', { timeout: 10000 }); await p1.waitForSelector('.wrow.me');
+  assert.equal(serverProfile(777).faction, 'notcoin');
+  await p1.screenshot({ path: OUT + '/w5-war.png', fullPage: true });
+  const gw = serverProfile(777).gems;
+  await p1.click('#w-rally'); await p1.waitForFunction(() => window.__story, null, { timeout: 10000 });
+  const story = await p1.evaluate(() => window.__story);
+  assert.match(story[0], /\/share\/777\.jpg\?v=/); assert.match(story[1].widget_link.url, /startapp=ref_777/);
+  const img = await fetch(story[0].replace(/^https?:\/\/[^/]+/, base)); assert.equal(img.status, 200); assert.ok((await img.arrayBuffer()).byteLength > 20000, 'share card image drawn');
+  await p1.waitForTimeout(500); assert.equal(serverProfile(777).gems, gw + 3, 'daily share reward');
+  fs.writeFileSync(OUT + '/w6-story.jpg', Buffer.from(await (await fetch(story[0].replace(/^https?:\/\/[^/]+/, base))).arrayBuffer()));
+  console.log('✓ community joined, war standings, story share card uploaded (+3 gems)');
 
   // ---- Telegram BackButton still drives navigation ----
   await p2.click('[data-tab=heroes]'); await p2.waitForTimeout(150);

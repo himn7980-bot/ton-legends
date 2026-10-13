@@ -392,3 +392,28 @@ button:disabled { opacity: .45; cursor: default; }
 .next-unlock { margin: 10px 0 0; padding: 9px 12px; border-radius: 12px; background: rgba(255,197,49,.08); border: 1px solid rgba(255,197,49,.25); color: var(--gold); font-size: 13px; font-weight: 700; text-align: center; }
 .unlocked { margin: 10px 0 0; padding: 10px; border-radius: 12px; background: rgba(75,227,122,.1); border: 1px solid rgba(75,227,122,.35); color: var(--green); font-weight: 700; }
 .chk.warn { color: #ffb34d; }
+/* ---------- community war ---------- */
+.fac-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+.fac { position: relative; background: var(--panel2); border: 2px solid var(--line); border-radius: 12px; padding: 4px; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+.fac img { width: 100%; aspect-ratio: 3/4; object-fit: cover; object-position: 50% 20%; border-radius: 8px; display: block; }
+.fac span { font-size: 11px; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fac small { font-size: 10px; color: var(--muted); }
+.fac.on { border-color: var(--gold); box-shadow: 0 0 16px -2px var(--gold); background: #3a3000; }
+.perks { display: grid; gap: 6px; font-size: 13px; background: rgba(255,255,255,.04); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }
+.friend-in { color: var(--green); font-weight: 700; margin: 4px 0; }
+.war-head { display: flex; gap: 14px; align-items: center; border-color: var(--rc); box-shadow: 0 0 24px -8px var(--rc); }
+.war-head img { width: 92px; aspect-ratio: 3/4; object-fit: cover; object-position: 50% 20%; border-radius: 12px; border: 2px solid var(--rc); flex: none; }
+.wrow { display: flex; gap: 10px; align-items: center; padding: 8px 4px; border-bottom: 1px solid var(--line); }
+.wrow:last-child { border-bottom: 0; }
+.wrow.me { background: rgba(255,197,49,.12); border-radius: 10px; }
+.wrow .rk { width: 26px; text-align: center; font-weight: 900; flex: none; }
+.wrow img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; object-position: 50% 20%; flex: none; }
+.wrow .wb { flex: 1; min-width: 0; }
+.wrow .wn { font-weight: 700; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+.wrow .wp { font-weight: 900; color: var(--gold); flex: none; }
+.war-banner { width: 100%; margin-top: 10px; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 14px; background: linear-gradient(90deg, rgba(255,197,49,.18), rgba(63,162,255,.12)); border: 1px solid rgba(255,197,49,.35); font-weight: 700; text-align: start; }
+.war-banner img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; object-position: 50% 20%; border: 2px solid var(--gold); }
+.war-banner span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.war-banner b { color: var(--gold); font-size: 13px; white-space: nowrap; }
+.fac-badge { margin-top: 10px; padding: 8px 12px; border-radius: 12px; background: rgba(255,197,49,.12); border: 1px solid rgba(255,197,49,.3); color: var(--gold); font-weight: 700; font-size: 13px; }
+.card .fac-flag { position: absolute; top: 28px; left: 5px; font-size: 15px; filter: drop-shadow(0 1px 2px #000); }

@@ -136,8 +136,9 @@ function syncNav() {
     return;
   }
   // Plain browser: map the device/browser back button onto goBack via one history entry.
+  // Undo the entry only once this tick is over: a popup closed and another opened right away keeps it.
   if (can && !histPushed) { history.pushState({ tl: 1 }, ''); histPushed = true; }
-  else if (!can && histPushed) { histPushed = false; ignorePop = true; history.back(); }
+  else if (!can && histPushed) setTimeout(() => { if (!canGoBack() && histPushed) { histPushed = false; ignorePop = true; history.back(); } }, 0);
 }
 window.addEventListener('popstate', () => {
   if (Online.tg()) return;
@@ -151,7 +152,7 @@ window.addEventListener('popstate', () => {
 function show(tab) {
   S.tab = tab; save();
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === (PARENT_TAB[tab] || tab)));
-  ({ map: renderMap, arena: renderArena, lab: renderLab, heroes: renderHeroes, chest: renderChest, quests: renderQuests, rank: renderRank, clan: renderClan })[tab]();
+  ({ map: renderMap, arena: renderArena, lab: renderLab, heroes: renderHeroes, chest: renderChest, quests: renderQuests, rank: renderRank, clan: renderClan, war: renderWar })[tab]();
   updateBadge();
   window.scrollTo(0, 0);
   syncNav();
@@ -186,6 +187,7 @@ function renderMap() {
       </div>
       <div class="stages">${nodes}</div>
     </div>
+    ${warBanner()}
     ${nextUnlock() ? `<div class="next-unlock">🔓 ${t.nextUnlock(t.feat[nextUnlock()], n(unlockWorld(nextUnlock())))}</div>` : ''}
     <div class="panel">
       <div class="row"><div class="h2" style="margin:0">${t.stage(stageLabel(S.sel))} ${isBossStage(S.sel) ? '· ' + t.boss : ''}</div>
@@ -200,6 +202,7 @@ function renderMap() {
   document.querySelectorAll('.stage').forEach(b => b.onclick = () => { S.sel = +b.dataset.i; save(); renderMap(); });
   document.querySelectorAll('.arrow').forEach(b => b.onclick = () => { S.world = +b.dataset.w; S.sel = -1; save(); renderMap(); });
   $('#edit-team').onclick = () => show('heroes');
+  $('#to-war').onclick = () => show('war');
   $('#go').onclick = () => startBattle(S.sel);
 }
 
@@ -221,24 +224,28 @@ function renderHeroes() {
 }
 function cardHtml(h) {
   const t = T(), lv = S.owned[h.id], rc = RARITY[h.rarity].color;
-  const canUp = lv && lv < MAX_LEVEL && S.coins >= upgradeCost(h.id, lv);
+  const canUp = lv && lv < MAX_LEVEL && S.coins >= ECON.upgradePrice(S, h.id, lv);
   return `<button class="card ${lv ? '' : 'locked'} ${S.holo[h.id] ? 'holo' : ''}" data-id="${h.id}" style="--rc:${rc}">
     <img src="${img(h.id)}" alt="${h.name}" loading="lazy">
     ${lv ? `<span class="lv">${t.level(n(lv))}</span>` : '<span class="lock">🔒</span>'}
     <span class="rl">${ROLES[h.role].icon}</span>
-    ${canUp ? '<span class="up">⬆️</span>' : ''}${S.serials[h.id] ? `<span class="serial">#${n(S.serials[h.id])}</span>` : ''}
+    ${h.id === S.faction ? '<span class="fac-flag">🚩</span>' : ''}${canUp ? '<span class="up">⬆️</span>' : ''}${S.serials[h.id] ? `<span class="serial">#${n(S.serials[h.id])}</span>` : ''}
     <div class="info">${S.team.includes(h.id) ? `<span class="in-team">${t.inTeam}</span>` : ''}<div class="nm">${h.name}</div><div class="muted" style="font-size:11px">${heroText(h.id).title}</div></div>
   </button>`;
 }
 function heroModal(id) {
   const t = T(), h = HERO_BY_ID[id], ht = heroText(id), lv = S.owned[id], R = RARITY[h.rarity];
-  const s = heroStats(id, lv || 1), cost = lv ? upgradeCost(id, lv) : 0, inTeam = S.team.includes(id);
-  const next = lv && lv < MAX_LEVEL ? heroStats(id, lv + 1) : null;
+  // Stats as they fight for you (your community's card and fusions with it are stronger).
+  const mine = factionMult(id, S.faction), boosted = l => { const x = heroStats(id, l); return { ...x, hp: Math.round(x.hp * mine), atk: Math.round(x.atk * mine) }; };
+  const s = boosted(lv || 1);
+  const cost = lv ? ECON.upgradePrice(S, id, lv) : 0, inTeam = S.team.includes(id);
+  const next = lv && lv < MAX_LEVEL ? boosted(lv + 1) : null;
   openModal(`
     <div class="poster-wrap ${S.holo[id] ? 'holo' : ''}" style="--rc:${R.color}"><img class="poster" src="${img(id)}" alt="">
       ${S.holo[id] ? `<span class="holo-tag">${t.holo}</span>` : ''}${S.serials[id] ? `<span class="serial big-serial">#${n(S.serials[id])}/${n(FUSION_RULES[h.parts.length].supply)}</span>` : ''}</div>
     <div class="row" style="margin-top:12px"><div><div class="big latin" style="font-size:26px">${h.name}</div><div class="muted">${ht.title}</div></div>
       <div class="end"><span class="tag" style="color:${R.color}">${L().rarity[h.rarity]}</span><div class="muted" style="margin-top:6px">${ROLES[h.role].icon} ${L().role[h.role]}</div></div></div>
+    ${mine > 1 ? `<div class="fac-badge">${id === S.faction ? `${t.yourCommunity} · ${t.factionPerkShort}` : `🚩 ${t.army(factionName(S.faction))} · +${n(Math.round((mine - 1) * 100))}%`}</div>` : ''}
     <div class="stats">
       <div>${t.hp}<b>${n(s.hp)}</b>${next ? `<span style="color:var(--green)">+${n(next.hp - s.hp)}</span>` : ''}</div>
       <div>${t.atk}<b>${n(s.atk)}</b>${next ? `<span style="color:var(--green)">+${n(next.atk - s.atk)}</span>` : ''}</div>
@@ -430,7 +437,11 @@ function fusionReveal(r) {
     <div class="big latin" style="font-size:26px">${f.name}</div>
     <div class="muted">${heroText(f.id).title}</div>
     <p style="font-weight:900">${t.fused}${r.serial ? ` <span class="serial inline">${t.serialOf(n(r.serial), n(r.supply))}</span>` : ''}</p>
-    <button class="btn wide gold" id="fr-ok">${t.ok}</button></div>`, box => box.querySelector('#fr-ok').onclick = () => { closeModal(); });
+    <button class="btn wide gold" id="fr-ok">${t.ok}</button>
+    ${Online.tg() ? `<button class="btn wide gem" id="fr-share" style="margin-top:10px">${t.shareFusion}</button>` : ''}</div>`, box => {
+    box.querySelector('#fr-ok').onclick = () => { closeModal(); };
+    const sh = box.querySelector('#fr-share'); if (sh) sh.onclick = () => shareCard('fusion', f.id);
+  });
 }
 
 // ---------- battle (shared by stage battles and arena duels) ----------
@@ -488,7 +499,7 @@ async function startBattle(idx) {
   if (BT) return;
   const r = await tryAct({ type: 'stageStart', stage: idx });
   if (!r) return;
-  const t = T(), B = createBattle(S.team, S.owned, idx, r.seed);
+  const t = T(), B = createBattle(S.team, S.owned, idx, r.seed, S.faction || null);
   // Taps are queued and applied at the next fixed tick, and recorded as [tick, code] so the server can replay the fight.
   BT = { mode: 'stage', B, idx, mySide: 'hero', inputs: [], queue: S.auto ? [-1] : [], acc: 0, last: performance.now(), raf: 0, ended: false };
   buildBattle({
@@ -692,5 +703,11 @@ function help() {
     box.querySelector('#ok').onclick = done;
     box.querySelector('#hg').onclick = () => { S.seenHelp = true; save(); guideModal(); };
   }, { onBack: done });
-  function done() { const first = !S.seenHelp; S.seenHelp = true; save(); closeModal(); if (first) maybeDaily(); }
+  // First time: choose a community, then the daily reward.
+  // (the picker replaces this window instead of closing and reopening one, which keeps browser history in step)
+  function done() {
+    const first = !S.seenHelp; S.seenHelp = true; save();
+    if (first && !S.faction) return factionPicker({ suggest: SUGGEST, then: maybeDaily });
+    closeModal(); if (first) maybeDaily();
+  }
 }

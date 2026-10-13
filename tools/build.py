@@ -9,7 +9,7 @@ images = {p.stem: "data:image/jpeg;base64," + base64.b64encode(p.read_bytes()).d
 game = (src / "game.js").read_text(encoding="utf-8").replace("{/*IMAGES*/}", json.dumps(images))
 
 html = html.replace('<link rel="stylesheet" href="style.css">', "<style>\n" + (src / "style.css").read_text(encoding="utf-8") + "</style>")
-for name in ["audio.js", "online.js", "fusions-data.js", "engine.js", "i18n.js", "i18n-world.js", "i18n-social.js", "economy.js", "game.js", "meta.js", "clans.js", "arena.js"]:
+for name in ["audio.js", "online.js", "fusions-data.js", "engine.js", "i18n.js", "i18n-world.js", "i18n-social.js", "economy.js", "game.js", "meta.js", "clans.js", "war.js", "arena.js"]:
     code = game if name == "game.js" else (src / name).read_text(encoding="utf-8")
     tag = f'<script src="{name}"></script>'
     assert tag in html, tag

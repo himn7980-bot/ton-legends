@@ -7,7 +7,7 @@ const I18N = {
     world: { ocean: 'Deep Ocean', cave: 'Crystal Cave', city: 'Neon City', temple: 'Lantern Temple', lab: 'Green Lab' },
     hero: {
       pinkbull:  ['Gold Rush Titan', 'Earthquake', '150% damage to all enemies and stuns them for 1.5s'],
-      notcoin:   ['Golden Sentinel', 'Golden Shield', 'Gives every ally a shield worth 25% of his max HP'],
+      notcoin:   ['Golden Sentinel', 'Golden Shield', 'Gives every ally a shield worth 25% of their own max HP (shields fade after 6s)'],
       volya:     ['Guardian of the Legends', 'Laser Eyes', '450% damage to the strongest enemy'],
       egor:      ['Crystal Miner', 'Armor Break', '250% damage; target takes 30% more damage for 5s. (+10% coins)'],
       paws:      ['Lunar Paw Striker', 'Fire Paw', 'Three 140% hits on the front enemy'],
@@ -106,7 +106,7 @@ const I18N = {
     world: { ocean: 'اقیانوس عمیق', cave: 'غار کریستال', city: 'شهر نئونی', temple: 'معبد فانوس', lab: 'آزمایشگاه سبز' },
     hero: {
       pinkbull:  ['تایتان طلایی', 'زمین‌لرزه', '۱۵۰٪ آسیب به همه دشمنان و گیج کردن آن‌ها به مدت ۱.۵ ثانیه'],
-      notcoin:   ['نگهبان طلایی', 'سپر طلایی', 'به همه هم‌تیمی‌ها سپری برابر ۲۵٪ جان خودش می‌دهد'],
+      notcoin:   ['نگهبان طلایی', 'سپر طلایی', 'به همه‌ی هم‌تیمی‌ها سپری برابر ۲۵٪ جان حداکثر خودشان می‌دهد (سپرها بعد از ۶ ثانیه محو می‌شوند)'],
       volya:     ['نگهبان افسانه‌ها', 'پرتو لیزری', '۴۵۰٪ آسیب به قوی‌ترین دشمن'],
       egor:      ['معدنچی کریستال', 'شکستن زره', '۲۵۰٪ آسیب؛ دشمن ۵ ثانیه ۳۰٪ آسیب بیشتر می‌گیرد. (+۱۰٪ سکه)'],
       paws:      ['ضربه‌زن پنجه ماه', 'پنجه آتشین', 'سه ضربه‌ی ۱۴۰٪ به دشمن جلویی'],

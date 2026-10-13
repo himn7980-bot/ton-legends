@@ -171,21 +171,33 @@ function newBattle(seed, pvp) {
   return { t: 0, tick: 0, seed: seed >>> 0, rng: mulberry32(seed >>> 0), nextUid: 1, events: [], over: null, pvp: !!pvp,
     autoBy: { hero: false, enemy: !pvp } };
 }
-function teamUnits(B, side, team, levels) {
-  return team.map(id => { const s = heroStats(id, levels[id] || 1); return makeUnit(B, side, { ...HERO_BY_ID[id], ...s }); });
+// Community (faction): every player backs one of the 16 heroes. That hero's card fights harder for them,
+// and so (a little) does any fusion card that contains it.
+const FACTION_BONUS = 0.15, FACTION_FUSION_BONUS = 0.08;
+function factionMult(id, faction) {
+  if (!faction) return 1;
+  if (id === faction) return 1 + FACTION_BONUS;
+  const h = HERO_BY_ID[id];
+  return h && h.fusion && h.parts.includes(faction) ? 1 + FACTION_FUSION_BONUS : 1;
 }
-function createBattle(team, levels, idx, seed = (Math.random() * 2 ** 32) >>> 0) {
+function teamUnits(B, side, team, levels, faction) {
+  return team.map(id => {
+    const s = heroStats(id, levels[id] || 1), k = factionMult(id, faction);
+    return makeUnit(B, side, { ...HERO_BY_ID[id], ...s, hp: s.hp * k, atk: s.atk * k });
+  });
+}
+function createBattle(team, levels, idx, seed = (Math.random() * 2 ** 32) >>> 0, faction = null) {
   const B = newBattle(seed, false);
   B.idx = idx;
-  B.heroes = teamUnits(B, 'hero', team, levels);
+  B.heroes = teamUnits(B, 'hero', team, levels, faction);
   B.enemies = stageEnemies(idx).map(e => makeUnit(B, 'enemy', e));
   return B;
 }
 // PvP: side A plays as 'hero', side B as 'enemy'; both sides use the same (hero) rules.
-function createPvpBattle(teamA, levelsA, teamB, levelsB, seed) {
+function createPvpBattle(teamA, levelsA, teamB, levelsB, seed, factionA = null, factionB = null) {
   const B = newBattle(seed, true);
-  B.heroes = teamUnits(B, 'hero', teamA, levelsA);
-  B.enemies = teamUnits(B, 'enemy', teamB, levelsB);
+  B.heroes = teamUnits(B, 'hero', teamA, levelsA, factionA);
+  B.enemies = teamUnits(B, 'enemy', teamB, levelsB, factionB);
   return B;
 }
 
@@ -342,8 +354,8 @@ function step(B) {
 }
 
 // Server-side verification of a stage battle: replay it from its seed and the player's inputs.
-function replayStage(team, levels, idx, seed, inputs) {
-  const B = createBattle(team, levels, idx, seed);
+function replayStage(team, levels, idx, seed, inputs, faction = null) {
+  const B = createBattle(team, levels, idx, seed, faction);
   const q = (Array.isArray(inputs) ? inputs : []).filter(x => Array.isArray(x) && Number.isInteger(x[0]) && Number.isInteger(x[1])).sort((a, b) => a[0] - b[0]);
   let i = 0, skills = 0;
   while (!B.over) {
@@ -358,5 +370,5 @@ function replayStage(team, levels, idx, seed, inputs) {
 
 if (typeof module !== 'undefined') {
   module.exports = { RARITY, ROLES, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, TEAM_MAX_FUSIONS, TEAM_MAX_TRIOS, teamError, duosWithin, ENRAGE_AT, LEGACY_FUSION_IDS, HERO_BY_ID, STARTERS, WORLDS, TOTAL_STAGES, STAGES_PER_WORLD, MAX_LEVEL, COIN_BONUS, TICK,
-    WORLD_K, LOCAL_K, heroStats, upgradeCost, stageReward, stageEnemies, createBattle, createPvpBattle, step, castSkill, applyInput, replayStage };
+    WORLD_K, LOCAL_K, FACTION_BONUS, FACTION_FUSION_BONUS, factionMult, heroStats, upgradeCost, stageReward, stageEnemies, createBattle, createPvpBattle, step, castSkill, applyInput, replayStage };
 }

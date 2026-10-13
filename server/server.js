@@ -16,6 +16,9 @@ const crypto = require('crypto');
 const ECON = require('../src/economy.js');
 const createArena = require('./pvp.js');
 const createClans = require('./clans.js');
+const createWar = require('./war.js');
+const createNotifier = require('./notify.js');
+const BOT_TEXT = require('./bot-text.js');
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const WEBAPP_URL = (process.env.WEBAPP_URL || process.env.RENDER_EXTERNAL_URL || '').trim().replace(/\/$/, '');
@@ -48,7 +51,7 @@ const findPack = id => PACKS.find(p => p.id === id) || OLD_PACKS.find(p => p.id 
 // Bot texts: Persian for Telegram users with a Persian UI, English for everyone else.
 const TEXT = {
   en: {
-    start: '⚔️ Welcome to TON Legends!\n\nCollect hero cards, build your team and battle boss cards across 5 worlds.\n\nTap the button below to start 👇',
+    start: '⚔️ Welcome to TON Legends!\n\nCollect hero cards, build your team and battle boss cards across 20 worlds.\n\nTap the button below to start 👇',
     play: '🎮 Play', open: '🎮 Open game', menu: '🎮 Play',
     paid: c => `✅ Payment successful! ${c.toLocaleString('en-US')} coins were added. Open the game to collect them.`,
     paidGems: g => `✅ Payment successful! ${g} 💎 gems were added to your account.`,
@@ -58,7 +61,7 @@ const TEXT = {
       : e.result === 'lose' ? `💔 You lost the arena duel vs ${e.opp} (-${e.stake.toLocaleString('en-US')} coins).` : `🤝 Arena duel vs ${e.opp} was a draw — your stake was returned.`,
   },
   fa: {
-    start: '⚔️ به TON Legends خوش آمدی!\n\nکارت‌های قهرمان را جمع کن، تیمت را بچین و در ۵ دنیا با کارت‌های رئیس بجنگ.\n\nبرای شروع روی دکمه‌ی زیر بزن 👇',
+    start: '⚔️ به TON Legends خوش آمدی!\n\nکارت‌های قهرمان را جمع کن، تیمت را بچین و در ۲۰ دنیا با کارت‌های رئیس بجنگ.\n\nبرای شروع روی دکمه‌ی زیر بزن 👇',
     play: '🎮 شروع بازی', open: '🎮 ورود به بازی', menu: '🎮 بازی',
     paid: c => `✅ پرداخت موفق! ${c.toLocaleString('fa-IR')} سکه به حسابت اضافه شد. بازی را باز کن تا دریافت کنی.`,
     paidGems: g => `✅ پرداخت موفق! ${g.toLocaleString('fa-IR')} جم 💎 به حسابت اضافه شد.`,
@@ -70,18 +73,18 @@ const TEXT = {
 };
 // Short bot texts for the other game languages (fall back to English for anything missing).
 const MORE = {
-  ru: ['⚔️ Добро пожаловать в TON Legends!\n\nСобирай карты героев, собирай команду, сражайся с боссами в 5 мирах и бросай вызов игрокам на арене.\n\nНажми кнопку ниже 👇', '🎮 Играть', 'Играть в TON Legends', 'монет', 'Оплата прошла! Монеты добавлены', 'Дуэль на арене против', 'победа', 'поражение', 'ничья — ставка возвращена'],
-  ar: ['⚔️ مرحبًا بك في TON Legends!\n\nاجمع بطاقات الأبطال، كوّن فريقك، قاتل الزعماء في 5 عوالم وتحدَّ اللاعبين في الساحة.\n\nاضغط الزر بالأسفل 👇', '🎮 العب', 'العب TON Legends', 'عملة', 'تم الدفع! أُضيفت العملات', 'مبارزة الساحة ضد', 'فوز', 'خسارة', 'تعادل — أُعيد الرهان'],
-  tr: ['⚔️ TON Legends’a hoş geldin!\n\nKahraman kartları topla, takımını kur, 5 dünyada boss’larla savaş ve arenada oyunculara meydan oku.\n\nAşağıdaki butona dokun 👇', '🎮 Oyna', 'TON Legends oyna', 'coin', 'Ödeme başarılı! Coin’ler eklendi', 'Arena düellosu, rakip:', 'galibiyet', 'yenilgi', 'berabere — bahis iade edildi'],
-  es: ['⚔️ ¡Bienvenido a TON Legends!\n\nColecciona cartas de héroes, arma tu equipo, vence a los jefes de 5 mundos y reta a jugadores en la arena.\n\nToca el botón 👇', '🎮 Jugar', 'Jugar a TON Legends', 'monedas', '¡Pago completado! Monedas añadidas', 'Duelo de arena contra', 'victoria', 'derrota', 'empate — apuesta devuelta'],
-  pt: ['⚔️ Bem-vindo ao TON Legends!\n\nColecione cartas de heróis, monte seu time, vença chefes em 5 mundos e desafie jogadores na arena.\n\nToque no botão 👇', '🎮 Jogar', 'Jogar TON Legends', 'moedas', 'Pagamento concluído! Moedas adicionadas', 'Duelo na arena contra', 'vitória', 'derrota', 'empate — aposta devolvida'],
-  fr: ['⚔️ Bienvenue dans TON Legends !\n\nCollectionne des cartes de héros, forme ton équipe, bats les boss de 5 mondes et défie des joueurs dans l’arène.\n\nTouche le bouton 👇', '🎮 Jouer', 'Jouer à TON Legends', 'pièces', 'Paiement réussi ! Pièces ajoutées', 'Duel d’arène contre', 'victoire', 'défaite', 'égalité — mise rendue'],
-  de: ['⚔️ Willkommen bei TON Legends!\n\nSammle Heldenkarten, stell dein Team zusammen, besiege Bosse in 5 Welten und fordere Spieler in der Arena heraus.\n\nTippe auf den Button 👇', '🎮 Spielen', 'TON Legends spielen', 'Münzen', 'Zahlung erfolgreich! Münzen gutgeschrieben', 'Arenaduell gegen', 'Sieg', 'Niederlage', 'Unentschieden — Einsatz zurück'],
-  id: ['⚔️ Selamat datang di TON Legends!\n\nKoleksi kartu pahlawan, susun timmu, kalahkan bos di 5 dunia, dan tantang pemain di arena.\n\nKetuk tombol di bawah 👇', '🎮 Main', 'Main TON Legends', 'koin', 'Pembayaran berhasil! Koin ditambahkan', 'Duel arena melawan', 'menang', 'kalah', 'seri — taruhan dikembalikan'],
-  uk: ['⚔️ Ласкаво просимо до TON Legends!\n\nЗбирай карти героїв, створюй команду, перемагай босів у 5 світах і кидай виклик гравцям на арені.\n\nНатисни кнопку нижче 👇', '🎮 Грати', 'Грати в TON Legends', 'монет', 'Оплата пройшла! Монети додано', 'Дуель на арені проти', 'перемога', 'поразка', 'нічия — ставку повернено'],
-  hi: ['⚔️ TON Legends में स्वागत है!\n\nहीरो कार्ड जमा करो, टीम बनाओ, 5 दुनिया के बॉस हराओ और अखाड़े में खिलाड़ियों को चुनौती दो।\n\nनीचे बटन दबाओ 👇', '🎮 खेलें', 'TON Legends खेलें', 'सिक्के', 'भुगतान सफल! सिक्के जोड़ दिए गए', 'अखाड़ा मुक़ाबला बनाम', 'जीत', 'हार', 'बराबरी — दाँव वापस'],
-  zh: ['⚔️ 欢迎来到 TON Legends！\n\n收集英雄卡，组建队伍，挑战5个世界的首领，并在竞技场与玩家对决。\n\n点击下方按钮 👇', '🎮 开始游戏', '开始 TON Legends', '金币', '支付成功！金币已到账', '竞技场对决 vs', '胜利', '失败', '平局——押注已退还'],
-  uz: ['⚔️ TON Legends’ga xush kelibsan!\n\nQahramon kartalarini yigʻ, jamoa tuz, 5 dunyoda bosslarni yeng va arenada oʻyinchilarni duelga chaqir.\n\nPastdagi tugmani bos 👇', '🎮 Oʻynash', 'TON Legends oʻynash', 'tanga', 'Toʻlov bajarildi! Tangalar qoʻshildi', 'Arena dueli, raqib:', 'gʻalaba', 'magʻlubiyat', 'durang — tikish qaytarildi'],
+  ru: ['⚔️ Добро пожаловать в TON Legends!\n\nСобирай карты героев, собирай команду, сражайся с боссами в 20 мирах и бросай вызов игрокам на арене.\n\nНажми кнопку ниже 👇', '🎮 Играть', 'Играть в TON Legends', 'монет', 'Оплата прошла! Монеты добавлены', 'Дуэль на арене против', 'победа', 'поражение', 'ничья — ставка возвращена'],
+  ar: ['⚔️ مرحبًا بك في TON Legends!\n\nاجمع بطاقات الأبطال، كوّن فريقك، قاتل الزعماء في 20 عوالم وتحدَّ اللاعبين في الساحة.\n\nاضغط الزر بالأسفل 👇', '🎮 العب', 'العب TON Legends', 'عملة', 'تم الدفع! أُضيفت العملات', 'مبارزة الساحة ضد', 'فوز', 'خسارة', 'تعادل — أُعيد الرهان'],
+  tr: ['⚔️ TON Legends’a hoş geldin!\n\nKahraman kartları topla, takımını kur, 20 dünyada boss’larla savaş ve arenada oyunculara meydan oku.\n\nAşağıdaki butona dokun 👇', '🎮 Oyna', 'TON Legends oyna', 'coin', 'Ödeme başarılı! Coin’ler eklendi', 'Arena düellosu, rakip:', 'galibiyet', 'yenilgi', 'berabere — bahis iade edildi'],
+  es: ['⚔️ ¡Bienvenido a TON Legends!\n\nColecciona cartas de héroes, arma tu equipo, vence a los jefes de 20 mundos y reta a jugadores en la arena.\n\nToca el botón 👇', '🎮 Jugar', 'Jugar a TON Legends', 'monedas', '¡Pago completado! Monedas añadidas', 'Duelo de arena contra', 'victoria', 'derrota', 'empate — apuesta devuelta'],
+  pt: ['⚔️ Bem-vindo ao TON Legends!\n\nColecione cartas de heróis, monte seu time, vença chefes em 20 mundos e desafie jogadores na arena.\n\nToque no botão 👇', '🎮 Jogar', 'Jogar TON Legends', 'moedas', 'Pagamento concluído! Moedas adicionadas', 'Duelo na arena contra', 'vitória', 'derrota', 'empate — aposta devolvida'],
+  fr: ['⚔️ Bienvenue dans TON Legends !\n\nCollectionne des cartes de héros, forme ton équipe, bats les boss de 20 mondes et défie des joueurs dans l’arène.\n\nTouche le bouton 👇', '🎮 Jouer', 'Jouer à TON Legends', 'pièces', 'Paiement réussi ! Pièces ajoutées', 'Duel d’arène contre', 'victoire', 'défaite', 'égalité — mise rendue'],
+  de: ['⚔️ Willkommen bei TON Legends!\n\nSammle Heldenkarten, stell dein Team zusammen, besiege Bosse in 20 Welten und fordere Spieler in der Arena heraus.\n\nTippe auf den Button 👇', '🎮 Spielen', 'TON Legends spielen', 'Münzen', 'Zahlung erfolgreich! Münzen gutgeschrieben', 'Arenaduell gegen', 'Sieg', 'Niederlage', 'Unentschieden — Einsatz zurück'],
+  id: ['⚔️ Selamat datang di TON Legends!\n\nKoleksi kartu pahlawan, susun timmu, kalahkan bos di 20 dunia, dan tantang pemain di arena.\n\nKetuk tombol di bawah 👇', '🎮 Main', 'Main TON Legends', 'koin', 'Pembayaran berhasil! Koin ditambahkan', 'Duel arena melawan', 'menang', 'kalah', 'seri — taruhan dikembalikan'],
+  uk: ['⚔️ Ласкаво просимо до TON Legends!\n\nЗбирай карти героїв, створюй команду, перемагай босів у 20 світах і кидай виклик гравцям на арені.\n\nНатисни кнопку нижче 👇', '🎮 Грати', 'Грати в TON Legends', 'монет', 'Оплата пройшла! Монети додано', 'Дуель на арені проти', 'перемога', 'поразка', 'нічия — ставку повернено'],
+  hi: ['⚔️ TON Legends में स्वागत है!\n\nहीरो कार्ड जमा करो, टीम बनाओ, 20 दुनिया के बॉस हराओ और अखाड़े में खिलाड़ियों को चुनौती दो।\n\nनीचे बटन दबाओ 👇', '🎮 खेलें', 'TON Legends खेलें', 'सिक्के', 'भुगतान सफल! सिक्के जोड़ दिए गए', 'अखाड़ा मुक़ाबला बनाम', 'जीत', 'हार', 'बराबरी — दाँव वापस'],
+  zh: ['⚔️ 欢迎来到 TON Legends！\n\n收集英雄卡，组建队伍，挑战20个世界的首领，并在竞技场与玩家对决。\n\n点击下方按钮 👇', '🎮 开始游戏', '开始 TON Legends', '金币', '支付成功！金币已到账', '竞技场对决 vs', '胜利', '失败', '平局——押注已退还'],
+  uz: ['⚔️ TON Legends’ga xush kelibsan!\n\nQahramon kartalarini yigʻ, jamoa tuz, 20 dunyoda bosslarni yeng va arenada oʻyinchilarni duelga chaqir.\n\nPastdagi tugmani bos 👇', '🎮 Oʻynash', 'TON Legends oʻynash', 'tanga', 'Toʻlov bajarildi! Tangalar qoʻshildi', 'Arena dueli, raqib:', 'gʻalaba', 'magʻlubiyat', 'durang — tikish qaytarildi'],
 };
 for (const [code, [start, play, cmd, coins, paid, duel, win, lose, draw]] of Object.entries(MORE)) {
   const fmt = n => n.toLocaleString('en-US');
@@ -127,6 +130,8 @@ function userRec(tgUser) {
   u.name = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ').slice(0, 40) || tgUser.username || 'Player';
   u.username = tgUser.username || null;
   u.seen = Date.now();
+  if (tgUser.language_code) u.tgLang = String(tgUser.language_code).slice(0, 2);
+  u.blocked = false;
   if (u.profile) u.profile = ECON.normalize(u.profile, Date.now());
   return u;
 }
@@ -342,10 +347,10 @@ function send(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' });
   res.end(JSON.stringify(obj));
 }
-function readBody(req) {
+function readBody(req, limit = 1e5) {
   return new Promise((resolve, reject) => {
     let data = '';
-    req.on('data', c => { data += c; if (data.length > 1e5) { reject(new Error('too large')); req.destroy(); } });
+    req.on('data', c => { data += c; if (data.length > limit) { reject(new Error('too large')); req.destroy(); } });
     req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch (e) { reject(e); } });
   });
 }
@@ -372,7 +377,12 @@ function leaderboard(meId) {
 }
 
 const clans = createClans({ db, persist, profileOut: u => (u.profile ? ECON.pickKeys(u.profile) : null) });
-const arena = createArena({ db, persist, onPoints: clans.addPoints, notify: (uid, end) => {
+const notifier = createNotifier({ db, persist, tg, webappUrl: () => WEBAPP_URL, logErr });
+const SHARE_DIR = path.join(path.dirname(DATA_FILE), 'share');
+const war = createWar({ db, persist, weekKey: clans.weekKey, shareDir: SHARE_DIR, profileOut: u => (u.profile ? ECON.pickKeys(u.profile) : null), onWeekEnd: last => notifier.weekEnded(last) });
+// Clan and community-war points come from the same wins.
+const addPoints = (uid, pts) => { clans.addPoints(uid, pts); war.addPoints(uid, pts); };
+const arena = createArena({ db, persist, onPoints: addPoints, notify: (uid, end) => {
   const u = db.users[uid];
   const L = tx(u && u.lang);
   if (end.result === 'cancelled') return;
@@ -382,17 +392,23 @@ const arena = createArena({ db, persist, onPoints: clans.addPoints, notify: (uid
 const routes = {
   'GET /api/health': () => ({ ok: true, bot: BOT_USERNAME, packs: PACKS, mint: db.mint || {}, art: artVersions() }),
   'GET /api/status': () => ({ ...diag, bot: BOT_USERNAME, users: Object.keys(db.users).length, node: process.version }),
-  'POST /api/hello': (body, u) => { applyReferral(u, body.startParam); return { ok: true }; },
+  'POST /api/hello': (body, u) => {
+    applyReferral(u, body.startParam);
+    // A friend's invite suggests their community to the newcomer.
+    const inviter = u.refBy && db.users[u.refBy];
+    return { ok: true, suggest: inviter && inviter.profile ? inviter.profile.faction || null : null };
+  },
+  'POST /api/notify': (body, u) => { u.mute = !body.on; return { on: !u.mute }; },
   // The server keeps each Telegram player's coins and heroes. First visit imports the offline save (clamped).
   'POST /api/profile': (body, u) => {
     if (!u.profile) { u.profile = ECON.importLocal(body.local, Date.now()); u.profile.coins += u.pending; u.profile.gems += u.pendingGems || 0; u.pending = 0; u.pendingGems = 0; }
-    return { profile: profileOut(u) };
+    return { profile: profileOut(u), notify: !u.mute };
   },
   'POST /api/act': (body, u) => {
     if (!u.profile) throw Object.assign(new Error('no_profile'), { code: 400 });
     const result = ECON.act(u.profile, body.action, { now: Date.now(), rng, mint });
     payReferral(u);
-    if (body.action && body.action.type === 'stageEnd' && result && result.result === 'win' && result.first) clans.addPoints(u.id, 2);
+    if (body.action && body.action.type === 'stageEnd' && result && result.result === 'win' && result.first) addPoints(u.id, 2);
     return { profile: profileOut(u), result };
   },
   'POST /api/score': () => ({ ok: true }), // kept for older clients; leaderboard now uses server profiles
@@ -400,6 +416,7 @@ const routes = {
   'POST /api/claim': (body, u) => { const coins = u.gift || 0, gems = u.giftGems || 0; u.gift = 0; u.giftGems = 0; return { ok: true, coins, gems, profile: u.profile ? profileOut(u) : null }; },
   ...arena.routes,
   ...clans.routes,
+  ...war.routes,
   'POST /api/invoice': async (body, u) => {
     const pack = PACKS.find(p => p.id === body.pack);
     if (!pack) throw Object.assign(new Error('unknown pack'), { code: 400 });
@@ -417,6 +434,13 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') return send(res, 204, {});
   const key = `${req.method} ${url.pathname}`;
   if (key === 'GET /api/pvp/stream') return arena.stream(req, res, url.searchParams.get('ticket'));
+  const shareM = req.method === 'GET' && /^\/share\/(\d+)\.jpg$/.exec(url.pathname);
+  if (shareM) {
+    const f = path.join(SHARE_DIR, `${shareM[1]}.jpg`);
+    if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); }
+    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=3600' });
+    return fs.createReadStream(f).pipe(res);
+  }
   const artM = req.method === 'GET' && /^\/art\/(\d+)$/.exec(url.pathname);
   if (artM) {
     const a = artIndex[artM[1]];
@@ -428,11 +452,11 @@ const server = http.createServer(async (req, res) => {
   if (!handler) return url.pathname.startsWith('/api/') ? send(res, 404, { error: 'not found' }) : serveStatic(req, res);
   try {
     if (req.method === 'GET') return send(res, 200, await handler());
-    const body = await readBody(req);
+    const body = await readBody(req, key === 'POST /api/share' ? 1e6 : 1e5);
     const tgUser = verifyInitData(body.initData);
     if (!tgUser || !tgUser.id) return send(res, 401, { error: 'invalid initData' });
     const u = userRec(tgUser);
-    if (body.lang === 'fa' || body.lang === 'en') u.lang = body.lang;
+    if (BOT_TEXT[body.lang]) u.lang = body.lang;
     const out = await handler(body, u);
     persist();
     send(res, 200, out);
@@ -459,4 +483,4 @@ async function start() {
 }
 
 if (require.main === module) start();
-module.exports = { flushDb, server, verifyInitData, handleUpdate, pollLoop, setupBot, db, PACKS, stop: () => { polling = false; arena.stop(); server.close(); } };
+module.exports = { notifier, war, flushDb, server, verifyInitData, handleUpdate, pollLoop, setupBot, db, PACKS, stop: () => { polling = false; arena.stop(); notifier.stop(); server.close(); } };

@@ -11,7 +11,7 @@ const assert = require('assert');
   await p.goto('file://' + file); await p.waitForTimeout(500);
   assert.equal(await p.evaluate(() => LANG), 'ru', 'auto-detected phone language');
   console.log('✓ language auto-detected from the device (ru)');
-  await p.click('#m-close'); await p.waitForTimeout(500); if (await p.$('#modal:not([hidden])')) await p.click('#m-close');
+  for (let i = 0; i < 4; i++) { await p.waitForTimeout(600); if (await p.$('#modal:not([hidden])')) await p.click('#m-close'); } // help → community picker → daily reward
   // give the player what a fusion needs
   await p.evaluate(() => { Object.assign(S.owned, { notcoin: 12, pinkbull: 12, egor: 31, memegram: 31, yoda: 22 }); S.coins = 50000; S.holo.pinkbull = true; save(); showCoins(); });
   await p.click('[data-tab=heroes]'); await p.waitForTimeout(200);

@@ -11,6 +11,7 @@ const afkRate = () => ECON.afkRate(S);
 const afkAmount = () => ECON.afkAmount(S, now());
 const achTier = a => ECON.achTier(S, a);
 
+let SUGGEST = null; // community suggested by the friend who invited this player
 function updateBadge() {
   const b = document.querySelector('#nav [data-tab=quests]');
   if (b) b.classList.toggle('dot', ECON.claimable(S, now()) > 0);
@@ -91,6 +92,7 @@ function renderRank() {
     <div class="stats">
       <div>${t.wins}<b>${n(S.stats.wins)}</b></div><div>${t.arenaWins}<b>${n(S.stats.pvpWins || 0)}</b></div><div>${t.bossesBeaten}<b>${n(S.stats.bosses)}</b></div>
     </div>
+    <div class="panel row clan-entry" id="to-war2"><div class="t">${t.warTitle}</div><button class="btn">${t.openClan} →</button></div>
     ${Online.state.profile ? `<div class="panel row clan-entry" id="to-clan"><div class="t">${t.clanTitle}</div><button class="btn">${t.openClan} →</button></div>` : ''}
     ${Online.inviteLink() ? `<div class="panel"><div class="t">${t.invite}</div>
       <p class="muted">${t.inviteNote}</p>
@@ -99,6 +101,7 @@ function renderRank() {
     <div id="board">${Online.state.server ? `<p class="muted center">${t.loading}</p>` : `<div class="panel center muted">${t.boardOffline}</div>`}</div>`;
   if ($('#invite')) $('#invite').onclick = () => Online.share(t.inviteText);
   if ($('#to-clan')) $('#to-clan').onclick = () => show('clan');
+  $('#to-war2').onclick = () => show('war');
   if (Online.state.server) Online.leaderboard().then(d => {
     const el = $('#board'); if (!el || S.tab !== 'rank') return;
     if (!d || !d.top) { el.innerHTML = `<div class="panel center muted">${t.boardErr}</div>`; return; }
@@ -124,6 +127,7 @@ function settingsModal() {
     <div class="setting"><span>${t.sfx}</span><button class="toggle ${S.sfx ? 'on' : ''}" id="t-sfx"></button></div>
     <div class="setting"><span>${t.music}</span><button class="toggle ${S.music ? 'on' : ''}" id="t-music"></button></div>
     <div class="setting"><span>${t.howTo}</span><button class="tag" id="s-help">${t.show}</button></div>
+    ${Online.state.profile ? `<div class="setting"><span>${t.notifications}</span><button class="toggle ${Online.state.notify ? 'on' : ''}" id="t-notify"></button></div>` : ''}
     ${Online.state.profile ? '' : `<div class="setting"><span>${t.reset}</span><button class="tag" id="s-reset" style="color:var(--red)">${t.erase}</button></div>`}
     <p class="muted center">${t.version} ${Online.tg() ? t.cloudOn : ''}</p>
     <button class="btn wide" id="s-ok">${t.close}</button>`, box => {
@@ -133,6 +137,10 @@ function settingsModal() {
     q('#t-sfx').onclick = e => { S.sfx = !S.sfx; save(); Sound.set({ sfx: S.sfx }); e.target.classList.toggle('on', S.sfx); };
     q('#t-music').onclick = e => { S.music = !S.music; save(); Sound.set({ music: S.music }); e.target.classList.toggle('on', S.music); };
     q('#s-help').onclick = help;
+    if (q('#t-notify')) q('#t-notify').onclick = async e => {
+      const on = !Online.state.notify; e.target.classList.toggle('on', on);
+      try { Online.state.notify = (await Online.setNotify(on)).on; } catch (err) { e.target.classList.toggle('on', !on); toast(errText(err)); }
+    };
     if (q('#s-reset')) q('#s-reset').onclick = e => {
       if (e.target.dataset.sure) { const keep = { sfx: S.sfx, music: S.music, lang: S.lang }; S = { ...defaultState(), ...keep, seenHelp: true }; save(); showCoins(); closeModal(); show('map'); }
       else { e.target.dataset.sure = 1; e.target.textContent = t.sure; }
@@ -177,7 +185,8 @@ window.initTelegram = async () => {
   if (Online.state.server) {
     // Online: the server's profile is the truth (first visit imports this device's save once).
     try {
-      await Online.hello();
+      const hi = await Online.hello();
+      SUGGEST = (hi && hi.suggest) || null;
       const prev = S.coins;
       Object.assign(S, await Online.loadProfile(ECON.pickKeys(S)));
       const c = await Online.claim();
@@ -196,7 +205,12 @@ window.initTelegram = async () => {
   }
   Online.markReady();
   if (!BT) refresh();
-  if (Online.state.profile) arenaBoot();
+  if (Online.state.profile) {
+    loadWar().then(() => { if (!BT && S.tab === 'map') refresh(); });
+    // Returning players who never chose a community get the picker once the server profile is in.
+    if (S.seenHelp && !S.faction && $('#modal').hidden && !BT) factionPicker({ suggest: SUGGEST, then: maybeDaily });
+    arenaBoot();
+  }
 };
 
 // Called at the end of arena.js, once every screen's code is loaded.
@@ -207,6 +221,8 @@ function boot() {
   Sound.music('menu');
   showCoins();
   show(S.tab || 'map');
-  if (!S.seenHelp) help(); else maybeDaily();
+  if (!S.seenHelp) help();
+  else if (!S.faction && !Online.tg()) factionPicker({ then: maybeDaily });
+  else maybeDaily();
   setInterval(updateBadge, 60e3);
 }

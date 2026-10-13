@@ -8,7 +8,7 @@ Object.assign(I18N, {
     world: { ocean: 'Глубокий океан', cave: 'Хрустальная пещера', city: 'Неоновый город', temple: 'Храм фонарей', lab: 'Зелёная лаборатория' },
     hero: {
       pinkbull: ['Титан золотой лихорадки', 'Землетрясение', '150% урона всем врагам и оглушение на 1.5 с'],
-      notcoin: ['Золотой страж', 'Золотой щит', 'Даёт всем союзникам щит в 25% от своего макс. здоровья'],
+      notcoin: ['Золотой страж', 'Золотой щит', 'Даёт каждому союзнику щит в 25% от его собственного макс. здоровья (щиты исчезают через 6 с)'],
       volya: ['Страж легенд', 'Лазерный взгляд', '450% урона самому сильному врагу'],
       egor: ['Хрустальный шахтёр', 'Пробитие брони', '250% урона; цель получает на 30% больше урона 5 с. (+10% монет)'],
       paws: ['Лунный коготь', 'Огненная лапа', 'Три удара по 140% по первому врагу'],
@@ -110,7 +110,7 @@ Object.assign(I18N, {
     world: { ocean: 'المحيط العميق', cave: 'كهف الكريستال', city: 'مدينة النيون', temple: 'معبد الفوانيس', lab: 'المختبر الأخضر' },
     hero: {
       pinkbull: ['عملاق حمّى الذهب', 'زلزال', 'ضرر 150% لكل الأعداء وصعقهم 1.5 ث'],
-      notcoin: ['الحارس الذهبي', 'الدرع الذهبي', 'يمنح كل الحلفاء درعًا بقيمة 25% من صحته القصوى'],
+      notcoin: ['الحارس الذهبي', 'الدرع الذهبي', 'يمنح كل حليف درعًا بقيمة 25% من صحته القصوى الخاصة (تختفي الدروع بعد 6 ث)'],
       volya: ['حارس الأساطير', 'عيون الليزر', 'ضرر 450% لأقوى عدو'],
       egor: ['منقّب الكريستال', 'كسر الدرع', 'ضرر 250%؛ يتلقى الهدف ضررًا أكبر بـ30% لمدة 5 ث. (+10% عملات)'],
       paws: ['ضارب مخلب القمر', 'المخلب الناري', 'ثلاث ضربات 140% على العدو الأمامي'],
@@ -212,7 +212,7 @@ Object.assign(I18N, {
     world: { ocean: 'Derin Okyanus', cave: 'Kristal Mağara', city: 'Neon Şehir', temple: 'Fener Tapınağı', lab: 'Yeşil Laboratuvar' },
     hero: {
       pinkbull: ['Altın Hücum Titanı', 'Deprem', 'Tüm düşmanlara %150 hasar ve 1,5 sn sersemletme'],
-      notcoin: ['Altın Nöbetçi', 'Altın Kalkan', 'Tüm müttefiklere maks. canının %25’i kadar kalkan verir'],
+      notcoin: ['Altın Nöbetçi', 'Altın Kalkan', 'Her müttefike kendi maks. canının %25’i kadar kalkan verir (kalkanlar 6 sn sonra kaybolur)'],
       volya: ['Efsanelerin Koruyucusu', 'Lazer Gözler', 'En güçlü düşmana %450 hasar'],
       egor: ['Kristal Madenci', 'Zırh Kırma', '%250 hasar; hedef 5 sn boyunca %30 fazla hasar alır. (+%10 coin)'],
       paws: ['Ay Pençesi', 'Ateş Pençe', 'Öndeki düşmana üç kez %140 vuruş'],
@@ -314,7 +314,7 @@ Object.assign(I18N, {
     world: { ocean: 'Océano Profundo', cave: 'Cueva de Cristal', city: 'Ciudad Neón', temple: 'Templo de Linternas', lab: 'Laboratorio Verde' },
     hero: {
       pinkbull: ['Titán de la Fiebre del Oro', 'Terremoto', '150% de daño a todos los enemigos y los aturde 1,5 s'],
-      notcoin: ['Centinela Dorado', 'Escudo Dorado', 'Da a todos los aliados un escudo del 25% de su vida máxima'],
+      notcoin: ['Centinela Dorado', 'Escudo Dorado', 'Da a cada aliado un escudo del 25% de su propia vida máxima (los escudos desaparecen tras 6 s)'],
       volya: ['Guardián de las Leyendas', 'Ojos Láser', '450% de daño al enemigo más fuerte'],
       egor: ['Minero de Cristal', 'Rompearmaduras', '250% de daño; el objetivo recibe un 30% más de daño durante 5 s. (+10% monedas)'],
       paws: ['Garra Lunar', 'Zarpa de Fuego', 'Tres golpes de 140% al enemigo del frente'],
@@ -418,7 +418,7 @@ Object.assign(I18N, {
     world: { ocean: 'Oceano Profundo', cave: 'Caverna de Cristal', city: 'Cidade Neon', temple: 'Templo das Lanternas', lab: 'Laboratório Verde' },
     hero: {
       pinkbull: ['Titã da Corrida do Ouro', 'Terremoto', '150% de dano em todos os inimigos e atordoa por 1,5 s'],
-      notcoin: ['Sentinela Dourado', 'Escudo Dourado', 'Dá a todos os aliados um escudo de 25% da vida máxima dele'],
+      notcoin: ['Sentinela Dourado', 'Escudo Dourado', 'Dá a cada aliado um escudo de 25% da própria vida máxima (os escudos somem após 6 s)'],
       volya: ['Guardião das Lendas', 'Olhos Laser', '450% de dano no inimigo mais forte'],
       egor: ['Minerador de Cristal', 'Quebra-Armadura', '250% de dano; o alvo sofre 30% a mais por 5 s. (+10% moedas)'],
       paws: ['Garra Lunar', 'Pata de Fogo', 'Três golpes de 140% no inimigo da frente'],
@@ -520,7 +520,7 @@ Object.assign(I18N, {
     world: { ocean: 'Océan profond', cave: 'Grotte de cristal', city: 'Ville néon', temple: 'Temple des lanternes', lab: 'Laboratoire vert' },
     hero: {
       pinkbull: ['Titan de la ruée vers l’or', 'Séisme', '150 % de dégâts à tous les ennemis et étourdissement 1,5 s'],
-      notcoin: ['Sentinelle dorée', 'Bouclier doré', 'Donne à tous les alliés un bouclier de 25 % de ses PV max'],
+      notcoin: ['Sentinelle dorée', 'Bouclier doré', 'Donne à chaque allié un bouclier égal à 25 % de ses propres PV max (les boucliers disparaissent après 6 s)'],
       volya: ['Gardien des légendes', 'Yeux laser', '450 % de dégâts à l’ennemi le plus fort'],
       egor: ['Mineur de cristal', 'Brise-armure', '250 % de dégâts ; la cible subit 30 % de dégâts en plus pendant 5 s. (+10 % de pièces)'],
       paws: ['Griffe lunaire', 'Patte de feu', 'Trois coups à 140 % sur l’ennemi de devant'],
@@ -622,7 +622,7 @@ Object.assign(I18N, {
     world: { ocean: 'Tiefer Ozean', cave: 'Kristallhöhle', city: 'Neonstadt', temple: 'Laternentempel', lab: 'Grünes Labor' },
     hero: {
       pinkbull: ['Titan des Goldrauschs', 'Erdbeben', '150 % Schaden an allen Gegnern und 1,5 s Betäubung'],
-      notcoin: ['Goldener Wächter', 'Goldschild', 'Gibt allen Verbündeten einen Schild von 25 % seiner max. LP'],
+      notcoin: ['Goldener Wächter', 'Goldschild', 'Gibt jedem Verbündeten einen Schild von 25 % seiner eigenen max. LP (Schilde verblassen nach 6 s)'],
       volya: ['Hüter der Legenden', 'Laseraugen', '450 % Schaden am stärksten Gegner'],
       egor: ['Kristallschürfer', 'Rüstungsbrecher', '250 % Schaden; das Ziel erleidet 5 s lang 30 % mehr Schaden. (+10 % Münzen)'],
       paws: ['Mondkralle', 'Feuerpfote', 'Drei Treffer mit je 140 % am vordersten Gegner'],
@@ -724,7 +724,7 @@ Object.assign(I18N, {
     world: { ocean: 'Samudra Dalam', cave: 'Gua Kristal', city: 'Kota Neon', temple: 'Kuil Lentera', lab: 'Lab Hijau' },
     hero: {
       pinkbull: ['Titan Demam Emas', 'Gempa Bumi', '150% kerusakan ke semua musuh dan membuat pingsan 1,5 dtk'],
-      notcoin: ['Penjaga Emas', 'Perisai Emas', 'Memberi semua sekutu perisai sebesar 25% HP maksimalnya'],
+      notcoin: ['Penjaga Emas', 'Perisai Emas', 'Memberi setiap sekutu perisai sebesar 25% HP maksimal mereka sendiri (perisai hilang setelah 6 dtk)'],
       volya: ['Penjaga Para Legenda', 'Mata Laser', '450% kerusakan ke musuh terkuat'],
       egor: ['Penambang Kristal', 'Penghancur Zirah', '250% kerusakan; target menerima 30% kerusakan lebih selama 5 dtk. (+10% koin)'],
       paws: ['Cakar Bulan', 'Cakar Api', 'Tiga serangan 140% ke musuh terdepan'],
@@ -828,7 +828,7 @@ Object.assign(I18N, {
     world: { ocean: 'Глибокий океан', cave: 'Кришталева печера', city: 'Неонове місто', temple: 'Храм ліхтарів', lab: 'Зелена лабораторія' },
     hero: {
       pinkbull: ['Титан золотої лихоманки', 'Землетрус', '150% шкоди всім ворогам і оглушення на 1,5 с'],
-      notcoin: ['Золотий вартовий', 'Золотий щит', 'Дає всім союзникам щит у 25% від свого макс. здоровʼя'],
+      notcoin: ['Золотий вартовий', 'Золотий щит', 'Дає кожному союзнику щит у 25% від його власного макс. здоровʼя (щити зникають через 6 с)'],
       volya: ['Охоронець легенд', 'Лазерний погляд', '450% шкоди найсильнішому ворогу'],
       egor: ['Кришталевий шахтар', 'Пробиття броні', '250% шкоди; ціль отримує на 30% більше шкоди 5 с. (+10% монет)'],
       paws: ['Місячний кіготь', 'Вогняна лапа', 'Три удари по 140% по першому ворогу'],
@@ -930,7 +930,7 @@ Object.assign(I18N, {
     world: { ocean: 'गहरा महासागर', cave: 'क्रिस्टल गुफा', city: 'नियॉन शहर', temple: 'लालटेन मंदिर', lab: 'हरी प्रयोगशाला' },
     hero: {
       pinkbull: ['सोने की दौड़ का दानव', 'भूकंप', 'सभी दुश्मनों को 150% नुकसान और 1.5 सेकंड बेहोश'],
-      notcoin: ['सुनहरा प्रहरी', 'सुनहरी ढाल', 'सभी साथियों को अपनी अधिकतम HP के 25% की ढाल देता है'],
+      notcoin: ['सुनहरा प्रहरी', 'सुनहरी ढाल', 'हर साथी को उसकी अपनी अधिकतम HP के 25% की ढाल देता है (ढालें 6 सेकंड बाद मिट जाती हैं)'],
       volya: ['किंवदंतियों का रक्षक', 'लेज़र आँखें', 'सबसे मज़बूत दुश्मन को 450% नुकसान'],
       egor: ['क्रिस्टल खनिक', 'कवच तोड़', '250% नुकसान; निशाना 5 सेकंड तक 30% ज़्यादा नुकसान लेता है। (+10% सिक्के)'],
       paws: ['चंद्र पंजा', 'आग का पंजा', 'सामने वाले दुश्मन पर 140% के तीन वार'],
@@ -1032,7 +1032,7 @@ Object.assign(I18N, {
     world: { ocean: '深海', cave: '水晶洞窟', city: '霓虹之城', temple: '灯笼神殿', lab: '绿色实验室' },
     hero: {
       pinkbull: ['淘金巨人', '地震', '对所有敌人造成150%伤害并眩晕1.5秒'],
-      notcoin: ['黄金哨兵', '黄金护盾', '为所有队友提供其最大生命值25%的护盾'],
+      notcoin: ['黄金哨兵', '黄金护盾', '为每位队友提供相当于其自身最大生命值25%的护盾（护盾6秒后消失）'],
       volya: ['传奇守护者', '激光眼', '对最强的敌人造成450%伤害'],
       egor: ['水晶矿工', '破甲', '造成250%伤害；目标5秒内受到的伤害提高30%。（金币+10%）'],
       paws: ['月爪突袭者', '火焰爪', '对最前方的敌人造成三次140%伤害'],
@@ -1134,7 +1134,7 @@ Object.assign(I18N, {
     world: { ocean: 'Chuqur okean', cave: 'Billur gʻor', city: 'Neon shahar', temple: 'Fonuslar ibodatxonasi', lab: 'Yashil laboratoriya' },
     hero: {
       pinkbull: ['Oltin poyga titani', 'Zilzila', 'Barcha dushmanlarga 150% zarar va 1,5 s karaxt qiladi'],
-      notcoin: ['Oltin qoʻriqchi', 'Oltin qalqon', 'Barcha ittifoqchilarga maks. jonining 25% qalqon beradi'],
+      notcoin: ['Oltin qoʻriqchi', 'Oltin qalqon', 'Har bir ittifoqchiga oʻzining maks. jonining 25% miqdorida qalqon beradi (qalqonlar 6 soniyadan keyin yoʻqoladi)'],
       volya: ['Afsonalar posboni', 'Lazer koʻzlar', 'Eng kuchli dushmanga 450% zarar'],
       egor: ['Billur konchisi', 'Sovutni sindirish', '250% zarar; nishon 5 s davomida 30% koʻproq zarar oladi. (+10% tanga)'],
       paws: ['Oy panjasi', 'Olovli panja', 'Oldingi dushmanga uch marta 140% zarba'],

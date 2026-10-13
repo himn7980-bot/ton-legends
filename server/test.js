@@ -296,6 +296,57 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   r = await post('/api/clan/leave', { initData: initData(carol) }); assert.ok(!srv.db.clans[clanId], 'empty clan removed');
   console.log('   clans: create, join, points, weekly chest, kick, leave');
 
+  // ---------- community war ----------
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'faction', id: 'notcoin' } }); assert.equal(r.body.profile.faction, 'notcoin');
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'faction', id: 'dog' } }); assert.equal(r.body.error, 'too_soon', 'switching waits a week');
+  r = await post('/api/act', { initData: initData(bob), action: { type: 'faction', id: 'dog' } });
+  srv.db.users['111'].profile.team = ['pinkbull'];
+  srv.war.addPoints('111', 5); // no Notcoin card in the team: 5
+  srv.db.users['111'].profile.team = ['notcoin', 'pinkbull'];
+  srv.war.addPoints('111', 5); // with it: doubled → 10
+  srv.war.addPoints('222', 2);
+  r = await post('/api/war/me', { initData: initData(alice) });
+  assert.equal(r.body.standings[0].id, 'notcoin'); assert.equal(r.body.standings[0].pts, 15); assert.equal(r.body.mine.pts, 15); assert.equal(r.body.mine.double, true);
+  assert.equal(r.body.standings.length, 16); assert.ok(r.body.endsAt > Date.now());
+  // the week ends
+  const oldWeek = srv.db.war.week;
+  srv.db.war.week = '2000-W01'; srv.db.users['111'].war.week = '2000-W01'; srv.db.users['222'].war.week = '2000-W01';
+  const sentBefore = calls.filter(c => c.method === 'sendMessage').length;
+  r = await post('/api/war/me', { initData: initData(alice) });
+  assert.equal(srv.db.war.week, oldWeek); assert.equal(r.body.last.place, 0); assert.equal(r.body.last.eligible, true); assert.equal(r.body.mine.pts, 0);
+  const g0w = srv.db.users['111'].profile.gems;
+  r = await post('/api/war/claim', { initData: initData(alice) }); assert.equal(r.body.gems, 30); assert.equal(r.body.profile.gems, g0w + 30);
+  r = await post('/api/war/claim', { initData: initData(alice) }); assert.equal(r.body.error, 'claimed');
+  r = await post('/api/war/claim', { initData: initData(bob) }); assert.equal(r.body.error, 'not_ready', 'under 10 points: no reward');
+  await sleep(500);
+  const warMsgs = calls.filter(c => c.method === 'sendMessage').slice(sentBefore).map(c => c.data);
+  assert.ok(warMsgs.some(m => m.chat_id === 111 && /Notcoin community finished #1/.test(m.text)), JSON.stringify(warMsgs));
+  assert.ok(warMsgs.some(m => m.chat_id === 222 && /#2/.test(m.text)));
+  console.log('   community war: points (×2 with own card), weekly result, reward claim, bot messages');
+
+  // ---------- bot reminders ----------
+  const nowR = Date.now(), bobU = srv.db.users['222'];
+  bobU.profile.afkSince = nowR - 9 * 3600e3; bobU.seen = nowR - 9 * 3600e3 + 60e3;
+  const before2 = calls.filter(c => c.method === 'sendMessage').length;
+  srv.notifier.sweep(nowR); srv.notifier.sweep(nowR); // the second sweep must not repeat it
+  await sleep(500);
+  const rem = calls.filter(c => c.method === 'sendMessage').slice(before2).map(c => c.data).filter(m => m.chat_id === 222);
+  assert.equal(rem.length, 1); assert.match(rem[0].text, /idle chest is full/); assert.ok(rem[0].reply_markup.inline_keyboard[0][0].web_app);
+  r = await post('/api/notify', { initData: initData(bob), on: false }); assert.equal(r.body.on, false);
+  bobU.profile.afkSince = nowR - 10 * 3600e3; bobU.seen = nowR - 10 * 3600e3 + 60e3;
+  srv.notifier.sweep(nowR); await sleep(300);
+  assert.equal(calls.filter(c => c.method === 'sendMessage').slice(before2).filter(c => c.data.chat_id === 222).length, 1, 'muted players get no reminders');
+  console.log('   bot reminders: idle chest full sent once; muted players skipped');
+
+  // ---------- share card for stories ----------
+  const jpg = 'data:image/jpeg;base64,' + Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 0xff, 0xd9]).toString('base64');
+  r = await post('/api/share', { initData: initData(alice), image: jpg }); assert.match(r.body.path, /^share\/111\.jpg\?v=/);
+  r = await fetch(base + '/share/111.jpg'); assert.equal(r.status, 200); assert.equal(r.headers.get('content-type'), 'image/jpeg');
+  r = await post('/api/share', { initData: initData(alice), image: 'data:image/png;base64,AAAA' }); assert.equal(r.status, 400);
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'share' } }); assert.equal(r.body.result.gems, 3);
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'share' } }); assert.equal(r.body.result.gems, 0, 'share reward once a day');
+  console.log('   share card uploaded and served; daily share reward');
+
   r = await fetch(base + '/api/status').then(x => x.json());
   assert.equal(r.webappUrlOk, true); assert.ok(r.updatesHandled >= 6); assert.equal(r.lastHandleError, null);
   assert.ok(!JSON.stringify(r).includes(TOKEN), 'status never leaks the token');

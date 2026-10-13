@@ -47,7 +47,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
     if (busyTicket(u.id)) fail('busy');
     if (p.coins < stake) fail('no_coins');
     p.coins -= stake;
-    const t = { id: rid(16), uid: u.id, name: u.name, stake, mode, team: [...p.team],
+    const t = { id: rid(16), uid: u.id, name: u.name, stake, mode, team: [...p.team], faction: p.faction || null,
       levels: Object.fromEntries(p.team.map(id => [id, p.owned[id]])), power: Math.round(ECON.teamPower(p)),
       status: 'waiting', client: null, auto: false, created: now(), lastSeen: now() };
     db.escrow[t.id] = { uid: u.id, stake };
@@ -86,7 +86,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
 
   function startMatch(a, b) {
     unlist(a); unlist(b);
-    const B = E.createPvpBattle(a.team, a.levels, b.team, b.levels, crypto.randomInt(2 ** 32));
+    const B = E.createPvpBattle(a.team, a.levels, b.team, b.levels, crypto.randomInt(2 ** 32), a.faction || null, b.faction || null);
     const m = { id: rid(8), ai: a.aiLevel || null, a, b, B, stake: a.stake, startAt: now() + COUNTDOWN_MS, inputs: [], ev: [], timer: null };
     a.side = 'hero'; b.side = 'enemy';
     for (const t of [a, b]) { t.match = m; t.status = 'playing'; send(t, 'match', matchInfo(m, t)); }
@@ -234,7 +234,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
       if (!p) fail('no_profile');
       if (!p.team.length) fail('bad_team');
       if (busyTicket(u.id)) fail('busy');
-      const t = { id: rid(16), uid: u.id, name: u.name, stake: 0, mode: 'ai', team: [...p.team],
+      const t = { id: rid(16), uid: u.id, name: u.name, stake: 0, mode: 'ai', team: [...p.team], faction: p.faction || null,
         levels: Object.fromEntries(p.team.map(id => [id, p.owned[id]])), power: Math.round(ECON.teamPower(p)),
         status: 'waiting', client: null, auto: false, created: now(), lastSeen: now() };
       const ai = aiTeam(p, level);

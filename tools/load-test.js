@@ -17,7 +17,7 @@ const initData = user => { const p = new URLSearchParams({ auth_date: String(Mat
   const base = `http://127.0.0.1:${srv.server.address().port}`;
   const post = (p, b) => fetch(base + p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json());
   const users = Array.from({ length: DUELS * 2 }, (_, i) => ({ id: 10000 + i, first_name: 'P' + i }));
-  for (const u of users) srv.db.users[u.id] = { id: String(u.id), pending: 0, gift: 0, refs: 0, created: Date.now(), profile: { ...ECON.newProfile(Date.now()), coins: 5000, owned: { pinkbull: 20, egor: 20, gramcat: 20, memegram: 20, babyshark: 20 } } };
+  for (const u of users) srv.db.users[u.id] = { id: String(u.id), pending: 0, gift: 0, refs: 0, created: Date.now(), profile: { ...ECON.newProfile(Date.now()), coins: 5000, cleared: 20, owned: { pinkbull: 20, egor: 20, gramcat: 20, memegram: 20, babyshark: 20 } } };
   const lag = monitorEventLoopDelay({ resolution: 10 }); lag.enable();
   const t0 = Date.now(); let ended = 0, ticks = 0;
   const streams = [];
