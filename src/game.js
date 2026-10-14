@@ -457,13 +457,15 @@ const STATUS_ICONS = [['freeze', '❄️'], ['stun', '💫'], ['slow', '🐌'], 
 const isMine = u => u.side === ((BT && BT.mySide) || 'hero');
 const allUnits = () => [...BT.B.heroes, ...BT.B.enemies];
 
+// A row with a long (three-word fusion) name gives every name in it room for three lines, so the bars line up.
+const tallNames = units => (units.some(u => u.name.length > 18) ? 'tall-names' : '');
 function unitCard(u) {
   const mine = isMine(u);
   const rc = !mine ? (u.boss ? '#ff3b3b' : '#e0475a') : RARITY[HERO_BY_ID[u.id].rarity].color;
   return `<div class="hcard ${mine ? 'hero' : 'enemy'} ${u.boss ? 'boss' : ''} ${mine ? frameOf(u.id) : ''}" data-uid="${u.uid}" style="--rc:${rc}">
     ${mine ? '<span class="ready">⚡</span>' : ''}${u.boss ? '<span class="crown">👑</span>' : ''}
     <img src="${img(u.id)}" alt=""><div class="status"></div>
-    <div class="hc-name">${u.name}</div><div class="bar hp ${mine ? 'h' : ''}"><i></i><i class="sh" style="width:0"></i></div><div class="bar en"><i></i></div></div>`;
+    <div class="hc-name ${u.name.length > 12 ? 'long' : ''}">${u.name}</div><div class="bar hp ${mine ? 'h' : ''}"><i></i><i class="sh" style="width:0"></i></div><div class="bar en"><i></i></div></div>`;
 }
 
 // Draws the battle screen for the current BT. mine = my cards (bottom), theirs = opponent cards (top).
@@ -478,10 +480,10 @@ function buildBattle({ title, bg, mine, theirs, oppLabel, myLabel, onTap, onAuto
       <button id="b-auto" class="${S.auto ? 'on' : ''}">${t.auto}</button>
     </div>
     ${oppLabel ? `<div class="b-name opp">${oppLabel}</div>` : ''}
-    <div class="b-enemies n${theirs.length}">${theirs.map(unitCard).join('')}</div>
+    <div class="b-enemies n${theirs.length} ${tallNames(theirs)}">${theirs.map(unitCard).join('')}</div>
     <div class="b-vs">VS</div>
     <div class="b-mid"><div id="b-banner"></div></div>
-    <div class="b-heroes">${mine.map(unitCard).join('')}</div>
+    <div class="b-heroes ${tallNames(mine)}">${mine.map(unitCard).join('')}</div>
     ${myLabel ? `<div class="b-name me">${myLabel}</div>` : ''}
     <div class="b-hint">${t.tapHint}</div>
     <div id="b-fx"></div>`;

@@ -488,3 +488,7 @@ img.mini.big { width: 84px; height: 84px; border-width: 3px; border-color: var(-
 @keyframes emote { 0% { transform: translateX(-50%) scale(.3); opacity: 0; } 15% { transform: translateX(-50%) scale(1.15); opacity: 1; } 75% { opacity: 1; } 100% { transform: translateX(-50%) translateY(-30px) scale(.9); opacity: 0; } }
 #battle.has-emotes { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 #battle.has-emotes .b-hint { display: none; }
+/* card names: long (fusion) names wrap to two lines; every name box has the same height so the bars line up */
+.hcard .hc-name { min-height: 25px; display: flex; align-items: center; justify-content: center; line-height: 1.1; }
+.hcard .hc-name.long { white-space: normal; font-size: 9px; letter-spacing: -.2px; overflow-wrap: anywhere; }
+.tall-names .hcard .hc-name { min-height: 34px; }

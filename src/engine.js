@@ -42,9 +42,24 @@ const HEROES = [
 // Fusion cards (#1–#680, every duo and trio of the 16 heroes; list in fusions-data.js). Crafted in the Fusion Lab
 // from heroes you own; their skill fires every part's skill at once. Supply is limited worldwide, so each copy is numbered.
 const FD = typeof module !== 'undefined' ? require('./fusions-data.js') : { FUSION_DATA: self.FUSION_DATA, LEGACY_FUSION_IDS: self.LEGACY_FUSION_IDS };
+// Every fusion card has its own name (shown under the card in battle). 22 are hand-named in fusions-data.js;
+// the rest are built from one word per part: [first word, second word, third word (trios)]. The word order
+// rotates with the card number for variety, and every combination of heroes gives a different name.
+const FUSION_WORDS = {
+  pinkbull: ['Raging', 'Bull', 'Titan'], notcoin: ['Golden', 'Sentinel', 'Vault'], volya: ['Legend', 'Guardian', 'Hero'],
+  egor: ['Crystal', 'Miner', 'Quake'], paws: ['Lunar', 'Claw', 'Fang'], noctis: ['Shadow', 'Phantom', 'Eclipse'],
+  gramcat: ['Sky', 'Archer', 'Arrow'], utya: ['Frost', 'Wing', 'Storm'], pengu: ['Polar', 'Ranger', 'Glacier'],
+  memegram: ['Star', 'Mage', 'Nova'], yoda: ['Ancient', 'Sage', 'Oracle'], virus: ['Toxic', 'Plague', 'Venom'],
+  babyshark: ['Ocean', 'Shark', 'Tide'], yaya: ['Lantern', 'Keeper', 'Flame'], dog: ['Swift', 'Courier', 'Express'],
+  teddy: ['Velvet', 'Bear', 'Boss'],
+};
+function fusionName(num, parts) {
+  const k = parts.length, r = num % k, order = parts.slice(r).concat(parts.slice(0, r));
+  return order.map((p, i) => FUSION_WORDS[p][i]).join(' ');
+}
 const FUSIONS = FD.FUSION_DATA.map(([num, parts, name, role]) => ({
   id: 'f' + num, num, parts, fusion: true, rarity: parts.length === 3 ? 'X' : 'M',
-  name: name || parts.map(p => HEROES.find(h => h.id === p).name).join(' × '),
+  name: name || fusionName(num, parts),
   role: role || HEROES.find(h => h.id === parts[0]).role,
 }));
 const LEGACY_FUSION_IDS = FD.LEGACY_FUSION_IDS;
