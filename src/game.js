@@ -55,7 +55,7 @@ const nextUnlock = () => Object.keys(ECON.UNLOCKS).filter(k => !isOpen(k)).sort(
 // ---------- state ----------
 const SAVE_KEY = 'tonlegends_v1';
 // S = economy profile (rules in economy.js; the server owns it when online) + local UI preferences.
-const PREFS = () => ({ sel: 0, world: 0, speed: 1, auto: false, tab: 'map', seenHelp: false, lang: null, sfx: true, music: true, stake: 100, updatedAt: 0 });
+const PREFS = () => ({ tutDone: false, sel: 0, world: 0, speed: 1, auto: false, tab: 'map', seenHelp: false, lang: null, sfx: true, music: true, stake: 100, updatedAt: 0 });
 const defaultState = () => ({ ...ECON.newProfile(Date.now()), ...PREFS() });
 let S = load();
 function load() {
@@ -192,6 +192,7 @@ function renderMap() {
       <div class="stages">${nodes}</div>
     </div>
     <button class="event-banner" id="to-cal">${EVENT_ICON[ev]} <b>${t.ev[ev]}</b> · ${t.evFx[ev]}</button>
+    ${ECON.rookieActive(S) ? rookieBanner() : ''}
     ${warBanner()}
     ${tickerHtml()}
     ${nextUnlock() ? `<div class="next-unlock">🔓 ${t.nextUnlock(t.feat[nextUnlock()], n(unlockWorld(nextUnlock())))}</div>` : ''}
@@ -211,6 +212,7 @@ function renderMap() {
   $('#edit-team').onclick = () => show('heroes');
   $('#to-war').onclick = () => show('war');
   $('#to-cal').onclick = () => show('quests');
+  if ($('#to-rookie')) $('#to-rookie').onclick = () => show('quests');
   if ($('#ticker')) $('#ticker').onclick = marketModal;
   $('#go').onclick = () => startBattle(S.sel);
 }
@@ -572,14 +574,47 @@ async function startBattle(idx) {
   if (!r) return;
   const t = T(), B = createBattle(S.team, S.owned, idx, r.seed, S.faction || null, r.market || null, r.perks || null);
   // Taps are queued and applied at the next fixed tick, and recorded as [tick, code] so the server can replay the fight.
-  BT = { mode: 'stage', B, idx, mySide: 'hero', inputs: [], queue: S.auto ? [-1] : [], acc: 0, last: performance.now(), raf: 0, ended: false };
+  // The very first battle is guided: it pauses and shows what to tap (a glowing card, then the ultimate).
+  const tut = !S.tutDone && S.cleared === 0 && idx === 0;
+  if (tut) { S.auto = false; save(); }
+  BT = { mode: 'stage', B, idx, mySide: 'hero', inputs: [], queue: S.auto ? [-1] : [], acc: 0, last: performance.now(), raf: 0, ended: false, tut: tut ? { step: 0 } : null };
   buildBattle({
     title: `${t.stage(stageLabel(idx))}${isBossStage(idx) ? ' · ' + t.bossCrown : ''}`, bg: WORLDS[Math.floor(idx / STAGES_PER_WORLD)].bg,
     mine: B.heroes, theirs: B.enemies, showSpeed: true,
-    onTap: u => BT.queue.push(u.uid), onAuto: on => BT.queue.push(on ? -1 : -2), onUlt: () => BT.queue.push(-3),
+    onTap: u => { BT.queue.push(u.uid); tutorDone(1); }, onAuto: on => BT.queue.push(on ? -1 : -2), onUlt: () => { BT.queue.push(-3); tutorDone(2); },
   });
   Sound.music('battle');
+  if (tut) coach(T().tut1, 3200);
   BT.raf = requestAnimationFrame(loop);
+}
+
+// ---------- first-battle coach ----------
+function coach(text, ms) {
+  const old = document.querySelector('.coach-bubble'); if (old) old.remove();
+  if (!text) return;
+  const d = document.createElement('div'); d.className = 'coach-bubble'; d.textContent = text;
+  $('#battle').appendChild(d);
+  if (ms) setTimeout(() => d.remove(), ms);
+}
+function coachTarget(el) {
+  document.querySelectorAll('.coached').forEach(x => x.classList.remove('coached'));
+  if (el) el.classList.add('coached');
+}
+// Called every frame of the guided battle: pause when there is something to learn.
+function tutorCheck() {
+  const tut = BT && BT.tut; if (!tut || BT.paused) return;
+  const B = BT.B;
+  if (tut.step === 0) {
+    const u = B.heroes.find(x => x.alive && x.energy >= 100);
+    if (u) { tut.step = 1; BT.paused = true; coachTarget(BT.els.get(u.uid).root); coach(T().tut2); }
+  } else if (tut.step === 1.5 && B.ult.hero >= 100) {
+    tut.step = 2; BT.paused = true; coachTarget($('#b-ult')); coach(T().tut4);
+  }
+}
+function tutorDone(step) {
+  const tut = BT && BT.tut; if (!tut || tut.step !== step) return;
+  BT.paused = false; BT.last = performance.now(); coachTarget(null);
+  if (step === 1) { tut.step = 1.5; coach(T().tut3, 3800); } else { tut.step = 3; coach(null); }
 }
 
 function confirmLeave() {
@@ -615,6 +650,7 @@ function loop(now) {
     for (const code of BT.queue.splice(0)) { BT.inputs.push([B.tick, code]); applyInput(B, code); }
     step(B);
     BT.acc -= TICK;
+    if (BT.tut) { tutorCheck(); if (BT.paused) break; }
   }
   flush();
   if (B.over && !BT.ended) { BT.ended = true; syncNav(); setTimeout(finishStage, 900); }
@@ -720,6 +756,7 @@ function processEvents() {
 async function finishStage() {
   if (!BT || BT.mode !== 'stage') return;
   const { idx, inputs } = BT, timeout = !!(BT.B && BT.B.timeout);
+  if (BT.tut) { S.tutDone = true; save(); coach(null); }
   cancelAnimationFrame(BT.raf);
   BT = null;
   Sound.music('menu');
@@ -749,7 +786,8 @@ function showStageResult(idx, res) {
       <div class="big" style="color:var(--gold)">+🪙 ${n(res.coins)}</div>
       ${res.first ? `<p class="muted">${t.firstBonus}</p>` : ''}
       ${res.timeout ? `<p class="muted">⏱️ ${t.timeUp}</p>` : ''}
-      ${res.unlocked.length ? `<div class="unlocked">${res.unlocked.map(k => `<div>🔓 ${t.unlockedNew}: <b>${t.feat[k]}</b></div>`).join('')}</div>` : ''}
+      ${res.unlocked.length ? `<div class="unlocked">${res.unlocked.map(k => `<div class="unl"><div>🔓 ${t.unlockedNew}: <b>${t.feat[k]}</b></div>
+        <div class="small muted">${t.featIntro[k]}</div><button class="btn gold" data-go="${k}">${t.showMe}</button></div>`).join('')}</div>` : ''}
       <div class="btns" style="margin-top:14px">
         <button class="btn ghost" id="r-map">${t.toMap}</button>
         <button class="btn ghost" id="r-again">${t.replay}</button>
@@ -775,6 +813,9 @@ function bindResult(box, idx, nextIdx) {
   if (q('#r-heroes')) q('#r-heroes').onclick = leave(() => { $('#battle').hidden = true; show('heroes'); });
   if (q('#r-again')) q('#r-again').onclick = leave(() => startBattle(idx));
   if (q('#r-next')) q('#r-next').onclick = leave(() => startBattle(nextIdx));
+  // "Show me" on a newly unlocked feature: go straight to it.
+  const where = { royal: 'chest', gemChest: 'chest', exchange: 'chest', ai: 'arena', pvp: 'arena', duo: 'lab', trio: 'lab', clan: 'clan' };
+  box.querySelectorAll('[data-go]').forEach(b => b.onclick = leave(() => { $('#battle').hidden = true; show(where[b.dataset.go] || 'map'); }));
 }
 
 // ---------- help ----------

@@ -45,6 +45,50 @@ function dailyHtml(panel = true) {
 }
 function maybeDaily() { if (dailyCanClaim() && S.seenHelp) setTimeout(() => { if ($('#modal').hidden && !BT) openModal(dailyHtml(false), box => box.querySelector('#daily').onclick = claimDaily); }, 400); }
 
+// ---------- rookie journey (first 7 days) ----------
+let ROOKIE_SEL = null;
+const rookieCur = () => { const c = S.rookie.claimed; return ECON.ROOKIE.findIndex((_, d) => !c.includes(d)); };
+function rookieBanner() {
+  const t = T(), d = rookieCur(), done = ECON.ROOKIE[d].tasks.filter(([k, n]) => ECON.rookieStat(S, k) >= n).length;
+  return `<button class="rookie-banner" id="to-rookie">🌱 <b>${t.rookieTitle}</b> · ${t.rookieDay(n(d + 1))} · ${n(done)}/${n(3)}${d === 6 ? ' · 👑' : ''}</button>`;
+}
+function rookieHtml() {
+  const t = T(), R = ECON.ROOKIE, open = ECON.rookieOpenDays(S, Date.now()), claimed = S.rookie.claimed;
+  if (ROOKIE_SEL === null || claimed.includes(ROOKIE_SEL)) ROOKIE_SEL = rookieCur();
+  const d = ROOKIE_SEL, day = R[d], done = ECON.rookieDayDone(S, d), isOpen = d < open;
+  const strip = R.map((r, i) => { const st = claimed.includes(i) ? 'got' : i >= open ? 'locked' : ECON.rookieDayDone(S, i) ? 'ready' : 'open';
+    return `<button class="rday ${st} ${i === d ? 'sel' : ''}" data-rday="${i}"><small>${t.day(n(i + 1))}</small><b>${st === 'got' ? '✓' : st === 'locked' ? '🔒' : r.legend ? '👑' : '🎁'}</b></button>`; }).join('');
+  const nextOpen = Date.parse(ECON.day(Date.now())) + 864e5, hrs = Math.max(1, Math.ceil((nextOpen - Date.now()) / 3600e3));
+  return `<div class="panel rookie"><div class="row"><div class="t">🌱 ${t.rookieTitle}</div><span class="muted small">${n(claimed.length)}/${n(7)}</span></div>
+    <p class="muted small" style="margin:4px 0 8px">${t.rookieNote}</p>
+    <div class="rdays">${strip}</div>
+    ${day.tasks.map(([k, goal]) => { const v = Math.min(goal, ECON.rookieStat(S, k)); return `<div class="rtask ${v >= goal ? 'ok' : ''}"><span>${v >= goal ? '✅' : '▫️'} ${t.rk[k](n(goal))}</span><small>${n(v)}/${n(goal)}</small></div>`; }).join('')}
+    <div class="muted small" style="margin:8px 0">${t.rookieReward}: 🪙 ${n(day.coins)} + 💎 ${n(day.gems)}${day.legend ? ` + 👑 ${t.rookieLegend}` : ''}</div>
+    ${!isOpen ? `<button class="btn wide ghost" disabled>🔒 ${t.rookieOpensIn(n(d === open ? hrs : hrs + (d - open) * 24))}</button>`
+      : done ? `<button class="btn wide gold" id="rk-claim">${t.claim(n(day.coins))} + 💎 ${n(day.gems)}${day.legend ? ' + 👑' : ''}</button>`
+        : `<button class="btn wide ghost" disabled>${t.rookieDoTasks}</button>`}</div>`;
+}
+function bindRookie() {
+  document.querySelectorAll('[data-rday]').forEach(b => b.onclick = () => { ROOKIE_SEL = +b.dataset.rday; renderQuests(); });
+  const c = $('#rk-claim');
+  if (c) c.onclick = async () => {
+    c.disabled = true;
+    const d = ROOKIE_SEL, r = await tryAct({ type: 'rookie', day: d });
+    if (!r) return renderQuests();
+    Sound.play('chest'); haptic('heavy');
+    if (r.hero) {
+      const h = HERO_BY_ID[r.hero], t = T();
+      openModal(`<div class="center"><div class="tag" style="color:${RARITY.L.color}">${L().rarity.L}</div>
+        <div class="reveal" style="--rc:${RARITY.L.color}"><div class="flip"><img src="${img(r.hero)}" alt=""></div></div>
+        <div class="big latin" style="font-size:26px">${h.name}</div><p style="font-weight:700">${t.rookieLegendGot}</p>
+        <div class="big" style="color:var(--gold)">+🪙 ${n(r.coins)} · +💎 ${n(r.gems)}</div>
+        <button class="btn wide gold" id="rk-ok" style="margin-top:10px">${t.great}</button></div>`, box => box.querySelector('#rk-ok').onclick = () => { closeModal(); refresh(); });
+      Sound.play('legend');
+    } else giftModal('🌱', T().rookieDay(n(d + 1)), r.coins, '', r.gems);
+    ROOKIE_SEL = null;
+  };
+}
+
 // ---------- weekly events calendar ----------
 function calendarHtml() {
   const t = T(), today = new Date().getUTCDay(), loc = L().locale;
@@ -62,6 +106,7 @@ function renderQuests() {
   ECON.ensureDQ(S, now());
   const afk = afkAmount(), afkH = Math.min(AFK_CAP_H, (Date.now() - S.afkSince) / 3600e3);
   $('#screen').innerHTML = `
+    ${ECON.rookieActive(S) ? rookieHtml() : ''}
     ${calendarHtml()}
     ${dailyHtml()}
     <div class="panel"><div class="row"><div class="t">${t.idleTitle}</div><span class="muted">${t.perHour(n(afkRate()))}</span></div>
@@ -77,6 +122,7 @@ function renderQuests() {
         Math.min(goal, a.stat(S)), goal, a.r[Math.min(tier, a.r.length - 1)], done, ECON.achGems(Math.min(tier, a.r.length - 1)));
     }).join('')}`;
   $('#daily').onclick = claimDaily;
+  bindRookie();
   $('#afk').onclick = async () => { if (await tryAct({ type: 'afk' })) renderQuests(); };
   document.querySelectorAll('[data-q]').forEach(b => b.onclick = async () => {
     const [kind, id] = b.dataset.q.split('-');

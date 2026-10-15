@@ -71,7 +71,7 @@ const tgScript = (user, startParam) => `
   assert.ok(await p1.$('#ticker'), 'market ticker on the map'); assert.match(await p1.textContent('#ticker'), /NOT.*12/);
   await p1.screenshot({ path: OUT + '/m1-ticker.png' });
   await p1.click('#ticker'); await p1.waitForSelector('#mk-ok'); await p1.screenshot({ path: OUT + '/m2-market.png' }); await p1.click('#mk-ok');
-  await p1.evaluate(() => { S.auto = true; S.speed = 3; save(); });
+  await p1.evaluate(() => { S.auto = true; S.speed = 3; S.tutDone = true; save(); });
   for (let i = 0; i < 2; i++) { await p1.click('#go'); await p1.waitForSelector('#r-map', { timeout: 60000 }); await p1.click('#r-map'); }
   assert.equal(serverProfile(777).cleared, 2, 'server verified both stage wins (with the market boost)');
   assert.deepEqual(await p1.evaluate(() => BT === null), true);

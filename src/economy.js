@@ -22,6 +22,21 @@
   const needUnlock = (p, key) => { if (!unlocked(p, key)) fail('locked_feature'); };
   // AI duels: no stake; the first AI_DAILY wins each day pay a reward based on progress.
   const AI_DAILY = 5;
+  // Rookie journey: 7 days of 3 simple tasks for new players; day N opens N-1 days after joining (missed days
+  // stay open), and day 7 gives a Legendary hero. Tasks count totals, so progress is never lost.
+  const ROOKIE = [
+    { tasks: [['cleared', 3], ['skills', 5], ['upgrades', 1]], coins: 500, gems: 5 },
+    { tasks: [['cleared', 6], ['chests', 1], ['wins', 8]], coins: 800, gems: 5 },
+    { tasks: [['cleared', 10], ['faction', 1], ['upgrades', 5]], coins: 1200, gems: 10 },
+    { tasks: [['cleared', 14], ['aiWins', 1], ['skills', 40]], coins: 1500, gems: 10 },
+    { tasks: [['cleared', 18], ['chests', 4], ['wins', 25]], coins: 2000, gems: 15 },
+    { tasks: [['cleared', 22], ['pvpWins', 1], ['upgrades', 12]], coins: 2500, gems: 15 },
+    { tasks: [['cleared', 26], ['skills', 100], ['wins', 40]], coins: 3000, gems: 20, legend: true },
+  ];
+  const rookieStat = (p, k) => (k === 'cleared' ? p.cleared : k === 'faction' ? (p.faction ? 1 : 0) : (p.stats && p.stats[k]) || 0);
+  const rookieOpenDays = (p, now) => (p.rookie ? Math.floor((Date.parse(day(now)) - Date.parse(p.rookie.start)) / 864e5) + 1 : 0);
+  const rookieDayDone = (p, d) => ROOKIE[d].tasks.every(([k, n]) => rookieStat(p, k) >= n);
+  const rookieActive = p => !!(p.rookie && p.rookie.claimed.length < ROOKIE.length);
   // Collection sets: own all four heroes of a set at level SET_LEVEL+ and every card in your team gets the bonus.
   const SET_LEVEL = 10;
   const SETS = [
@@ -93,10 +108,10 @@
   const DAILY_REWARDS = [200, 300, 400, 500, 700, 900, 'royal'];
   const AFK_CAP_H = 8;
   const HOLO_CHANCE = 0.03; // a chest card has a 3% chance to come out as a shimmering Holo variant (cosmetic)
-  const KEYS = ['fv', 'faction', 'factionAt', 'shareDay', 'coins', 'gems', 'owned', 'team', 'cleared', 'stats', 'daily', 'dq', 'ach', 'afkSince', 'pending', 'serials', 'holo', 'replays', 'aiDay'];
+  const KEYS = ['rookie', 'fv', 'faction', 'factionAt', 'shareDay', 'coins', 'gems', 'owned', 'team', 'cleared', 'stats', 'daily', 'dq', 'ach', 'afkSince', 'pending', 'serials', 'holo', 'replays', 'aiDay'];
 
   function newProfile(now) {
-    return { fv: FUSION_VERSION, faction: null, factionAt: 0, shareDay: null, coins: 300, gems: START_GEMS, aiDay: null, owned: Object.fromEntries(E.STARTERS.map(id => [id, 1])), team: [...E.STARTERS], cleared: 0,
+    return { rookie: { start: day(now), claimed: [] }, fv: FUSION_VERSION, faction: null, factionAt: 0, shareDay: null, coins: 300, gems: START_GEMS, aiDay: null, owned: Object.fromEntries(E.STARTERS.map(id => [id, 1])), team: [...E.STARTERS], cleared: 0,
       stats: { wins: 0, losses: 0, chests: 0, upgrades: 0, skills: 0, bosses: 0, pvpWins: 0, pvpLosses: 0 },
       daily: { last: null, streak: 0 }, dq: { date: null, p: {}, c: {} }, ach: {}, afkSince: now, pending: null, serials: {}, holo: {}, replays: {} };
   }
@@ -111,6 +126,8 @@
   const FUSION_VERSION = 2, FUSION_V2_SHIFT = { 2: 3, 3: 7 };
   function normalize(p, now) {
     const d = newProfile(now);
+    // Players who joined before the rookie journey: new-ish ones get it, veterans skip it.
+    if (!p.rookie) p.rookie = (p.cleared || 0) >= 30 ? { start: day(now), claimed: [0, 1, 2, 3, 4, 5, 6] } : { start: day(now), claimed: [] };
     if (p.fv !== FUSION_VERSION) {
       for (const f of E.FUSIONS) if (p.owned && p.owned[f.id]) p.owned[f.id] = Math.min(E.MAX_LEVEL, p.owned[f.id] + FUSION_V2_SHIFT[f.parts.length]);
       p.fv = FUSION_VERSION;
@@ -267,6 +284,22 @@
         p.faction = id; p.factionAt = now;
         return { faction: id };
       }
+      case 'rookie': {
+        const d = a.day | 0;
+        if (!p.rookie || !ROOKIE[d] || p.rookie.claimed.includes(d)) fail('claimed');
+        if (d >= rookieOpenDays(p, now) || !rookieDayDone(p, d)) fail('not_ready');
+        const r = ROOKIE[d];
+        p.rookie.claimed.push(d); p.coins += r.coins; p.gems += r.gems;
+        let hero = null, level = null;
+        if (r.legend) {
+          // A Legendary hero you don't have yet; if you own them all, your weakest one gains 3 levels.
+          const legends = E.BASE_HEROES.filter(h => h.rarity === 'L'), missing = legends.filter(h => !p.owned[h.id]);
+          if (missing.length) { hero = missing[Math.floor(rng() * missing.length)].id; p.owned[hero] = 1; if (p.team.length < 5) p.team.push(hero); }
+          else { hero = legends.reduce((a, h) => (p.owned[h.id] < p.owned[a.id] ? h : a), legends[0]).id; p.owned[hero] = Math.min(E.MAX_LEVEL, p.owned[hero] + 3); }
+          level = p.owned[hero];
+        }
+        return { coins: r.coins, gems: r.gems, hero, level };
+      }
       case 'share': {
         if (p.shareDay === day(now)) return { gems: 0 };
         p.shareDay = day(now); p.gems += SHARE_GEMS;
@@ -349,6 +382,6 @@
     return p;
   }
 
-  return { SET_LEVEL, SETS, setDone, perksOf, STAR_LEVELS, starsOf, EVENTS, EVENT_FX, eventOf, COMMUNITY, MOODS, moodOf, marketBoosts, marketCoinBonus, FACTION_SWITCH_GEMS, FACTION_SWITCH_DAYS, FACTION_UPGRADE_DISCOUNT, FACTION_CHEST_WEIGHT, SHARE_GEMS, upgradePrice, UNLOCKS, unlocked, START_GEMS, DAY7_GEMS, WARP_COST, WARP_HOURS, gemRate, achGems, AI_DAILY, AI_LEVELS, aiLeft, aiReward, migrateIds, HOLO_CHANCE, CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
+  return { ROOKIE, rookieStat, rookieOpenDays, rookieDayDone, rookieActive, SET_LEVEL, SETS, setDone, perksOf, STAR_LEVELS, starsOf, EVENTS, EVENT_FX, eventOf, COMMUNITY, MOODS, moodOf, marketBoosts, marketCoinBonus, FACTION_SWITCH_GEMS, FACTION_SWITCH_DAYS, FACTION_UPGRADE_DISCOUNT, FACTION_CHEST_WEIGHT, SHARE_GEMS, upgradePrice, UNLOCKS, unlocked, START_GEMS, DAY7_GEMS, WARP_COST, WARP_HOURS, gemRate, achGems, AI_DAILY, AI_LEVELS, aiLeft, aiReward, migrateIds, HOLO_CHANCE, CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
     dqReward, dailyCanClaim, dailyNext, afkRate, afkAmount, achTier, coinBonus, replayFactor, stageCoins, teamPower, claimable, act, importLocal };
 });

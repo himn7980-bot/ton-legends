@@ -29,12 +29,13 @@ const assert = require('assert');
   await step('Heroes → Chests', () => p.click('[data-tab=chest]'), { tab: 'chest' });
   await step('header back → Map (home)', () => p.click('#back'), { tab: 'map', back: false });
   await step('Quests → device back → Map', async () => { await p.click('[data-tab=quests]'); await deviceBack(); }, { tab: 'map' });
+  await p.evaluate(() => { S.tutDone = true; save(); }); // the guided first battle is tested on its own
   await step('start battle', () => p.click('#go'), { bt: true, battle: true });
   await step('device back asks to confirm + pauses', deviceBack, { modal: true, paused: true });
   await p.screenshot({ path: out + '/n2-leave.png' });
   await step('back again = keep fighting', deviceBack, { modal: false, paused: false, bt: true });
   await step('✕ in battle → confirm → Leave', async () => { await p.click('#b-exit'); await p.click('#lv-yes'); }, { bt: false, battle: false, tab: 'map', modal: false });
-  await p.evaluate(() => { S.auto = true; S.speed = 3; save(); });
+  await p.evaluate(() => { S.auto = true; S.speed = 3; S.tutDone = true; save(); });
   await step('win a battle', async () => { await p.click('#go'); await p.waitForSelector('#r-map', { timeout: 60000 }); }, { modal: true, battle: true });
   await step('device back on result → Map', deviceBack, { modal: false, battle: false, tab: 'map' });
   await step('Ranks → Community War → back → Map', async () => { await p.click('[data-tab=rank]'); await p.click('#to-war2'); await p.waitForTimeout(200); await deviceBack(); }, { tab: 'map', modal: false });

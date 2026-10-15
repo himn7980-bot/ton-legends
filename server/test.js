@@ -422,6 +422,20 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert.equal(srv.db.war.points.notcoin - wp, 2, 'war day doubles points');
   process.env.TL_EVENT = 'none';
   console.log('   collection set perks; weekend coins, upgrade sale, war day');
+  // rookie journey: day 1 tasks done → reward; day 2 waits until tomorrow
+  const rook = { id: 4242, first_name: 'Rook' };
+  r = await post('/api/profile', { initData: initData(rook) }); assert.deepEqual(r.body.profile.rookie.claimed, []);
+  r = await post('/api/act', { initData: initData(rook), action: { type: 'rookie', day: 0 } }); assert.equal(r.body.error, 'not_ready');
+  Object.assign(srv.db.users['4242'].profile, { cleared: 3 }); Object.assign(srv.db.users['4242'].profile.stats, { skills: 5, upgrades: 1 });
+  r = await post('/api/act', { initData: initData(rook), action: { type: 'rookie', day: 0 } }); assert.equal(r.body.result.coins, 500);
+  r = await post('/api/act', { initData: initData(rook), action: { type: 'rookie', day: 0 } }); assert.equal(r.body.error, 'claimed');
+  r = await post('/api/act', { initData: initData(rook), action: { type: 'rookie', day: 1 } }); assert.equal(r.body.error, 'not_ready');
+  srv.db.users['4242'].profile.rookie.start = '2000-01-01'; Object.assign(srv.db.users['4242'].profile, { cleared: 26, faction: 'dog' });
+  Object.assign(srv.db.users['4242'].profile.stats, { skills: 100, wins: 40, chests: 4, upgrades: 12, aiWins: 1, pvpWins: 1 });
+  for (let d = 1; d < 6; d++) await post('/api/act', { initData: initData(rook), action: { type: 'rookie', day: d } });
+  r = await post('/api/act', { initData: initData(rook), action: { type: 'rookie', day: 6 } });
+  assert.ok(['notcoin', 'volya', 'noctis'].includes(r.body.result.hero), 'day 7: a Legendary hero');
+  console.log('   rookie journey: daily unlocks, claims, Legendary on day 7');
 
   r = await fetch(base + '/api/status').then(x => x.json());
   assert.equal(r.webappUrlOk, true); assert.ok(r.updatesHandled >= 6); assert.equal(r.lastHandleError, null);
