@@ -437,6 +437,20 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert.ok(['notcoin', 'volya', 'noctis'].includes(r.body.result.hero), 'day 7: a Legendary hero');
   console.log('   rookie journey: daily unlocks, claims, Legendary on day 7');
 
+  // ---------- analytics (/stats for admins) ----------
+  srv.db.users['555'].seen = Date.now() - 5 * 864e5; srv.db.users['555'].created = Date.now() - 9 * 864e5; srv.db.users['555'].profile.cleared = 11;
+  const rep = srv.analytics.report();
+  assert.ok(rep.players >= 5, rep.players); assert.ok(rep.today.active >= 4, JSON.stringify(rep.today)); assert.ok(rep.today.battles >= 1); assert.ok(rep.starsAll >= 75);
+  assert.ok(rep.quitTop.some(([st]) => st === '12'), 'Carol quit at stage 12');
+  const before3 = calls.filter(c => c.method === 'sendMessage').length;
+  queue.push({ update_id: 9001, message: { chat: { id: 111 }, from: alice, text: '/stats' } });
+  queue.push({ update_id: 9002, message: { chat: { id: 222 }, from: bob, text: '/stats' } });
+  await sleep(1200);
+  const st = calls.filter(c => c.method === 'sendMessage').slice(before3).map(c => c.data);
+  assert.ok(st.some(m => m.chat_id === 111 && /TON Legends — stats/.test(m.text) && /stuck at: .*stage 12/.test(m.text)), JSON.stringify(st));
+  assert.ok(st.some(m => m.chat_id === 222 && /Only admins/.test(m.text)));
+  console.log('   analytics: daily counters, retention, funnel, quit stages; /stats only for admins');
+
   r = await fetch(base + '/api/status').then(x => x.json());
   assert.equal(r.webappUrlOk, true); assert.ok(r.updatesHandled >= 6); assert.equal(r.lastHandleError, null);
   assert.ok(!JSON.stringify(r).includes(TOKEN), 'status never leaks the token');

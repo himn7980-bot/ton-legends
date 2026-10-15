@@ -19,6 +19,7 @@ const createClans = require('./clans.js');
 const createWar = require('./war.js');
 const createNotifier = require('./notify.js');
 const createMarket = require('./market.js');
+const createAnalytics = require('./analytics.js');
 const BOT_TEXT = require('./bot-text.js');
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
@@ -276,10 +277,16 @@ async function handleUpdate(up) {
     if (String(u.id) !== uid) return;
     credit(u, pack.coins || 0, pack.gems || 0);
     db.payments[chargeId] = { uid, pack: packId, stars: p.total_amount, at: Date.now() };
+    analytics.payment(p.total_amount);
     persist();
     const L = tx(m.from.language_code);
     await tg('sendMessage', { chat_id: m.chat.id, text: pack.gems ? L.paidGems(pack.gems) : L.paid(pack.coins),
       reply_markup: { inline_keyboard: [[{ text: L.open, web_app: { url: WEBAPP_URL } }]] } });
+    return;
+  }
+  if (typeof m.text === 'string' && /^\/stats\b/.test(m.text)) {
+    if (ADMIN_IDS.has(String(m.from.id))) await tg('sendMessage', { chat_id: m.chat.id, text: analytics.text() });
+    else await tg('sendMessage', { chat_id: m.chat.id, text: `Your Telegram ID is ${m.from.id}. Only admins (ADMIN_IDS) can see /stats.` });
     return;
   }
   if ((typeof m.text === 'string' && /^\/art/.test(m.text)) || ((m.photo || m.document) && ADMIN_IDS.has(String(m.from.id)))) {
@@ -377,6 +384,7 @@ function leaderboard(meId) {
   return { top, total: all.length, me: idx >= 0 ? { rank: idx + 1, stage: all[idx].stage } : null };
 }
 
+const analytics = createAnalytics({ db, persist });
 const clans = createClans({ db, persist, profileOut: u => (u.profile ? ECON.pickKeys(u.profile) : null) });
 const notifier = createNotifier({ db, persist, tg, webappUrl: () => WEBAPP_URL, logErr });
 const SHARE_DIR = path.join(path.dirname(DATA_FILE), 'share');
@@ -417,6 +425,7 @@ const routes = {
     if (!u.profile) throw Object.assign(new Error('no_profile'), { code: 400 });
     const result = ECON.act(u.profile, body.action, { now: Date.now(), rng, mint, market: market.moods(), community: war.community(u.profile) });
     payReferral(u);
+    if (body.action && body.action.type === 'stageEnd' && result) analytics.battle(result.result === 'win');
     if (body.action && body.action.type === 'stageEnd' && result && result.result === 'win') onWin(u.id, result.first ? 'stageFirst' : 'stage', { stage: result.stage });
     return { profile: profileOut(u), result };
   },
@@ -465,6 +474,7 @@ const server = http.createServer(async (req, res) => {
     const tgUser = verifyInitData(body.initData);
     if (!tgUser || !tgUser.id) return send(res, 401, { error: 'invalid initData' });
     const u = userRec(tgUser);
+    analytics.seen(u);
     if (BOT_TEXT[body.lang]) u.lang = body.lang;
     const out = await handler(body, u);
     persist();
@@ -493,4 +503,4 @@ async function start() {
 }
 
 if (require.main === module) start();
-module.exports = { market, notifier, war, flushDb, server, verifyInitData, handleUpdate, pollLoop, setupBot, db, PACKS, stop: () => { polling = false; arena.stop(); notifier.stop(); market.stop(); server.close(); } };
+module.exports = { analytics, market, notifier, war, flushDb, server, verifyInitData, handleUpdate, pollLoop, setupBot, db, PACKS, stop: () => { polling = false; arena.stop(); notifier.stop(); market.stop(); server.close(); } };
