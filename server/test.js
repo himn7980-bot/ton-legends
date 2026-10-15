@@ -40,6 +40,19 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     res.end(JSON.stringify({ notcoin: { usd: 0.0042, usd_24h_change: 12.3 }, 'dogs-2': { usd: 0.0005, usd_24h_change: -4.1 } })); });
   await new Promise(r => cg.listen(0, r));
   process.env.MARKET_API = `http://127.0.0.1:${cg.address().port}`;
+  // fake Runway API: one task that is PENDING once, then SUCCEEDED with a PNG
+  const rw = { calls: [], polls: 0 };
+  const runwaySrv = http.createServer((req, res) => {
+    let b = ''; req.on('data', c => b += c); req.on('end', () => {
+      rw.calls.push({ method: req.method, url: req.url, auth: req.headers.authorization, ver: req.headers['x-runway-version'], body: b ? JSON.parse(b) : null });
+      if (req.method === 'POST' && req.url === '/v1/text_to_image') { res.writeHead(200); return res.end(JSON.stringify({ id: 'task1' })); }
+      if (req.url === '/v1/tasks/task1') { res.writeHead(200); return res.end(JSON.stringify(rw.polls++ ? { status: 'SUCCEEDED', output: [`http://127.0.0.1:${runwaySrv.address().port}/out.png`] } : { status: 'RUNNING' })); }
+      if (req.url === '/out.png') { res.writeHead(200, { 'Content-Type': 'image/png' }); return res.end(Buffer.from('\x89PNG fake')); }
+      res.writeHead(404); res.end('{}');
+    });
+  });
+  await new Promise(r => runwaySrv.listen(0, r));
+  Object.assign(process.env, { RUNWAY_API: `http://127.0.0.1:${runwaySrv.address().port}`, RUNWAYML_API_SECRET: 'rw_test', RUNWAY_POLL_MS: '50' });
   process.env.TL_EVENT = 'none'; // weekday events are tested explicitly below
   Object.assign(process.env, { ADMIN_IDS: '111', ART_DIR: path.join(path.dirname(dataFile), 'art'), BOT_TOKEN: TOKEN, WEBAPP_URL: 'https://game.example', PORT: '0', DATA_FILE: dataFile, TELEGRAM_API: `http://127.0.0.1:${fake.address().port}` });
   const srv = require('./server.js');
@@ -460,6 +473,24 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   r = await post('/api/act', { initData: initData(alice), action: { type: 'pass', tier: 10, track: 'prem' } }); assert.ok(r.body.result.chestResult, 'tier 10 premium: Gem Chest');
   r = await fetch(base + '/api/health').then(x => x.json()); assert.ok(!r.packs.some(p => p.id === 'pass'), 'the pass is not in the gem shop');
   console.log('   season pass: XP tiers, free/premium claims, Stars purchase, one per season');
+
+  // ---------- fusion art with Runway (/gen) ----------
+  const beforeGen = calls.length;
+  queue.push({ update_id: 9200, message: { chat: { id: 222 }, from: bob, text: '/gen 81' } });
+  queue.push({ update_id: 9201, message: { chat: { id: 111 }, from: alice, text: '/gen 81' } });
+  await sleep(1500);
+  const post81 = rw.calls.find(c => c.method === 'POST');
+  assert.equal(post81.auth, 'Bearer rw_test'); assert.equal(post81.ver, '2024-11-06'); assert.equal(post81.body.model, 'gen4_image');
+  assert.deepEqual(post81.body.referenceImages.map(x => x.tag).sort(), ['babyshark', 'gramcat']);
+  assert.match(post81.body.referenceImages[0].uri, /^data:image\/jpeg;base64,/); assert.match(post81.body.promptText, /@gramcat/); assert.ok(post81.body.promptText.length <= 1000);
+  r = await fetch(base + '/art/81'); assert.equal(r.status, 200); assert.equal(r.headers.get('content-type'), 'image/png');
+  const genMsgs = calls.slice(beforeGen);
+  assert.ok(genMsgs.some(c => c.method === 'sendPhoto' && c.data.chat_id === 111 && /#81/.test(c.data.caption)), 'preview sent to the admin');
+  assert.ok(genMsgs.some(c => c.method === 'sendMessage' && c.data.chat_id === 222 && /Only admins/.test(c.data.text)));
+  assert.deepEqual(require('./runway.js').parseTargets('5-7'), [5, 6, 7]); assert.equal(require('./runway.js').parseTargets('named').length, 22);
+  assert.ok(require('./runway.js').parseTargets('bosses').length >= 10);
+  runwaySrv.close();
+  console.log('   fusion art: /gen 81 → Runway task (2 tagged references) → saved as card art, preview sent; admins only');
 
   // ---------- analytics (/stats for admins) ----------
   srv.db.users['555'].seen = Date.now() - 5 * 864e5; srv.db.users['555'].created = Date.now() - 9 * 864e5; srv.db.users['555'].profile.cleared = 11;

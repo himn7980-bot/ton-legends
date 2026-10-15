@@ -20,6 +20,7 @@ const createWar = require('./war.js');
 const createNotifier = require('./notify.js');
 const createMarket = require('./market.js');
 const createAnalytics = require('./analytics.js');
+const createRunway = require('./runway.js');
 const BOT_TEXT = require('./bot-text.js');
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
@@ -182,15 +183,46 @@ function nextMissingArt(after = 0) {
   for (let i = 1; i <= E.FUSIONS.length; i++) { const num = ((after + i - 1) % E.FUSIONS.length) + 1; if (!artIndex[num]) return num; }
   return null;
 }
-async function saveArt(num, fileId, ext) {
-  const f = await tg('getFile', { file_id: fileId });
-  const r = await fetch(`${TG_FILES}${f.file_path}`);
-  if (!r.ok) throw new Error('download failed ' + r.status);
-  const buf = Buffer.from(await r.arrayBuffer());
+function writeArt(num, buf, ext) {
   fs.mkdirSync(ART_DIR, { recursive: true });
   for (const e of ART_EXT) { try { fs.unlinkSync(path.join(ART_DIR, num + e)); } catch (err) {} }
   fs.writeFileSync(path.join(ART_DIR, num + ext), buf);
   scanArt();
+}
+async function saveArt(num, fileId, ext) {
+  const f = await tg('getFile', { file_id: fileId });
+  const r = await fetch(`${TG_FILES}${f.file_path}`);
+  if (!r.ok) throw new Error('download failed ' + r.status);
+  writeArt(num, Buffer.from(await r.arrayBuffer()), ext);
+}
+// ---------- fusion art generated with Runway (/gen, admins only) ----------
+const runway = createRunway({ saveArt: async (num, buf, ext) => writeArt(num, buf, ext), hasArt: n => !!artIndex[n], log: m => console.error('runway', m),
+  pollMs: +process.env.RUNWAY_POLL_MS || 4000 });
+async function handleGen(m) {
+  const say = text => tg('sendMessage', { chat_id: m.chat.id, text });
+  if (!ADMIN_IDS.has(String(m.from.id))) return say(`Your Telegram ID is ${m.from.id}. Only admins (ADMIN_IDS) can generate art.`);
+  const arg = m.text.replace(/^\/gen(@\w+)?/, '').trim(), force = /\bforce\b/.test(arg), what = arg.replace(/\bforce\b/, '').trim();
+  const J = runway.job;
+  if (what === 'status') return say(J.running ? `🎨 Generating: ${J.done + J.failed.length}/${J.list.length} (failed ${J.failed.length})` : `🎨 Idle. Art: ${Object.keys(artIndex).length}/${E.FUSIONS.length}.`);
+  if (what === 'stop') { J.stop = true; return say('⏹ Stopping after the current card.'); }
+  if (!runway.enabled()) return say('⚠️ Runway is not connected. In Render → Environment add RUNWAYML_API_SECRET (your key from dev.runwayml.com) and redeploy.');
+  const nums = createRunway.parseTargets(what);
+  if (!nums.length) return say('🎨 /gen <number> · /gen 1-50 · /gen named · /gen bosses · /gen all  (add "force" to redo cards that already have art) · /gen status · /gen stop');
+  if (nums.length === 1) {
+    const f = E.FUSIONS.find(x => x.num === nums[0]);
+    await say(`🎨 Generating #${f.num} ${f.name}…`);
+    try {
+      await runway.generate(f.num);
+      const url = `${WEBAPP_URL}/art/${f.num}?v=${artIndex[f.num].v}`;
+      await tg('sendPhoto', { chat_id: m.chat.id, photo: url, caption: `✅ #${f.num} ${f.name} — now in the game. /gen ${f.num} force to try again.` }).catch(() => say(`✅ #${f.num} ${f.name} saved.`));
+    } catch (e) { await say(`❌ #${f.num}: ${e.message}`); }
+    return;
+  }
+  const todo = force ? nums.length : nums.filter(n => !artIndex[n]).length;
+  await say(`🎨 Generating ${todo} cards one by one (${nums.length - todo} already have art). I'll report every 5.`);
+  runway.runQueue(nums, { force, onProgress: p => say(p.error ? `❌ Stopped: ${p.error}` : `🎨 ${p.done}/${p.total} done${p.failed ? ` · ${p.failed} failed` : ''}`) })
+    .then(r => say(`✅ Finished: ${r.done}/${r.total} generated${r.failed.length ? ` · failed: ${r.failed.join(', ')}` : ''}${r.stopped ? ' (stopped)' : ''}.`))
+    .catch(e => say(`❌ ${e.message}`));
 }
 async function handleArt(m) {
   const say = text => tg('sendMessage', { chat_id: m.chat.id, text });
@@ -289,6 +321,7 @@ async function handleUpdate(up) {
       reply_markup: { inline_keyboard: [[{ text: L.open, web_app: { url: WEBAPP_URL } }]] } });
     return;
   }
+  if (typeof m.text === 'string' && /^\/gen\b/.test(m.text)) return handleGen(m);
   if (typeof m.text === 'string' && /^\/stats\b/.test(m.text)) {
     if (ADMIN_IDS.has(String(m.from.id))) await tg('sendMessage', { chat_id: m.chat.id, text: analytics.text() });
     else await tg('sendMessage', { chat_id: m.chat.id, text: `Your Telegram ID is ${m.from.id}. Only admins (ADMIN_IDS) can see /stats.` });

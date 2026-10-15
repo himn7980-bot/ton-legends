@@ -19,3 +19,6 @@ services:
       # Market mood: hero=coingecko-id:SYMBOL for heroes whose token price drives their card (others use community activity)
       - key: MARKET_TOKENS
         value: notcoin=notcoin:NOT,dog=dogs-2:DOGS
+      # Fusion art generation (/gen in the bot): API key from dev.runwayml.com
+      - key: RUNWAYML_API_SECRET
+        sync: false
