@@ -12,43 +12,44 @@ const assert = require('assert');
   assert.equal(await p.evaluate(() => LANG), 'ru', 'auto-detected phone language');
   console.log('✓ language auto-detected from the device (ru)');
   for (let i = 0; i < 4; i++) { await p.waitForTimeout(600); if (await p.$('#modal:not([hidden])')) await p.click('#m-close'); } // help → community picker → daily reward
-  // give the player what a fusion needs
-  await p.evaluate(() => { Object.assign(S.owned, { notcoin: 12, pinkbull: 12, egor: 31, memegram: 31, yoda: 22 }); S.coins = 50000; S.holo.pinkbull = true; save(); showCoins(); });
+  // fusion: pick any heroes you own and pay coins — no level rules, heroes are kept
+  await p.evaluate(() => { Object.assign(S.owned, { notcoin: 12, pinkbull: 4, egor: 3, memegram: 5, yoda: 1 }); S.coins = 50000; S.holo.pinkbull = true; save(); showCoins(); });
   await p.click('[data-tab=heroes]'); await p.waitForTimeout(200);
   assert.equal(await p.$('#to-lab'), null, 'Fusion Lab locked before world 4');
   await p.screenshot({ path: out + '/l0-lab-locked.png' });
   await p.evaluate(() => { S.cleared = 70; save(); refresh(); }); await p.waitForTimeout(200);
   await p.screenshot({ path: out + '/l1-heroes-ru.png' });
   await p.click('#to-lab'); await p.waitForTimeout(300);
-  await p.screenshot({ path: out + '/l2-lab-empty.png' });
+  await p.screenshot({ path: out + '/l2-lab-empty.png', fullPage: true });
+  assert.ok((await p.$$('[data-craft]')).length > 0, 'ready-to-craft suggestions');
   const pick = async ids => { for (const id of ids) { await p.click('.altar-slot:not(.filled)'); await p.click(`[data-pick=${id}]`); await p.waitForTimeout(150); } };
-  // a combination whose parts are too low: shown, but the fuse button stays off
+  // low-level heroes fuse just fine now
   await pick(['gramcat', 'babyshark']);
-  assert.ok(await p.$eval('#lab-fuse', b => b.disabled), 'low-level parts cannot fuse');
   assert.match(await p.textContent('.fresult'), /#81/);
-  await p.screenshot({ path: out + '/l2b-lab-low.png' });
+  assert.equal(await p.$eval('#lab-fuse', b => b.disabled), false, 'any pair can fuse');
+  await p.screenshot({ path: out + '/l2b-lab-pair.png' });
   await p.click('.altar-slot.filled'); await p.click('.altar-slot.filled');
-  // the player's own pick: Pink Bull + Notcoin → #1 Golden Bull
+  // the player's own pick: Pink Bull + Notcoin → #1 Golden Bull at level (4 + 12) / 2 = 8
   await pick(['pinkbull', 'notcoin']);
   assert.match(await p.textContent('.fresult'), /Golden Bull/);
   await p.screenshot({ path: out + '/l2c-lab-ready.png' });
   await p.click('#lab-fuse'); await p.waitForSelector('#fr-ok');
   await p.screenshot({ path: out + '/l3-fused.png' });
   await p.click('#fr-ok');
-  assert.equal(await p.evaluate(() => S.owned.pinkbull), 3, 'parts paid 9 levels');
-  await pick(['egor', 'memegram', 'yoda']);
-  assert.ok(await p.$eval('#lab-fuse', b => b.disabled), 'trio needs a duo first');
-  await p.screenshot({ path: out + '/l3a-trio-needs-duo.png' });
-  await p.click('.altar-slot.filled'); await p.click('.altar-slot.filled'); await p.click('.altar-slot.filled');
-  await pick(['egor', 'memegram']);
-  await p.click('#lab-fuse'); await p.waitForSelector('#fr-ok'); await p.click('#fr-ok');
+  assert.equal(await p.evaluate(() => S.owned.f1), 8); assert.deepEqual(await p.evaluate(() => [S.owned.pinkbull, S.owned.notcoin]), [4, 12], 'heroes kept');
+  // picking the same pair again shows "owned" instead of failing
+  await pick(['pinkbull', 'notcoin']); assert.ok(await p.$('#lab-open'), 'owned card opens instead of an error');
+  await p.click('.altar-slot.filled'); await p.click('.altar-slot.filled');
+  // trio straight away (no duo needed), filled by tapping the hero picker
   await pick(['egor', 'memegram', 'yoda']);
   await p.click('#lab-fuse'); await p.waitForSelector('#fr-ok'); await p.click('#fr-ok');
   await p.waitForTimeout(200);
   await p.screenshot({ path: out + '/l3b-lab-mine.png', fullPage: true });
-  assert.equal(await p.evaluate(() => S.owned.f1 && S.owned.f440), 1);
-  assert.equal(await p.evaluate(() => S.coins), 50000 - 6000 - 6000 - 25000);
-  console.log('✓ duo + trio fusion crafted (trio after a duo), coins and part levels charged');
+  assert.equal(await p.evaluate(() => S.owned.f440), 3, 'trio starts at (3 + 5 + 1) / 3');
+  assert.equal(await p.evaluate(() => S.coins), 50000 - 5000 - 20000);
+  // a third fusion: craft it from a suggestion chip
+  await p.click('[data-craft]'); await p.waitForSelector('#lab-fuse'); await p.click('#lab-fuse'); await p.waitForSelector('#fr-ok'); await p.click('#fr-ok');
+  console.log('✓ fusion: any heroes, coins only, heroes kept, average level, suggestions, no error states');
   assert.equal(await p.evaluate(async () => { try { await act({ type: 'team', team: ['f1', 'f440', S.team.find(id => !id.startsWith('f')), Object.keys(S.owned).find(id => id.startsWith('f') && id !== 'f1' && id !== 'f440')] }); return 'ok'; } catch (e) { return e.message; } }), 'fusion_limit');
   // fusion in team and fights
   await p.evaluate(async () => { await act({ type: 'team', team: ['f1', 'f440', 'babyshark'] }); S.auto = true; S.speed = 3; S.sel = 0; S.world = 0; save(); });

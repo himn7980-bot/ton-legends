@@ -244,6 +244,7 @@ function heroModal(id) {
   const mine = factionMult(id, S.faction) * marketMult(id, ECON.marketBoosts(moods())), boosted = l => { const x = heroStats(id, l); return { ...x, hp: Math.round(x.hp * mine), atk: Math.round(x.atk * mine) }; };
   const s = boosted(lv || 1);
   const cost = lv ? ECON.upgradePrice(S, id, lv) : 0, inTeam = S.team.includes(id);
+  const fusionCap = !inTeam && !!teamError([...S.team, id]); // a team holds 2 fusion cards (1 trio): say so instead of failing
   const next = lv && lv < MAX_LEVEL ? boosted(lv + 1) : null;
   openModal(`
     <div class="poster-wrap ${S.holo[id] ? 'holo' : ''}" style="--rc:${R.color}"><img class="poster" src="${img(id)}" alt="">
@@ -260,8 +261,8 @@ function heroModal(id) {
     <div class="skill">${t.special} <b>${ht.skill}</b><div class="muted" style="color:var(--text);margin-top:4px">${ht.desc}</div></div>
     ${lv ? `<div class="btns">
       <button class="btn gold" id="up" ${!next || S.coins < cost ? 'disabled' : ''}>${next ? t.upgrade(n(cost)) : t.maxLevel}</button>
-      <button class="btn ${inTeam ? 'ghost' : ''}" id="tm" ${!inTeam && S.team.length >= 5 ? 'disabled' : ''}>${inTeam ? t.leaveTeam : S.team.length >= 5 ? t.teamFull : t.joinTeam}</button>
-    </div>` : h.fusion ? `<p class="center muted">${t.needs(n(FUSION_RULES[h.parts.length].minLevel))}</p><button class="btn wide" id="tolab">${t.openLab}</button>`
+      <button class="btn ${inTeam ? 'ghost' : ''}" id="tm" ${!inTeam && (S.team.length >= 5 || fusionCap) ? 'disabled' : ''}>${inTeam ? t.leaveTeam : S.team.length >= 5 ? t.teamFull : fusionCap ? t.err.fusion_limit : t.joinTeam}</button>
+    </div>` : h.fusion ? `<p class="center muted">${t.fuseHow(n(FUSION_RULES[h.parts.length].cost))}</p><button class="btn wide" id="tolab">${t.openLab}</button>`
       : `<p class="center muted">${t.getFromChest}</p><button class="btn wide" id="tochest">${t.goChest}</button>`}
   `, box => {
     const up = box.querySelector('#up'), tm = box.querySelector('#tm'), tc = box.querySelector('#tochest');
@@ -356,50 +357,73 @@ const fusionFor = parts => {
   const key = [...parts].sort().join('+');
   return FUSIONS.find(f => [...f.parts].sort().join('+') === key) || null;
 };
+// One rule, no surprises: any 2 (or, from world 8, 3) of your heroes make a fusion card for a fixed coin price.
+// The button always says what is possible right now; it is never an enabled button that then fails.
+function fusionState(f) {
+  const rule = FUSION_RULES[f.parts.length], mint = Online.state.mint || {}, online = !!Online.state.profile;
+  const kind = f.parts.length === 3 ? 'trio' : 'duo', left = rule.supply - (mint[f.id] || 0);
+  if (S.owned[f.id]) return { key: 'owned' };
+  if (!isOpen(kind)) return { key: 'locked', kind };
+  if (f.parts.some(p => !S.owned[p])) return { key: 'missing' };
+  if (online && left <= 0) return { key: 'soldout' };
+  if (S.coins < rule.cost) return { key: 'coins', need: rule.cost - S.coins };
+  return { key: 'ok', left, rule };
+}
 function renderLab() {
-  const t = T(), mint = Online.state.mint || {}, online = !!Online.state.profile;
+  const t = T(), online = !!Online.state.profile, mint = Online.state.mint || {};
+  if (!isOpen('duo')) {
+    $('#screen').innerHTML = `<div class="h2">${t.labTitle}</div><div class="panel center"><div style="font-size:54px">🧪</div>
+      <p style="font-weight:700">${t.labLocked(n(unlockWorld('duo')))}</p><p class="muted small">${t.labSimple}</p></div>`;
+    return;
+  }
   labPick = labPick.filter(id => S.owned[id]);
-  const f = fusionFor(labPick), rule = FUSION_RULES[Math.max(2, labPick.length)];
+  const trioOpen = isOpen('trio'), f = fusionFor(labPick);
   const mine = FUSIONS.filter(x => S.owned[x.id]);
   const slot = i => {
     const id = labPick[i];
-    if (id) {
-      const lv = S.owned[id], ok = lv >= rule.minLevel;
-      return `<button class="altar-slot filled ${ok ? 'ok' : 'low'}" data-slot="${i}"><img src="${img(id)}" alt=""><b>${t.level(n(lv))}</b><span class="x">✕</span></button>`;
-    }
+    if (id) return `<button class="altar-slot filled ok" data-slot="${i}"><img src="${img(id)}" alt=""><b>${t.level(n(S.owned[id]))}</b><span class="x">✕</span></button>`;
+    if (i === 2 && !trioOpen) return `<div class="altar-slot opt locked"><span class="plus">🔒</span><small>${t.trioLock(n(unlockWorld('trio')))}</small></div>`;
     return `<button class="altar-slot ${i === 2 ? 'opt' : ''}" data-slot="${i}"><span class="plus">+</span><small>${i === 2 ? t.slotOptional : t.pickHero}</small></button>`;
   };
   let result = `<p class="muted center">${t.altarHint}</p>`;
   if (f) {
-    const owned = !!S.owned[f.id], left = rule.supply - (mint[f.id] || 0), soldOut = online && left <= 0;
-    const lvOk = f.parts.every(p => (S.owned[p] || 0) >= rule.minLevel), coinOk = S.coins >= rule.cost;
-    const kind = f.parts.length === 3 ? 'trio' : 'duo', open = isOpen(kind), duoOk = !rule.needDuo || ECON_DUOS(f.parts).length > 0;
-    const can = open && !owned && !soldOut && lvOk && coinOk && duoOk;
-    const chk = (ok, text) => `<div class="chk ${ok ? 'ok' : 'no'}">${ok ? '✓' : '✗'} ${text}</div>`;
+    const st = fusionState(f), rule = FUSION_RULES[f.parts.length], start = fusionStartLevel(S.owned, f.parts);
+    const left = rule.supply - (mint[f.id] || 0);
+    const btn = st.key === 'ok' ? `<button class="btn wide gold" id="lab-fuse">${t.fuse(n(rule.cost))}</button>`
+      : st.key === 'owned' ? `<button class="btn wide" id="lab-open">${t.ownedOpen}</button>`
+      : st.key === 'coins' ? `<button class="btn wide ghost" disabled>${t.needMore(n(st.need))}</button>`
+      : st.key === 'soldout' ? `<button class="btn wide ghost" disabled>${t.soldOut}</button>`
+      : `<button class="btn wide ghost" disabled>🔒 ${t.lockedUntil(t.feat[st.kind || 'duo'], n(unlockWorld(st.kind || 'duo')))}</button>`;
     result = `<div class="fresult" style="--rc:${RARITY[f.rarity].color}">
       <button class="fr-img" data-hero="${f.id}"><img src="${img(f.id)}" alt=""><span class="fnum">#${f.num}</span></button>
       <div class="fr-info">
         <div class="tag" style="color:${RARITY[f.rarity].color}">${L().rarity[f.rarity]}</div>
         <div class="fname latin">${f.name}</div>
         <div class="muted small">${heroText(f.id).skill}</div>
-        ${open ? '' : chk(false, t.lockedUntil(t.feat[kind], n(unlockWorld(kind))))}
-        ${chk(lvOk, t.chkLevel(n(rule.minLevel)))}
-        ${rule.needDuo ? chk(duoOk, t.chkDuo) : ''}
-        ${chk(coinOk, t.chkCoins(n(rule.cost)))}
-        ${online ? chk(!soldOut, soldOut ? t.soldOut : t.left(n(left), n(rule.supply))) : ''}
-        ${chk(!owned, owned ? t.ownedTag : t.chkNew)}
-        <div class="chk warn">⚠️ ${t.chkBurn(n(rule.burn), n(rule.minLevel - rule.burn), n(rule.minLevel))}</div>
-      </div></div>
-      <button class="btn wide ${can ? 'gold' : 'ghost'}" id="lab-fuse" ${can ? '' : 'disabled'}>${t.fuse(n(rule.cost))}</button>`;
+        <div class="fr-facts">
+          ${st.key === 'owned' ? '' : `<div>⭐ ${t.startsAt(n(start))}</div>`}
+          <div>🪙 ${n(rule.cost)}</div>
+          ${online ? `<div>🔢 ${t.left(n(Math.max(0, left)), n(rule.supply))}</div>` : ''}
+          <div class="muted">✅ ${t.heroesKept}</div>
+        </div>
+      </div></div>${btn}`;
   }
-  $('#screen').innerHTML = `<div class="h2">${t.labTitle}</div><p class="muted">${t.labNote}</p>
+  // Ready-to-craft suggestions: every combination of your heroes you can make right now (best starting level first).
+  const ready = FUSIONS.filter(x => fusionState(x).key === 'ok')
+    .map(x => ({ x, lv: fusionStartLevel(S.owned, x.parts) })).sort((a, b) => b.x.parts.length - a.x.parts.length || b.lv - a.lv).slice(0, 12);
+  $('#screen').innerHTML = `<div class="h2">${t.labTitle}</div>
+    <p class="muted small">${t.labSimple}</p>
     <div class="panel altar">
       <div class="altar-slots">${slot(0)}<span class="altar-op">+</span>${slot(1)}<span class="altar-op">+</span>${slot(2)}</div>
       ${result}
     </div>
+    <div class="h2">${t.craftNow}</div>
+    ${ready.length ? `<div class="craft-row">${ready.map(({ x, lv }) => `<button class="craft" data-craft="${x.id}" style="--rc:${RARITY[x.rarity].color}">
+        <img src="${img(x.id)}" alt=""><span class="cn">${x.name}</span><small>${t.level(n(lv))} · 🪙 ${n(FUSION_RULES[x.parts.length].cost)}</small></button>`).join('')}</div>`
+      : `<p class="muted small">${S.coins < FUSION_RULES[2].cost ? t.needMore(n(FUSION_RULES[2].cost - S.coins)) : t.craftNone}</p>`}
     <div class="panel rules"><div class="t">${t.rulesTitle}</div>
-      <div class="rule-row"><span>${t.duo}</span><span>${t.chkLevel(n(FUSION_RULES[2].minLevel))} · 🪙 ${n(FUSION_RULES[2].cost)} · ${t.copies(n(FUSION_RULES[2].supply))}${isOpen('duo') ? '' : ` · 🔒 ${t.worldN(n(unlockWorld('duo')))}`}</span></div>
-      <div class="rule-row"><span>${t.trio}</span><span>${t.chkLevel(n(FUSION_RULES[3].minLevel))} · 🪙 ${n(FUSION_RULES[3].cost)} · ${t.copies(n(FUSION_RULES[3].supply))}${isOpen('trio') ? '' : ` · 🔒 ${t.worldN(n(unlockWorld('trio')))}`}</span></div>
+      <div class="rule-row"><span>${t.duo}</span><span>🪙 ${n(FUSION_RULES[2].cost)} · ${t.copies(n(FUSION_RULES[2].supply))}</span></div>
+      <div class="rule-row"><span>${t.trio}</span><span>🪙 ${n(FUSION_RULES[3].cost)} · ${t.copies(n(FUSION_RULES[3].supply))}${trioOpen ? '' : ` · 🔒 ${t.worldN(n(unlockWorld('trio')))}`}</span></div>
       <p class="muted small" style="margin:8px 0 0">${t.fuseRules}</p>
     </div>
     <div class="h2">${t.myFusions} <span class="muted">(${n(mine.length)}/${n(FUSIONS.length)})</span></div>
@@ -409,7 +433,9 @@ function renderLab() {
     if (labPick[i]) { labPick.splice(i, 1); renderLab(); } else heroPicker();
   });
   document.querySelectorAll('[data-hero]').forEach(b => b.onclick = () => heroModal(b.dataset.hero));
+  document.querySelectorAll('[data-craft]').forEach(b => b.onclick = () => { labPick = [...HERO_BY_ID[b.dataset.craft].parts]; renderLab(); window.scrollTo(0, 0); });
   document.querySelectorAll('.grid .card').forEach(c => c.onclick = () => heroModal(c.dataset.id));
+  const open = $('#lab-open'); if (open) open.onclick = () => heroModal(f.id);
   const fb = $('#lab-fuse');
   if (fb) fb.onclick = async () => {
     fb.disabled = true;
@@ -420,17 +446,16 @@ function renderLab() {
     fusionReveal(r); renderLab();
   };
 }
-const ECON_DUOS = parts => FUSIONS.filter(f => f.parts.length === 2 && S.owned[f.id] && f.parts.every(p => parts.includes(p)));
-// Choose a hero for the next empty slot (only heroes you own; fusion cards can't be fused again).
+// Choose a hero for the next empty slot: any hero you own (fusion cards can't be fused again).
 function heroPicker() {
-  const t = T(), need = FUSION_RULES[Math.max(2, labPick.length + 1)].minLevel;
-  const options = BASE_HEROES.filter(h => S.owned[h.id] && !labPick.includes(h.id))
-    .sort((a, b) => S.owned[b.id] - S.owned[a.id]);
+  const t = T();
+  const options = BASE_HEROES.filter(h => S.owned[h.id] && !labPick.includes(h.id)).sort((a, b) => S.owned[b.id] - S.owned[a.id]);
   openModal(`<div class="big center" style="font-size:20px">${t.pickHero}</div>
-    <p class="muted center small">${t.chkLevel(n(need))}</p>
-    <div class="grid pick-grid">${options.map(h => `<button class="card pick ${S.owned[h.id] >= need ? '' : 'low'}" data-pick="${h.id}" style="--rc:${RARITY[h.rarity].color}">
-      <img src="${img(h.id)}" alt=""><span class="lv">${t.level(n(S.owned[h.id]))}</span>
-      <div class="info"><div class="nm">${h.name}</div></div></button>`).join('')}</div>`, box => {
+    <div class="grid pick-grid">${options.map(h => {
+      const made = fusionFor([...labPick, h.id]);
+      return `<button class="card pick" data-pick="${h.id}" style="--rc:${RARITY[h.rarity].color}">
+      <img src="${img(h.id)}" alt=""><span class="lv">${t.level(n(S.owned[h.id]))}</span>${made && S.owned[made.id] ? '<span class="have">✓</span>' : ''}
+      <div class="info"><div class="nm">${h.name}</div></div></button>`; }).join('')}</div>`, box => {
     box.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => { labPick.push(b.dataset.pick); closeModal(); renderLab(); });
   });
 }

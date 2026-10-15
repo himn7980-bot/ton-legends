@@ -64,8 +64,10 @@ const FUSIONS = FD.FUSION_DATA.map(([num, parts, name, role]) => ({
 }));
 const LEGACY_FUSION_IDS = FD.LEGACY_FUSION_IDS;
 const FUSION_K = { duo: [1.2, 1.05, 0.6], trio: [1.3, 1.1, 0.45] };
-// Fusing uses up `burn` levels of every part (they stay in your collection), and a trio also needs a duo of two of its parts.
-const FUSION_RULES = { 2: { minLevel: 10, cost: 6000, supply: 300, burn: 9 }, 3: { minLevel: 20, cost: 25000, supply: 30, burn: 19, needDuo: true } };
+// Fusion is one simple rule: pick any 2 (duo) or 3 (trio) of your heroes and pay the coins. The heroes are kept,
+// and the new card starts at their average level. `boost`: a fusion fights like its parts that many levels higher.
+const FUSION_RULES = { 2: { cost: 5000, supply: 300, boost: 6 }, 3: { cost: 20000, supply: 30, boost: 12 } };
+const fusionStartLevel = (owned, parts) => Math.max(1, Math.floor(parts.reduce((a, p) => a + (owned[p] || 1), 0) / parts.length));
 // A battle team holds at most 2 fusion cards, and only one of them may be a trio.
 const TEAM_MAX_FUSIONS = 2, TEAM_MAX_TRIOS = 1;
 function teamError(team) {
@@ -119,7 +121,7 @@ function heroStats(id, level) {
   const h = HERO_BY_ID[id], r = ROLES[h.role];
   if (h.fusion) {
     // Fusion level 1 = its parts at the level required to fuse them, then boosted (FUSION_K: [HP, ATK, skill power]).
-    const offset = FUSION_RULES[h.parts.length].minLevel - 1;
+    const offset = FUSION_RULES[h.parts.length].boost;
     const ps = h.parts.map(p => heroStats(p, level + offset)), k = ps.length === 3 ? [FUSION_K.trio[0], FUSION_K.trio[1]] : [FUSION_K.duo[0], FUSION_K.duo[1]];
     const avg = key => ps.reduce((a, s) => a + s[key], 0) / ps.length;
     return { hp: Math.round(avg('hp') * k[0]), atk: Math.round(avg('atk') * k[1]), spd: r.spd };
@@ -391,6 +393,6 @@ function replayStage(team, levels, idx, seed, inputs, faction = null, market = n
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { RARITY, ROLES, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, TEAM_MAX_FUSIONS, TEAM_MAX_TRIOS, teamError, duosWithin, ENRAGE_AT, LEGACY_FUSION_IDS, HERO_BY_ID, STARTERS, WORLDS, TOTAL_STAGES, STAGES_PER_WORLD, MAX_LEVEL, COIN_BONUS, TICK,
+  module.exports = { RARITY, ROLES, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, fusionStartLevel, TEAM_MAX_FUSIONS, TEAM_MAX_TRIOS, teamError, duosWithin, ENRAGE_AT, LEGACY_FUSION_IDS, HERO_BY_ID, STARTERS, WORLDS, TOTAL_STAGES, STAGES_PER_WORLD, MAX_LEVEL, COIN_BONUS, TICK,
     WORLD_K, LOCAL_K, FACTION_BONUS, FACTION_FUSION_BONUS, factionMult, marketMult, heroStats, upgradeCost, stageReward, stageEnemies, createBattle, createPvpBattle, step, castSkill, applyInput, replayStage };
 }

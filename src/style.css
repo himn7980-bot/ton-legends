@@ -492,3 +492,12 @@ img.mini.big { width: 84px; height: 84px; border-width: 3px; border-color: var(-
 .hcard .hc-name { min-height: 25px; display: flex; align-items: center; justify-content: center; line-height: 1.1; }
 .hcard .hc-name.long { white-space: normal; font-size: 9px; letter-spacing: -.2px; overflow-wrap: anywhere; }
 .tall-names .hcard .hc-name { min-height: 34px; }
+/* v2 fusion lab */
+.altar-slot.locked { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: .5; border-style: dashed; }
+.fr-facts { display: grid; gap: 4px; margin-top: 8px; font-size: 12px; font-weight: 700; }
+.craft-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+.craft { position: relative; background: var(--panel); border: 2px solid var(--rc); border-radius: 12px; padding: 4px 4px 6px; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+.craft img { width: 100%; aspect-ratio: 3/4; object-fit: cover; object-position: 50% 20%; border-radius: 8px; }
+.craft .cn { font-size: 11px; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.craft small { font-size: 10px; color: var(--muted); }
+.card.pick .have { position: absolute; top: 5px; left: 5px; background: var(--green); color: #002a10; border-radius: 50%; width: 20px; height: 20px; display: grid; place-items: center; font-size: 12px; font-weight: 900; }

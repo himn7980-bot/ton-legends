@@ -125,34 +125,34 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   r = await post('/api/act', { initData: initData(alice), action: { type: 'stageEnd', inputs: [[0, -1]] } });
   assert.equal(r.body.result.first, false); assert.ok(r.body.result.coins < 100, 'replay pays half');
 
-  // fusion: limited, numbered editions
-  srv.db.users['111'].profile.owned.notcoin = 12; srv.db.users['111'].profile.owned.pinkbull = 12; srv.db.users['111'].profile.coins += 10000;
+  // fusion: one rule — any 2 (or 3) owned heroes + coins; heroes are kept; the card starts at their average level
+  Object.assign(srv.db.users['111'].profile.owned, { notcoin: 12, pinkbull: 4 }); srv.db.users['111'].profile.coins += 10000;
   r = await post('/api/act', { initData: initData(alice), action: { type: 'fuse', id: 'f1' } }); assert.equal(r.body.error, 'locked_feature', 'duo fusions open in world 4');
   const aliceCleared = srv.db.users['111'].profile.cleared; srv.db.users['111'].profile.cleared = 30;
+  const c0f = srv.db.users['111'].profile.coins;
   r = await post('/api/act', { initData: initData(alice), action: { type: 'fuse', id: 'f1' } });
-  assert.equal(r.body.result.serial, 1); assert.equal(r.body.profile.owned.f1, 1); assert.equal(r.body.profile.serials.f1, 1);
-  assert.equal(r.body.profile.owned.notcoin, 3, 'parts pay 9 levels'); assert.equal(r.body.profile.owned.pinkbull, 3);
+  assert.equal(r.body.result.serial, 1); assert.equal(r.body.profile.serials.f1, 1);
+  assert.equal(r.body.profile.owned.f1, 8, 'starts at the average level (12 + 4) / 2'); assert.equal(r.body.result.level, 8);
+  assert.equal(r.body.profile.owned.notcoin, 12, 'heroes are kept'); assert.equal(r.body.profile.owned.pinkbull, 4);
+  assert.equal(r.body.profile.coins, c0f - E.FUSION_RULES[2].cost);
   // team rule: at most 2 fusion cards, only one trio
   Object.assign(srv.db.users['111'].profile.owned, { f2: 1, f3: 1 });
   r = await post('/api/act', { initData: initData(alice), action: { type: 'team', team: ['f1', 'f2', 'f3'] } }); assert.equal(r.body.error, 'fusion_limit');
   r = await post('/api/act', { initData: initData(alice), action: { type: 'team', team: ['f1', 'f2', 'pinkbull'] } }); assert.equal(r.status, 200);
   delete srv.db.users['111'].profile.owned.f2; delete srv.db.users['111'].profile.owned.f3;
   r = await post('/api/act', { initData: initData(alice), action: { type: 'team', team: ['f1', 'pinkbull'] } }); assert.equal(r.status, 200);
-  // a trio needs world 8 and a duo made from two of its heroes
-  const trio = E.FUSIONS.find(f => f.parts.length === 3 && ['pinkbull', 'notcoin', 'teddy'].every(p => f.parts.includes(p)));
-  Object.assign(srv.db.users['111'].profile.owned, { pinkbull: 20, notcoin: 20, teddy: 20 }); srv.db.users['111'].profile.coins += 30000;
+  // trios open in world 8; no other requirement
+  const trio = E.FUSIONS.find(f => f.parts.length === 3 && ['egor', 'gramcat', 'teddy'].every(p => f.parts.includes(p)));
+  Object.assign(srv.db.users['111'].profile.owned, { egor: 3, gramcat: 1, teddy: 2 }); srv.db.users['111'].profile.coins += 30000;
   r = await post('/api/act', { initData: initData(alice), action: { type: 'fuse', id: trio.id } }); assert.equal(r.body.error, 'locked_feature');
   srv.db.users['111'].profile.cleared = 70;
-  const noDuo = E.FUSIONS.find(f => f.parts.length === 3 && ['egor', 'gramcat', 'teddy'].every(p => f.parts.includes(p)));
-  Object.assign(srv.db.users['111'].profile.owned, { egor: 20, gramcat: 20 });
-  r = await post('/api/act', { initData: initData(alice), action: { type: 'fuse', id: noDuo.id } }); assert.equal(r.body.error, 'need_duo');
   r = await post('/api/act', { initData: initData(alice), action: { type: 'fuse', id: trio.id } }); assert.equal(r.body.result.serial, 1, JSON.stringify(r.body));
-  assert.equal(r.body.profile.owned.teddy, 1, 'trio parts pay 19 levels');
+  assert.equal(r.body.profile.owned[trio.id], 2, 'trio starts at (3 + 1 + 2) / 3'); assert.equal(r.body.profile.owned.teddy, 2);
   srv.db.users['111'].profile.cleared = aliceCleared;
   r = await post('/api/act', { initData: initData(alice), action: { type: 'fuse', id: 'f1' } }); assert.equal(r.status, 400, 'one copy per player');
   r = await post('/api/act', { initData: initData(bob), action: { type: 'fuse', id: 'f466' } }); assert.equal(r.status, 400, 'parts required');
   srv.db.users['222'].profile.cleared = Math.max(30, srv.db.users['222'].profile.cleared);
-  srv.db.mint.f106 = 300; Object.assign(srv.db.users['222'].profile.owned, { virus: 12, yoda: 12 }); srv.db.users['222'].profile.coins += 7000;
+  srv.db.mint.f106 = 300; Object.assign(srv.db.users['222'].profile.owned, { virus: 2, yoda: 2 }); srv.db.users['222'].profile.coins += 7000;
   r = await post('/api/act', { initData: initData(bob), action: { type: 'fuse', id: 'f106' } }); assert.equal(r.body.error, 'sold_out');
   srv.db.users['222'].profile.coins -= 7000;
   r = await fetch(base + '/api/health').then(x => x.json()); assert.equal(r.mint.f1, 1);

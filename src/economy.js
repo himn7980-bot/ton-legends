@@ -3,7 +3,7 @@
 (function (root, factory) {
   if (typeof module !== 'undefined') module.exports = factory(require('./engine.js'));
   // In the browser engine.js declares top-level consts (not window properties), so pass them explicitly.
-  else root.ECON = factory({ STAGES_PER_WORLD, STARTERS, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, LEGACY_FUSION_IDS, teamError, duosWithin, factionMult, marketMult, HERO_BY_ID, MAX_LEVEL, TOTAL_STAGES, COIN_BONUS, heroStats, upgradeCost, stageReward, replayStage });
+  else root.ECON = factory({ STAGES_PER_WORLD, STARTERS, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, fusionStartLevel, LEGACY_FUSION_IDS, teamError, duosWithin, factionMult, marketMult, HERO_BY_ID, MAX_LEVEL, TOTAL_STAGES, COIN_BONUS, heroStats, upgradeCost, stageReward, replayStage });
 })(typeof self !== 'undefined' ? self : this, function (E) {
   const CHESTS = {
     basic: { cost: 300, rates: { C: 55, R: 32, E: 11, L: 2 } },
@@ -75,10 +75,10 @@
   const DAILY_REWARDS = [200, 300, 400, 500, 700, 900, 'royal'];
   const AFK_CAP_H = 8;
   const HOLO_CHANCE = 0.03; // a chest card has a 3% chance to come out as a shimmering Holo variant (cosmetic)
-  const KEYS = ['faction', 'factionAt', 'shareDay', 'coins', 'gems', 'owned', 'team', 'cleared', 'stats', 'daily', 'dq', 'ach', 'afkSince', 'pending', 'serials', 'holo', 'replays', 'aiDay'];
+  const KEYS = ['fv', 'faction', 'factionAt', 'shareDay', 'coins', 'gems', 'owned', 'team', 'cleared', 'stats', 'daily', 'dq', 'ach', 'afkSince', 'pending', 'serials', 'holo', 'replays', 'aiDay'];
 
   function newProfile(now) {
-    return { faction: null, factionAt: 0, shareDay: null, coins: 300, gems: START_GEMS, aiDay: null, owned: Object.fromEntries(E.STARTERS.map(id => [id, 1])), team: [...E.STARTERS], cleared: 0,
+    return { fv: FUSION_VERSION, faction: null, factionAt: 0, shareDay: null, coins: 300, gems: START_GEMS, aiDay: null, owned: Object.fromEntries(E.STARTERS.map(id => [id, 1])), team: [...E.STARTERS], cleared: 0,
       stats: { wins: 0, losses: 0, chests: 0, upgrades: 0, skills: 0, bosses: 0, pvpWins: 0, pvpLosses: 0 },
       daily: { last: null, streak: 0 }, dq: { date: null, p: {}, c: {} }, ach: {}, afkSince: now, pending: null, serials: {}, holo: {}, replays: {} };
   }
@@ -88,8 +88,15 @@
     for (const [old, id] of Object.entries(E.LEGACY_FUSION_IDS || {})) if (old in obj) { obj[id] = obj[old]; delete obj[old]; }
     return obj;
   }
+  // v2 fusion rules: the old cards fought like their parts +9 (duo) / +19 (trio) levels, now +6 / +12 —
+  // move owned fusion cards up by the difference so they keep their power.
+  const FUSION_VERSION = 2, FUSION_V2_SHIFT = { 2: 3, 3: 7 };
   function normalize(p, now) {
     const d = newProfile(now);
+    if (p.fv !== FUSION_VERSION) {
+      for (const f of E.FUSIONS) if (p.owned && p.owned[f.id]) p.owned[f.id] = Math.min(E.MAX_LEVEL, p.owned[f.id] + FUSION_V2_SHIFT[f.parts.length]);
+      p.fv = FUSION_VERSION;
+    }
     if (typeof p.gems !== 'number') p.gems = START_GEMS;
     migrateIds(p.owned); migrateIds(p.serials); migrateIds(p.holo);
     if (Array.isArray(p.team)) {
@@ -254,17 +261,15 @@
         if (p.owned[f.id]) fail('claimed');
         const rule = E.FUSION_RULES[f.parts.length];
         needUnlock(p, f.parts.length === 3 ? 'trio' : 'duo');
-        if (f.parts.some(id => (p.owned[id] || 0) < rule.minLevel)) fail('need_parts');
-        if (rule.needDuo && !E.duosWithin(p.owned, f.parts).length) fail('need_duo');
+        if (f.parts.some(id => !p.owned[id])) fail('need_parts');
         if (p.coins < rule.cost) fail('no_coins');
         // Online, the server hands out the next serial number (and refuses when the edition is sold out).
         const serial = ctx.mint ? ctx.mint(f.id, rule.supply) : null;
-        // The parts pay with their levels (they stay in the collection).
-        p.coins -= rule.cost; p.owned[f.id] = 1;
-        for (const id of f.parts) p.owned[id] = Math.max(1, p.owned[id] - rule.burn);
+        // The heroes are kept; the new card starts at their average level.
+        p.coins -= rule.cost; p.owned[f.id] = E.fusionStartLevel(p.owned, f.parts);
         if (serial) p.serials[f.id] = serial;
         track(p, 'fusions', 1, now);
-        return { id: f.id, serial, supply: rule.supply };
+        return { id: f.id, serial, supply: rule.supply, level: p.owned[f.id] };
       }
       case 'stageStart': {
         const idx = a.stage | 0;
