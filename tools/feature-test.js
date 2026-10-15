@@ -58,7 +58,15 @@ const assert = require('assert');
   await p.waitForSelector('#r-map', { timeout: 60000 }); await p.click('#r-map');
   console.log('✓ fusion cards battle (both parts’ skills)');
   await p.click('[data-tab=heroes]'); await p.click('.card[data-id=f1]'); await p.waitForTimeout(200);
-  await p.screenshot({ path: out + '/l5-fusion-detail.png' }); await p.click('#m-close');
+  await p.screenshot({ path: out + '/l5-fusion-detail.png' });
+  // alliance card: the first hero picked in the lab leads; tap another member to change the leader
+  const lead0 = await p.evaluate(() => ECON.leaderOf(S, 'f1'));
+  await p.click('.ally-m[data-lead]'); await p.waitForTimeout(250);
+  const lead1 = await p.evaluate(() => ECON.leaderOf(S, 'f1'));
+  assert.equal(lead0, 'pinkbull', 'first pick leads'); assert.notEqual(lead0, lead1, 'leader changed'); assert.ok(await p.$('.ally-m.lead'));
+  await p.screenshot({ path: out + '/l5b-alliance-leader.png' });
+  console.log('✓ alliance card: leader', lead0, '→', lead1);
+  await p.click('#m-close');
   await p.click('.card[data-id=pinkbull]'); await p.waitForTimeout(200);
   await p.screenshot({ path: out + '/l6-holo.png' }); await p.click('#m-close');
   // languages

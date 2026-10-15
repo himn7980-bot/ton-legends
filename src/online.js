@@ -43,12 +43,12 @@ const Online = (() => {
     if (!tg()) return state;
     try {
       const h = await call('health');
-      state.server = !!h.ok; state.bot = h.bot || null; state.packs = h.packs || []; state.mint = h.mint || {}; state.art = new Map(Object.entries(h.art || {}).map(([k, v]) => [+k, v])); state.market = h.market || null;
+      state.server = !!h.ok; state.bot = h.bot || null; state.packs = h.packs || []; state.mint = h.mint || {}; state.art = new Map(Object.entries(h.art || {}).map(([k, v]) => [+k, v])); state.market = h.market || null; state.alliances = h.alliances || [];
     } catch (e) { state.server = false; }
     return state;
   }
   // Market mood changes slowly (the server refreshes it every 30 min).
-  async function refreshMarket() { try { const h = await call('health'); state.market = h.market || null; state.mint = h.mint || state.mint; } catch (e) {} return state.market; }
+  async function refreshMarket() { try { const h = await call('health'); state.market = h.market || null; state.mint = h.mint || state.mint; state.alliances = h.alliances || state.alliances || []; } catch (e) {} return state.market; }
   async function hello() { if (!state.server) return null; try { return await call('hello', { startParam: startParam() }); } catch (e) { return null; } }
 
   let scoreTimer = null;

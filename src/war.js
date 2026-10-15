@@ -106,7 +106,8 @@ function weekTab(t, W) {
     ${ms ? `<div class="panel"><div class="row"><div class="t">🏅 ${t.milestoneTitle}</div><span class="muted small">${n(ms.total)}${ms.next ? ' / ' + n(ms.next) : ''}</span></div>
       ${ms.next ? `<div class="bar xp" style="margin:8px 0"><i style="width:${ms.total / ms.next * 100}%"></i></div>` : ''}
       <div class="frames">${ECON.COMMUNITY.MILESTONES.map((m, i) => `<div class="fr ${i < ms.tier ? 'got' : ''}"><span class="fdot frame-${FRAME[i + 1]}"></span>${t.frames[i]}<small>${n(m)}</small></div>`).join('')}</div>
-      <p class="muted small" style="margin:8px 0 0">${t.milestoneNote}</p></div>` : ''}
+      <p class="muted small" style="margin:8px 0 0">${t.milestoneNote}</p>
+      <p class="small" style="margin:6px 0 0">💪 ${t.mascotPower(n(Math.round(ms.tier * ECON.MASCOT_PER_TIER * 100)), n(Math.round(ECON.MASCOT_PER_TIER * 100)))}</p></div>` : ''}
     ${last && !last.claimable && last.place >= 0 ? `<div class="panel"><div class="t">${t.lastWeekTitle}</div>
       <p style="margin:6px 0">${t.placeOf(n(last.place + 1))} · ${last.top.map((x, i) => `${['🥇', '🥈', '🥉'][i]} ${factionName(x.id)}`).join(' ')}</p>
       ${last.claimed ? `<p class="muted small">✓ ${t.err.claimed}</p>` : `<p class="muted small">${t.needPts(n(W.min))}</p>`}</div>` : ''}`;

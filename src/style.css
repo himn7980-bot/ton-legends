@@ -579,3 +579,13 @@ img.mini.big { width: 84px; height: 84px; border-width: 3px; border-color: var(-
 .pcell.ready { border-color: var(--green); box-shadow: 0 0 12px -3px var(--green); }
 .pcell.ready small { color: var(--green); font-weight: 700; }
 .pcell.got { opacity: .45; } .pcell.far { opacity: .65; } .pcell.lock { opacity: .7; }
+/* alliance card: members and leader */
+.ally-box{margin:10px 0;padding:10px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}
+.ally-official{font-weight:800;color:#ffd166;margin-bottom:6px}
+.ally-members{display:flex;gap:8px;margin:8px 0}
+.ally-m{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.2);color:var(--text);font:inherit;font-size:12px}
+.ally-m img{width:64px;height:80px;object-fit:cover;object-position:top;border-radius:8px}
+.ally-m span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.ally-m.lead{border-color:#ffd166;box-shadow:0 0 0 1px #ffd166 inset}
+.ally-m:disabled{opacity:1}
+.ally-banner{margin:8px 0;padding:10px 12px;border-radius:12px;background:linear-gradient(90deg,rgba(255,209,102,.18),rgba(255,209,102,.05));border:1px solid rgba(255,209,102,.4);font-weight:700;font-size:13px}

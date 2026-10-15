@@ -3,6 +3,7 @@ const http = require('http');
 const crypto = require('crypto');
 const assert = require('assert');
 const E = require('../src/engine.js');
+const ECON = require('../src/economy.js');
 const os = require('os'), path = require('path'), fs = require('fs');
 
 const TOKEN = '123456:TEST_TOKEN';
@@ -505,6 +506,40 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert.ok(st.some(m => m.chat_id === 111 && /TON Legends — stats/.test(m.text) && /stuck at: .*stage 12/.test(m.text)), JSON.stringify(st));
   assert.ok(st.some(m => m.chat_id === 222 && /Only admins/.test(m.text)));
   console.log('   analytics: daily counters, retention, funnel, quit stages; /stats only for admins');
+
+  // ---------- alliance cards: leader, war points for every community on the card, official alliances ----------
+  const ap = () => srv.db.users['111'].profile;
+  ap().owned.f1 = ap().owned.f1 || 8; ap().faction = 'notcoin';
+  assert.equal(ECON.leaderOf(ap(), 'f1'), 'notcoin', 'default leader: your own community');
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'leader', id: 'f1', hero: 'pinkbull' } }); assert.equal(r.body.profile.leaders.f1, 'pinkbull');
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'leader', id: 'f1', hero: 'dog' } }); assert.equal(r.status, 400, 'leader must be a member');
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'team', team: ['f1', 'notcoin'] } }); assert.equal(r.status, 200);
+  const pb0 = srv.db.war.points.pinkbull || 0, nc0 = srv.db.war.points.notcoin || 0;
+  srv.war.onWin('111', 'pvp', {});
+  assert.ok((srv.db.war.points.notcoin || 0) - nc0 >= 10, 'own community: ×2 with its card in the team');
+  assert.equal((srv.db.war.points.pinkbull || 0) - pb0, Math.round(5 * ECON.ALLY_SHARE), 'allied community earns a share');
+  srv.db.war.total.notcoin = 12000;
+  assert.equal(srv.war.community(ap()).tier, 2, 'two milestones reached');
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'stageStart', stage: 0 } });
+  assert.equal(r.body.result.perks.mascot, 2 * ECON.MASCOT_PER_TIER, 'mascot power from milestones');
+  const msgs0 = calls.filter(c => c.method === 'sendMessage').length;
+  queue.push({ update_id: 9101, message: { chat: { id: 222 }, from: bob, text: '/ally notcoin pinkbull' } });
+  queue.push({ update_id: 9102, message: { chat: { id: 111 }, from: alice, text: '/ally Notcoin "pinkbull" 12 7' } });
+  queue.push({ update_id: 9103, message: { chat: { id: 111 }, from: alice, text: '/ally notcoin pinkbull 12 7' } });
+  await sleep(1200);
+  const am = calls.filter(c => c.method === 'sendMessage').slice(msgs0).map(c => c.data);
+  assert.ok(am.some(m => m.chat_id === 222 && /Only admins/.test(m.text)));
+  assert.ok(am.some(m => m.chat_id === 111 && /Unknown heroes/.test(m.text)));
+  assert.ok(am.some(m => m.chat_id === 111 && /Official alliance: Notcoin × Pink Bull · \+12% for 7 days/.test(m.text)), JSON.stringify(am));
+  assert.equal(srv.db.alliances.length, 1);
+  r = await fetch(base + '/api/health').then(x => x.json()); assert.equal(r.alliances[0].pct, 12);
+  assert.ok(am.some(m => /([1-9]\d*) members will be told/.test(m.text)), 'members are told');
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'stageStart', stage: 0 } });
+  assert.ok(r.body.result.market.f1 >= 1.12 - 1e-9, JSON.stringify(r.body.result.market));
+  queue.push({ update_id: 9104, message: { chat: { id: 111 }, from: alice, text: '/ally remove pinkbull notcoin' } });
+  await sleep(1200);
+  assert.equal(srv.db.alliances.length, 0);
+  console.log('   alliances: leader, shared war points, mascot milestones, official /ally boost');
 
   r = await fetch(base + '/api/status').then(x => x.json());
   assert.equal(r.webappUrlOk, true); assert.ok(r.updatesHandled >= 6); assert.equal(r.lastHandleError, null);

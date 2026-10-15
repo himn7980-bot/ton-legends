@@ -18,7 +18,7 @@ const AI_NAMES = ['Neon Ronin', 'Frost Byte', 'Crypto Kraken', 'Shadow Bot', 'Lu
 
 const EMOTES = 6; // 😂 🔥 😱 👏 🤝 + the sender's community mascot
 const winGems = () => PVP_WIN_GEMS * (ECON.eventOf(Date.now()) === 'arena' ? ECON.EVENT_FX.arena : 1); // Friday: arena day
-module.exports = function createArena({ db, persist, notify = () => {}, onPoints = () => {}, market = () => null }) {
+module.exports = function createArena({ db, persist, notify = () => {}, onPoints = () => {}, market = () => null, perksExtra = () => ({}) }) {
   const tickets = new Map();   // ticket id (secret) -> ticket
   const queues = new Map();    // stake -> waiting tickets
   const rooms = new Map();     // invite code -> waiting host ticket
@@ -49,7 +49,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
     if (busyTicket(u.id)) fail('busy');
     if (p.coins < stake) fail('no_coins');
     p.coins -= stake;
-    const t = { id: rid(16), uid: u.id, name: u.name, stake, mode, team: [...p.team], faction: p.faction || null, perks: ECON.perksOf(p),
+    const t = { id: rid(16), uid: u.id, name: u.name, stake, mode, team: [...p.team], faction: p.faction || null, perks: { ...ECON.perksOf(p), ...perksExtra(p) },
       levels: Object.fromEntries(p.team.map(id => [id, p.owned[id]])), power: Math.round(ECON.teamPower(p)),
       status: 'waiting', client: null, auto: false, created: now(), lastSeen: now() };
     db.escrow[t.id] = { uid: u.id, stake };
@@ -252,7 +252,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
       if (!p) fail('no_profile');
       if (!p.team.length) fail('bad_team');
       if (busyTicket(u.id)) fail('busy');
-      const t = { id: rid(16), uid: u.id, name: u.name, stake: 0, mode: 'ai', team: [...p.team], faction: p.faction || null, perks: ECON.perksOf(p),
+      const t = { id: rid(16), uid: u.id, name: u.name, stake: 0, mode: 'ai', team: [...p.team], faction: p.faction || null, perks: { ...ECON.perksOf(p), ...perksExtra(p) },
         levels: Object.fromEntries(p.team.map(id => [id, p.owned[id]])), power: Math.round(ECON.teamPower(p)),
         status: 'waiting', client: null, auto: false, created: now(), lastSeen: now() };
       const ai = aiTeam(p, level);

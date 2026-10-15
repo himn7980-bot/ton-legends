@@ -9,7 +9,7 @@ const STREAK_HOUR = 16; // UTC hour after which a "keep your streak" reminder ma
 
 module.exports = function createNotifier({ db, persist, tg, webappUrl, logErr = () => {} }) {
   const queue = [];
-  const textFor = u => BOT_TEXT[u.lang] || BOT_TEXT[String(u.tgLang || '').slice(0, 2)] || BOT_TEXT.en;
+  const textFor = u => ({ ...BOT_TEXT.en, ...(BOT_TEXT[u.lang] || BOT_TEXT[String(u.tgLang || '').slice(0, 2)] || {}) }); // a missing key falls back to English
   function enqueue(uid, make) { queue.push({ uid: String(uid), make }); }
 
   const pump = setInterval(async () => {

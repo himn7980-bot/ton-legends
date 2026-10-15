@@ -114,6 +114,12 @@ module.exports = function createWar({ db, persist, weekKey, shareDir, profileOut
       w.pts += got;
       W.points[f] = (W.points[f] || 0) + got;
       W.total[f] = (W.total[f] || 0) + got;
+      // Alliance cards in the team: every allied community on them earns a share of the base points too.
+      const allies = new Set(p.team.flatMap(id => { const h = E.HERO_BY_ID[id]; return h && h.fusion && h.parts.includes(f) ? h.parts : []; }).filter(x => x !== f));
+      for (const a of allies) {
+        const share = Math.max(1, Math.round(base * ECON.ALLY_SHARE));
+        W.points[a] = (W.points[a] || 0) + share; W.total[a] = (W.total[a] || 0) + share;
+      }
     }
     persist();
     return got;
@@ -220,8 +226,9 @@ module.exports = function createWar({ db, persist, weekKey, shareDir, profileOut
     },
   };
   // What a stage battle needs from the war (frozen into the battle by economy.js).
-  const community = p => { roll(); return { owners: owners(), cry: cryOf(p && p.faction) }; };
-  return { routes, onWin, addPoints, roll, userWar, community, owners, MIN_POINTS, REWARDS };
+  const tierFor = f => (f ? tierOf(W.total[f] || 0) : 0);
+  const community = p => { roll(); return { owners: owners(), cry: cryOf(p && p.faction), tier: tierFor(p && p.faction) }; };
+  return { routes, onWin, addPoints, roll, userWar, community, tierFor, owners, MIN_POINTS, REWARDS };
 };
 module.exports.weekEnd = weekEnd;
 module.exports.pairUp = pairUp;

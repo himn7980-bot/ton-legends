@@ -205,7 +205,7 @@ function marketMult(id, market) {
   if (!market) return 1;
   const h = HERO_BY_ID[id];
   if (!h || !h.fusion) return market[id] || 1;
-  return 1 + Math.max(0, ...h.parts.map(p => (market[p] || 1) - 1)) * 0.5;
+  return (market[id] || 1) * (1 + Math.max(0, ...h.parts.map(p => (market[p] || 1) - 1)) * 0.5);
 }
 // Formation: the first two cards stand in the front row; while a front-row ally stands, back-row cards
 // take less damage from basic attacks (tanks in front, archers and mages behind).
@@ -215,7 +215,8 @@ const rowOf = i => (i < FRONT ? 'front' : 'back');
 function teamUnits(B, side, team, levels, faction, market, perks) {
   const pk = perks || {};
   return team.map((id, i) => {
-    const s = heroStats(id, levels[id] || 1), k = factionMult(id, faction) * marketMult(id, market);
+    const h = HERO_BY_ID[id], ms = pk.mascot && faction ? (id === faction ? pk.mascot : h && h.fusion && h.parts.includes(faction) ? pk.mascot / 2 : 0) : 0;
+    const s = heroStats(id, levels[id] || 1), k = factionMult(id, faction) * marketMult(id, market) * (1 + ms);
     const u = makeUnit(B, side, { ...HERO_BY_ID[id], ...s, hp: s.hp * k * (1 + (pk.hp || 0)), atk: s.atk * k * (1 + (pk.atk || 0)), row: rowOf(i) });
     u.energy = Math.min(100, u.energy + (pk.energy || 0));
     return u;

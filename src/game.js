@@ -4,11 +4,12 @@ const IMAGES = {/*IMAGES*/};
 // from the parent heroes' posters (diagonal slices + frame + name), cached per fusion.
 const BASE_IMG = {}, FART = {};
 const baseSrc = id => IMAGES[id] || `images/${id}.jpg`;
-function img(id) {
+function img(id, leader) {
   const h = HERO_BY_ID[id];
   if (!h || !h.fusion) return baseSrc(id);
   if (Online.state.art && Online.state.art.has(h.num)) return `art/${h.num}?v=${Online.state.art.get(h.num)}`;
-  return FART[id] || (FART[id] = drawFusion(h)) || baseSrc(h.parts[0]);
+  const lead = leader && h.parts.includes(leader) ? leader : S.owned && S.owned[id] ? ECON.leaderOf(S, id) : h.parts[0], off = officialPct(h), key = `${id}:${lead}:${off}`;
+  return FART[key] || (FART[key] = drawFusion(h, lead, off)) || baseSrc(lead);
 }
 function preloadBaseImages(done) {
   let left = BASE_HEROES.length;
@@ -18,28 +19,51 @@ function preloadBaseImages(done) {
     im.src = baseSrc(h.id); BASE_IMG[h.id] = im;
   }
 }
-function drawFusion(h) {
+// Official alliances (approved by the admin) between two communities: +pct power for alliance cards with both.
+function officialPct(f) {
+  const list = (Online.state.alliances || []).filter(a => a.until > Date.now() && f.parts.includes(a.a) && f.parts.includes(a.b));
+  return list.length ? Math.max(...list.map(a => a.pct)) : 0;
+}
+// Alliance card art drawn from the heroes' own posters: the leader big (with a crown) and the allies smaller
+// beside it, every one complete and recognizable; name and members at the bottom.
+function drawFusion(h, lead = h.parts[0], official = 0) {
   const ims = h.parts.map(p => BASE_IMG[p]);
-  if (ims.some(im => !im || !im.complete || !im.naturalWidth)) return null; // not loaded yet: show first part meanwhile
-  const W = 360, H = 540, k = ims.length, c = document.createElement('canvas');
+  if (ims.some(im => !im || !im.complete || !im.naturalWidth)) return null; // not loaded yet: show the leader meanwhile
+  const W = 360, H = 540, k = h.parts.length, c = document.createElement('canvas');
   c.width = W; c.height = H;
-  const g = c.getContext('2d');
-  ims.forEach((im, i) => {
-    const sc = Math.max(W / im.naturalWidth, H / im.naturalHeight), w = im.naturalWidth * sc, hh = im.naturalHeight * sc;
-    const x0 = W * i / k, x1 = W * (i + 1) / k, sl = 50;
-    g.save(); g.beginPath();
-    g.moveTo(i ? x0 + sl : 0, 0); g.lineTo(i < k - 1 ? x1 + sl : W, 0); g.lineTo(i < k - 1 ? x1 - sl : W, H); g.lineTo(i ? x0 - sl : 0, H); g.closePath(); g.clip();
-    g.drawImage(im, (W - w) / 2, -(hh - H) * 0.15, w, hh); g.restore();
-  });
-  const col = k === 2 ? '#ff5ad1' : '#46f0ff';
-  const grad = g.createLinearGradient(0, H - 170, 0, H); grad.addColorStop(0, 'rgba(8,6,20,0)'); grad.addColorStop(0.45, 'rgba(8,6,20,.85)'); grad.addColorStop(1, 'rgba(8,6,20,.95)');
-  g.fillStyle = grad; g.fillRect(0, H - 170, W, 170);
-  g.strokeStyle = col; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8);
-  g.textAlign = 'center'; g.fillStyle = col; g.font = '900 17px Vazirmatn, sans-serif';
-  g.fillText(`${k === 2 ? 'DUO' : 'TRIO'} FUSION · #${h.num}`, W / 2, H - 88);
-  g.fillStyle = '#fff'; g.font = `900 ${h.name.length > 22 ? 22 : 30}px Vazirmatn, sans-serif`;
-  g.fillText(h.name, W / 2, H - 50, W - 24);
-  return c.toDataURL('image/jpeg', 0.82);
+  const g = c.getContext('2d'), col = k === 2 ? '#ff5ad1' : '#46f0ff', gold = '#ffc531';
+  // background: night sky, a glowing moon and the rarity glow
+  const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#0b1240'); bg.addColorStop(0.6, '#140a2e'); bg.addColorStop(1, '#05040f');
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  const moon = g.createRadialGradient(180, 170, 20, 180, 170, 170); moon.addColorStop(0, 'rgba(90,170,255,.55)'); moon.addColorStop(1, 'rgba(90,170,255,0)');
+  g.fillStyle = moon; g.fillRect(0, 0, W, 360);
+  const rr = (x, y, w, hh, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + hh, r); g.arcTo(x + w, y + hh, x, y + hh, r); g.arcTo(x, y + hh, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+  // a hero's portrait: the poster without its title (top ~78%), cover-fitted into the frame
+  const portrait = (id, x, y, w, hh, border, lw) => {
+    const im = BASE_IMG[id], sw = im.naturalWidth, sh = im.naturalHeight * 0.78;
+    const sc = Math.max(w / sw, hh / sh), dw = sw * sc, dh = sh * sc;
+    g.save(); rr(x, y, w, hh, 14); g.clip();
+    g.drawImage(im, 0, 0, sw, sh, x + (w - dw) / 2, y + (hh - dh) * 0.2, dw, dh); g.restore();
+    g.save(); g.shadowColor = border; g.shadowBlur = 16; g.lineWidth = lw; g.strokeStyle = border; rr(x, y, w, hh, 14); g.stroke(); g.restore();
+  };
+  const allies = h.parts.filter(p => p !== lead);
+  const L = k === 2 ? { lead: [22, 36, 200, 266], allies: [[232, 122, 108, 148]] }
+    : { lead: [96, 30, 168, 230], allies: [[8, 128, 104, 142], [248, 128, 104, 142]] };
+  allies.forEach((id, i) => portrait(id, ...L.allies[i], RARITY[HERO_BY_ID[id].rarity].color, 3));
+  portrait(lead, ...L.lead, official ? gold : col, 5);
+  g.textAlign = 'center'; g.font = '34px sans-serif';
+  g.fillText('👑', L.lead[0] + L.lead[2] / 2, L.lead[1] + 8);
+  // bottom band: tag, name, members (leader first)
+  const band = g.createLinearGradient(0, 300, 0, H); band.addColorStop(0, 'rgba(5,4,15,0)'); band.addColorStop(0.25, 'rgba(5,4,15,.92)'); band.addColorStop(1, 'rgba(5,4,15,1)');
+  g.fillStyle = band; g.fillRect(0, 300, W, H - 300);
+  g.fillStyle = official ? gold : col; g.font = '900 16px Vazirmatn, sans-serif';
+  g.fillText(`${official ? `🤝 OFFICIAL +${official}% · ` : ''}${k === 2 ? 'DUO' : 'TRIO'} ALLIANCE · #${h.num}`, W / 2, 352);
+  g.fillStyle = '#fff'; g.font = `900 ${h.name.length > 20 ? 24 : 30}px Vazirmatn, sans-serif`;
+  g.fillText(h.name, W / 2, 392, W - 24);
+  g.fillStyle = '#aab4e0'; g.font = '700 15px Vazirmatn, sans-serif';
+  g.fillText([lead, ...allies].map(id => HERO_BY_ID[id].name).join('  ·  '), W / 2, 424, W - 24);
+  g.lineWidth = 6; g.strokeStyle = official ? gold : col; g.strokeRect(3, 3, W - 6, H - 6);
+  return c.toDataURL('image/jpeg', 0.85);
 }
 const n = x => Math.round(x).toLocaleString(L().locale);
 const pct = x => LANG === 'fa' ? `${n(x)}٪` : `${n(x)}%`;
@@ -194,6 +218,7 @@ function renderMap() {
     <button class="event-banner" id="to-cal">${EVENT_ICON[ev]} <b>${t.ev[ev]}</b> · ${t.evFx[ev]}</button>
     ${ECON.rookieActive(S) ? rookieBanner() : ''}
     ${warBanner()}
+    ${allyBanner()}
     ${tickerHtml()}
     ${nextUnlock() ? `<div class="next-unlock">🔓 ${t.nextUnlock(t.feat[nextUnlock()], n(unlockWorld(nextUnlock())))}</div>` : ''}
     <div class="panel">
@@ -276,7 +301,7 @@ function cardHtml(h) {
 function heroModal(id) {
   const t = T(), h = HERO_BY_ID[id], ht = heroText(id), lv = S.owned[id], R = RARITY[h.rarity];
   // Stats as they fight for you (your community's card and fusions with it are stronger).
-  const mine = factionMult(id, S.faction) * marketMult(id, ECON.marketBoosts(moods())), boosted = l => { const x = heroStats(id, l); return { ...x, hp: Math.round(x.hp * mine), atk: Math.round(x.atk * mine) }; };
+  const mine = factionMult(id, S.faction) * marketMult(id, ECON.marketBoosts(moods())) * (h.fusion ? 1 + officialPct(h) / 100 : 1), boosted = l => { const x = heroStats(id, l); return { ...x, hp: Math.round(x.hp * mine), atk: Math.round(x.atk * mine) }; };
   const s = boosted(lv || 1);
   const cost = lv ? ECON.upgradePrice(S, id, lv) : 0, inTeam = S.team.includes(id);
   const fusionCap = !inTeam && !!teamError([...S.team, id]); // a team holds 2 fusion cards (1 trio): say so instead of failing
@@ -289,6 +314,7 @@ function heroModal(id) {
     ${lv ? `<div class="star-line">${ECON.STAR_LEVELS.map(l => `<span class="${lv >= l ? 'on' : ''}">★</span>`).join('')}
       <small>${ECON.starsOf(lv) === 5 ? t.awakened : t.nextStar(n(ECON.STAR_LEVELS[ECON.starsOf(lv)]))}</small></div>` : ''}
     ${moodBadge(id)}
+    ${h.fusion ? allianceHtml(h, lv) : ''}
     ${mine > 1 ? `<div class="fac-badge">${id === S.faction ? `${t.yourCommunity} · ${t.factionPerkShort}` : `🚩 ${t.army(factionName(S.faction))} · +${n(Math.round((mine - 1) * 100))}%`}</div>` : ''}
     <div class="stats">
       <div>${t.hp}<b>${n(s.hp)}</b>${next ? `<span style="color:var(--green)">+${n(next.hp - s.hp)}</span>` : ''}</div>
@@ -307,7 +333,26 @@ function heroModal(id) {
     if (tm) tm.onclick = async () => { const team = inTeam ? S.team.filter(x => x !== id) : [...S.team, id]; if (await tryAct({ type: 'team', team })) { closeModal(); refresh(); } };
     if (tc) tc.onclick = () => { closeModal(); show('chest'); };
     const tl = box.querySelector('#tolab'); if (tl) tl.onclick = () => { closeModal(); show('lab'); };
+    box.querySelectorAll('[data-lead]').forEach(b => b.onclick = async () => {
+      if (await tryAct({ type: 'leader', id, hero: b.dataset.lead })) { haptic('light'); refresh(); heroModal(id); }
+    });
   });
+}
+// Official alliances running now (map banner).
+function allyBanner() {
+  const t = T(), now = Date.now(), list = (Online.state.alliances || []).filter(a => a.until > now);
+  return list.map(a => `<div class="ally-banner">🤝 ${t.allyBanner(HERO_BY_ID[a.a].name, HERO_BY_ID[a.b].name, n(a.pct), n(Math.ceil((a.until - now) / 864e5)))}</div>`).join('');
+}
+// Alliance card: its member communities, the leader (shown big; you can change it) and an official alliance bonus.
+function allianceHtml(h, owned) {
+  const t = T(), lead = owned ? ECON.leaderOf(S, h.id) : h.parts[0], off = officialPct(h);
+  return `<div class="ally-box">
+    ${off ? `<div class="ally-official">${t.officialAlly(n(off))}</div>` : ''}
+    <div class="muted small">${t.allyMembers}</div>
+    <div class="ally-members">${h.parts.map(p => `<button class="ally-m ${p === lead ? 'lead' : ''}" ${owned && p !== lead ? `data-lead="${p}"` : 'disabled'}>
+      <img src="${img(p)}" alt=""><span>${p === lead ? '👑 ' : ''}${HERO_BY_ID[p].name}</span></button>`).join('')}</div>
+    ${owned ? `<div class="muted small">${t.leaderHint}</div>` : ''}
+  </div>`;
 }
 
 // ---------- chest ----------
@@ -432,7 +477,7 @@ function renderLab() {
       : st.key === 'soldout' ? `<button class="btn wide ghost" disabled>${t.soldOut}</button>`
       : `<button class="btn wide ghost" disabled>🔒 ${t.lockedUntil(t.feat[st.kind || 'duo'], n(unlockWorld(st.kind || 'duo')))}</button>`;
     result = `<div class="fresult" style="--rc:${RARITY[f.rarity].color}">
-      <button class="fr-img" data-hero="${f.id}"><img src="${img(f.id)}" alt=""><span class="fnum">#${f.num}</span></button>
+      <button class="fr-img" data-hero="${f.id}"><img src="${img(f.id, st.key === 'owned' ? null : labPick[0])}" alt=""><span class="fnum">#${f.num}</span></button>
       <div class="fr-info">
         <div class="tag" style="color:${RARITY[f.rarity].color}">${L().rarity[f.rarity]}</div>
         <div class="fname latin">${f.name}</div>
@@ -441,6 +486,7 @@ function renderLab() {
           ${st.key === 'owned' ? '' : `<div>⭐ ${t.startsAt(n(start))}</div>`}
           <div>🪙 ${n(rule.cost)}</div>
           ${online ? `<div>🔢 ${t.left(n(Math.max(0, left)), n(rule.supply))}</div>` : ''}
+          ${st.key === 'owned' ? '' : `<div>👑 ${t.leaderIs(HERO_BY_ID[labPick[0]].name)}</div>`}
           <div class="muted">✅ ${t.heroesKept}</div>
         </div>
       </div></div>${btn}`;
@@ -476,7 +522,7 @@ function renderLab() {
   const fb = $('#lab-fuse');
   if (fb) fb.onclick = async () => {
     fb.disabled = true;
-    const r = await tryAct({ type: 'fuse', id: f.id });
+    const r = await tryAct({ type: 'fuse', id: f.id, leader: labPick[0] });
     if (!r) { renderLab(); return; }
     if (r.serial) Online.state.mint[r.id] = Math.max(Online.state.mint[r.id] || 0, r.serial);
     labPick = [];

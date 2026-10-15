@@ -195,6 +195,42 @@ async function saveArt(num, fileId, ext) {
   if (!r.ok) throw new Error('download failed ' + r.status);
   writeArt(num, Buffer.from(await r.arrayBuffer()), ext);
 }
+// ---------- official alliances (/ally, admins only) ----------
+// Two real projects announce a partnership → the admin approves it here; every alliance card holding both
+// communities gets +pct% power for `days` days, and both communities hear about it from the bot.
+db.alliances = db.alliances || [];
+const activeAllies = (now = Date.now()) => db.alliances.filter(x => x.until > now);
+const findHero = q => { const k = String(q || '').toLowerCase().replace(/[\s_-]/g, ''); return E.BASE_HEROES.find(h => h.id === k || h.name.toLowerCase().replace(/[\s_-]/g, '') === k); };
+const pairOf = (x, a, b) => (x.a === a && x.b === b) || (x.a === b && x.b === a);
+// Market moods plus official alliances, as the boost map battles use (keys: hero or alliance card ids).
+function battleMarket() {
+  const m = ECON.marketBoosts(market.moods());
+  for (const [k, v] of Object.entries(ECON.allianceBoosts(activeAllies()))) m[k] = +((m[k] || 1) * v).toFixed(4);
+  return m;
+}
+async function handleAlly(m) {
+  const say = text => tg('sendMessage', { chat_id: m.chat.id, text });
+  if (!ADMIN_IDS.has(String(m.from.id))) return say(`Your Telegram ID is ${m.from.id}. Only admins (ADMIN_IDS) can manage alliances.`);
+  const args = m.text.replace(/^\/ally(@\w+)?/, '').trim().split(/\s+/).filter(Boolean);
+  const now = Date.now(), name = id => E.HERO_BY_ID[id].name;
+  const list = () => (activeAllies(now).map(x => `🤝 ${name(x.a)} × ${name(x.b)} · +${x.pct}% · ${Math.ceil((x.until - now) / 864e5)}d left`).join('\n') || 'No official alliances yet.');
+  if (!args.length || args[0] === 'list') return say(list() + '\n\n/ally <hero> <hero> [percent=10] [days=30] · /ally remove <hero> <hero>');
+  const remove = args[0] === 'remove', [qa, qb, qp, qd] = remove ? args.slice(1) : args;
+  const a = findHero(qa), b = findHero(qb);
+  if (!a || !b || a === b) return say(`Unknown heroes. Use ids or names: ${E.BASE_HEROES.map(h => h.id).join(', ')}`);
+  if (remove) {
+    const before = db.alliances.length;
+    db.alliances = db.alliances.filter(x => !pairOf(x, a.id, b.id)); persist();
+    return say(before === db.alliances.length ? 'No such alliance.' : `❌ ${a.name} × ${b.name} removed.`);
+  }
+  const pct = Math.max(1, Math.min(30, Math.round(+qp || ECON.ALLY_DEFAULT.pct))), days = Math.max(1, Math.min(365, Math.round(+qd || ECON.ALLY_DEFAULT.days)));
+  db.alliances = db.alliances.filter(x => !pairOf(x, a.id, b.id) && x.until > now);
+  db.alliances.push({ a: a.id, b: b.id, pct, until: now + days * 864e5, at: now }); persist();
+  let told = 0;
+  for (const u of Object.values(db.users)) if (u.profile && (u.profile.faction === a.id || u.profile.faction === b.id)) { notifier.enqueue(u.id, L => L.ally(a.name, b.name, pct, days)); told++; }
+  return say(`✅ Official alliance: ${a.name} × ${b.name} · +${pct}% for ${days} days. ${told} members will be told.`);
+}
+
 // ---------- fusion art generated with Runway (/gen, admins only) ----------
 const runway = createRunway({ saveArt: async (num, buf, ext) => writeArt(num, buf, ext), hasArt: n => !!artIndex[n], log: m => console.error('runway', m),
   pollMs: +process.env.RUNWAY_POLL_MS || 4000 });
@@ -322,6 +358,7 @@ async function handleUpdate(up) {
     return;
   }
   if (typeof m.text === 'string' && /^\/gen\b/.test(m.text)) return handleGen(m);
+  if (typeof m.text === 'string' && /^\/ally\b/.test(m.text)) return handleAlly(m);
   if (typeof m.text === 'string' && /^\/stats\b/.test(m.text)) {
     if (ADMIN_IDS.has(String(m.from.id))) await tg('sendMessage', { chat_id: m.chat.id, text: analytics.text() });
     else await tg('sendMessage', { chat_id: m.chat.id, text: `Your Telegram ID is ${m.from.id}. Only admins (ADMIN_IDS) can see /stats.` });
@@ -436,7 +473,7 @@ const onWin = (uid, kind, info = {}) => {
   const got = war.onWin(uid, kind, info);
   const u = db.users[uid]; if (u && u.profile) market.addActivity(u.profile.faction, Math.max(1, got));
 };
-const arena = createArena({ db, persist, onPoints: (uid, pts, info = {}) => onWin(uid, info.kind || (pts >= 5 ? 'pvp' : 'ai'), info), market: () => ECON.marketBoosts(market.moods()), notify: (uid, end) => {
+const arena = createArena({ db, persist, onPoints: (uid, pts, info = {}) => onWin(uid, info.kind || (pts >= 5 ? 'pvp' : 'ai'), info), market: battleMarket, perksExtra: p => { const t = war.tierFor(p.faction); return t ? { mascot: t * ECON.MASCOT_PER_TIER } : {}; }, notify: (uid, end) => {
   const u = db.users[uid];
   const L = tx(u && u.lang);
   if (end.result === 'cancelled') return;
@@ -444,7 +481,7 @@ const arena = createArena({ db, persist, onPoints: (uid, pts, info = {}) => onWi
 } });
 
 const routes = {
-  'GET /api/health': () => ({ ok: true, bot: BOT_USERNAME, packs: PACKS, mint: db.mint || {}, art: artVersions(), market: { at: db.market.at, moods: market.moods() } }),
+  'GET /api/health': () => ({ ok: true, bot: BOT_USERNAME, packs: PACKS, mint: db.mint || {}, art: artVersions(), market: { at: db.market.at, moods: market.moods() }, alliances: activeAllies().map(({ a, b, pct, until }) => ({ a, b, pct, until })) }),
   'GET /api/status': () => ({ ...diag, bot: BOT_USERNAME, users: Object.keys(db.users).length, node: process.version,
     market: { tokens: market.tokens, prices: db.market.prices, updated: db.market.at ? new Date(db.market.at).toISOString() : null } }),
   'POST /api/hello': (body, u) => {
@@ -462,7 +499,7 @@ const routes = {
   },
   'POST /api/act': (body, u) => {
     if (!u.profile) throw Object.assign(new Error('no_profile'), { code: 400 });
-    const result = ECON.act(u.profile, body.action, { now: Date.now(), rng, mint, market: market.moods(), community: war.community(u.profile) });
+    const result = ECON.act(u.profile, body.action, { now: Date.now(), rng, mint, market: market.moods(), community: { ...war.community(u.profile), allies: activeAllies() } });
     payReferral(u);
     if (body.action && body.action.type === 'stageEnd' && result) analytics.battle(result.result === 'win');
     if (body.action && body.action.type === 'stageEnd' && result && result.result === 'win') onWin(u.id, result.first ? 'stageFirst' : 'stage', { stage: result.stage });
