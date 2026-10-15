@@ -22,6 +22,24 @@
   const needUnlock = (p, key) => { if (!unlocked(p, key)) fail('locked_feature'); };
   // AI duels: no stake; the first AI_DAILY wins each day pay a reward based on progress.
   const AI_DAILY = 5;
+  // Collection sets: own all four heroes of a set at level SET_LEVEL+ and every card in your team gets the bonus.
+  const SET_LEVEL = 10;
+  const SETS = [
+    { id: 'ocean', ico: '🌊', heroes: ['utya', 'pengu', 'babyshark', 'dog'], perk: { hp: 0.05 } },
+    { id: 'crystal', ico: '💎', heroes: ['egor', 'memegram', 'yoda', 'gramcat'], perk: { atk: 0.05 } },
+    { id: 'neon', ico: '🌃', heroes: ['pinkbull', 'notcoin', 'volya', 'teddy'], perk: { coins: 0.10 } },
+    { id: 'shadow', ico: '🌿', heroes: ['paws', 'noctis', 'virus', 'yaya'], perk: { energy: 25 } },
+  ];
+  const setDone = (p, s) => s.heroes.every(id => (p.owned[id] || 0) >= SET_LEVEL);
+  const perksOf = p => SETS.filter(s => setDone(p, s)).reduce((a, s) => { for (const [k, v] of Object.entries(s.perk)) a[k] = (a[k] || 0) + v; return a; }, {});
+  // Stars are earned with levels (10/25/50/75/100); five stars = awakened.
+  const STAR_LEVELS = [10, 25, 50, 75, 100];
+  const starsOf = lv => STAR_LEVELS.filter(l => (lv || 0) >= l).length;
+  // Weekly events (by UTC weekday): every day has something special.
+  const EVENTS = ['coins', 'war', 'ai', 'chest', 'sale', 'arena', 'coins']; // Sun..Sat
+  const EVENT_FX = { coins: 0.5, war: 2, ai: 2, chest: 1.5, sale: 0.2, arena: 2 };
+  // (tests pin the day's event with TL_EVENT, e.g. 'none')
+  const eventOf = now => (typeof process !== 'undefined' && process.env && process.env.TL_EVENT) || EVENTS[new Date(now).getUTCDay()];
   // Community war extras (server/war.js keeps the weekly state; these numbers are shared with the client).
   const COMMUNITY = {
     TERRITORY_BONUS: 0.15,        // +stage coins in a world your community holds this week
@@ -54,10 +72,10 @@
   // Communities: joining is free; switching costs gems and is allowed once a week. Your community's card is
   // cheaper to upgrade and drops more often from chests. Sharing the game once a day pays a few gems.
   const FACTION_SWITCH_GEMS = 100, FACTION_SWITCH_DAYS = 7, FACTION_UPGRADE_DISCOUNT = 0.25, FACTION_CHEST_WEIGHT = 3, SHARE_GEMS = 3;
-  const upgradePrice = (p, id, lv = p.owned[id]) => Math.round(E.upgradeCost(id, lv) * (id === p.faction ? 1 - FACTION_UPGRADE_DISCOUNT : 1));
+  const upgradePrice = (p, id, lv = p.owned[id], now = Date.now()) => Math.round(E.upgradeCost(id, lv) * (id === p.faction ? 1 - FACTION_UPGRADE_DISCOUNT : 1) * (eventOf(now) === 'sale' ? 1 - EVENT_FX.sale : 1));
   const AI_LEVELS = { easy: { power: 0.8, coins: 0.5, gems: 0 }, normal: { power: 1, coins: 1, gems: 0 }, hard: { power: 1.25, coins: 2, gems: 1 } };
   const aiLeft = (p, now) => (p.aiDay && p.aiDay.date === day(now) ? Math.max(0, AI_DAILY - p.aiDay.wins) : AI_DAILY);
-  const aiReward = (p, level) => ({ coins: Math.round(E.stageReward(Math.max(0, p.cleared - 1)) * AI_LEVELS[level].coins), gems: AI_LEVELS[level].gems });
+  const aiReward = (p, level, now = Date.now()) => ({ coins: Math.round(E.stageReward(Math.max(0, p.cleared - 1)) * AI_LEVELS[level].coins * (eventOf(now) === 'ai' ? EVENT_FX.ai : 1)), gems: AI_LEVELS[level].gems });
   const DAILY_QUESTS = [
     { id: 'wins', goal: 3, r: 150 },
     { id: 'skills', goal: 15, r: 120 },
@@ -129,7 +147,7 @@
   // so farming old stages dries up and progress comes from new stages, the idle chest, quests and the arena.
   const replayFactor = (p, idx) => (idx < p.cleared ? Math.pow(0.5, (p.replays[idx] || 0) + 1) : 2);
   const stageCoins = (p, idx, team, dip = 0) => Math.floor(E.stageReward(idx) * (1 + coinBonus(team) + dip) * replayFactor(p, idx));
-  const teamPower = (p, team = p.team) => team.reduce((sum, id) => { const s0 = E.heroStats(id, p.owned[id] || 1), k = E.factionMult(id, p.faction), s = { hp: s0.hp * k, atk: s0.atk * k, spd: s0.spd }; return sum + s.hp / 10 + s.atk / s.spd * 2; }, 0);
+  const teamPower = (p, team = p.team) => { const pk = perksOf(p); return team.reduce((sum, id) => { const s0 = E.heroStats(id, p.owned[id] || 1), k = E.factionMult(id, p.faction), s = { hp: s0.hp * k * (1 + (pk.hp || 0)), atk: s0.atk * k * (1 + (pk.atk || 0)), spd: s0.spd }; return sum + s.hp / 10 + s.atk / s.spd * 2; }, 0); };
 
   function claimable(p, now) {
     ensureDQ(p, now);
@@ -144,8 +162,14 @@
 
   function openChest(p, key, rng, now) {
     const c = CHESTS[key];
+    // Chest day: Epic and Legendary odds ×1.5 (Common/Rare shrink to make room).
+    let rates = c.rates;
+    if (eventOf(now) === 'chest') {
+      const up = { ...rates, E: rates.E * EVENT_FX.chest, L: rates.L * EVENT_FX.chest }, extra = up.E + up.L - rates.E - rates.L, low = rates.C + rates.R;
+      rates = { ...up, C: rates.C - extra * rates.C / low, R: rates.R - extra * rates.R / low };
+    }
     let roll = rng() * 100, rarity = 'C';
-    for (const [r, v] of Object.entries(c.rates)) { if (roll < v) { rarity = r; break; } roll -= v; }
+    for (const [r, v] of Object.entries(rates)) { if (roll < v) { rarity = r; break; } roll -= v; }
     // Your community's hero is FACTION_CHEST_WEIGHT times as likely as the others of its rarity.
     const pool = E.HEROES.filter(h => h.rarity === rarity), w = h => (h.id === p.faction ? FACTION_CHEST_WEIGHT : 1);
     let pickW = rng() * pool.reduce((a, h) => a + w(h), 0), h = pool[pool.length - 1];
@@ -179,7 +203,7 @@
       case 'upgrade': {
         const lv = p.owned[a.id];
         if (!lv || lv >= E.MAX_LEVEL) fail('cannot_upgrade');
-        const cost = upgradePrice(p, a.id, lv);
+        const cost = upgradePrice(p, a.id, lv, now);
         if (p.coins < cost) fail('no_coins');
         p.coins -= cost; p.owned[a.id]++; track(p, 'upgrades', 1, now);
         return { level: p.owned[a.id] };
@@ -284,15 +308,16 @@
         const dip = marketCoinBonus(ctx.market, p.team);
         const terr = p.faction && com.owners && com.owners[Math.floor(idx / E.STAGES_PER_WORLD)] === p.faction ? COMMUNITY.TERRITORY_BONUS : 0;
         const gold = cry === 'gold' ? COMMUNITY.CRIES.gold.coins : 0;
+        const perks = perksOf(p), weekend = eventOf(now) === 'coins' ? EVENT_FX.coins : 0;
         p.pending = { stage: idx, seed, team: [...p.team], levels: Object.fromEntries(p.team.map(id => [id, p.owned[id]])), faction: p.faction || null,
-          market, dip, extra: +(dip + terr + gold).toFixed(4), at: now };
-        return { seed, market, dip, terr, gold };
+          market, perks, dip, extra: +(dip + terr + gold + (perks.coins || 0) + weekend).toFixed(4), at: now };
+        return { seed, market, perks, dip, terr, gold, weekend };
       }
       case 'stageEnd': {
         const pd = p.pending;
         if (!pd) fail('no_battle');
         p.pending = null;
-        const r = E.replayStage(pd.team, pd.levels, pd.stage, pd.seed, a.inputs, pd.faction || null, pd.market || null);
+        const r = E.replayStage(pd.team, pd.levels, pd.stage, pd.seed, a.inputs, pd.faction || null, pd.market || null, pd.perks || null);
         if (r.skills) track(p, 'skills', r.skills, now);
         if (r.result !== 'win') { p.stats.losses++; return { result: r.result, stage: pd.stage }; }
         const first = pd.stage === p.cleared;
@@ -324,6 +349,6 @@
     return p;
   }
 
-  return { COMMUNITY, MOODS, moodOf, marketBoosts, marketCoinBonus, FACTION_SWITCH_GEMS, FACTION_SWITCH_DAYS, FACTION_UPGRADE_DISCOUNT, FACTION_CHEST_WEIGHT, SHARE_GEMS, upgradePrice, UNLOCKS, unlocked, START_GEMS, DAY7_GEMS, WARP_COST, WARP_HOURS, gemRate, achGems, AI_DAILY, AI_LEVELS, aiLeft, aiReward, migrateIds, HOLO_CHANCE, CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
+  return { SET_LEVEL, SETS, setDone, perksOf, STAR_LEVELS, starsOf, EVENTS, EVENT_FX, eventOf, COMMUNITY, MOODS, moodOf, marketBoosts, marketCoinBonus, FACTION_SWITCH_GEMS, FACTION_SWITCH_DAYS, FACTION_UPGRADE_DISCOUNT, FACTION_CHEST_WEIGHT, SHARE_GEMS, upgradePrice, UNLOCKS, unlocked, START_GEMS, DAY7_GEMS, WARP_COST, WARP_HOURS, gemRate, achGems, AI_DAILY, AI_LEVELS, aiLeft, aiReward, migrateIds, HOLO_CHANCE, CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
     dqReward, dailyCanClaim, dailyNext, afkRate, afkAmount, achTier, coinBonus, replayFactor, stageCoins, teamPower, claimable, act, importLocal };
 });

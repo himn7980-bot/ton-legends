@@ -17,6 +17,7 @@ const PVP_WIN_GEMS = 2;
 const AI_NAMES = ['Neon Ronin', 'Frost Byte', 'Crypto Kraken', 'Shadow Bot', 'Lucky Lynx', 'Iron Gecko', 'Moon Mantis', 'Pixel Paladin', 'Turbo Tiger', 'Volt Viper'];
 
 const EMOTES = 6; // 😂 🔥 😱 👏 🤝 + the sender's community mascot
+const winGems = () => PVP_WIN_GEMS * (ECON.eventOf(Date.now()) === 'arena' ? ECON.EVENT_FX.arena : 1); // Friday: arena day
 module.exports = function createArena({ db, persist, notify = () => {}, onPoints = () => {}, market = () => null }) {
   const tickets = new Map();   // ticket id (secret) -> ticket
   const queues = new Map();    // stake -> waiting tickets
@@ -48,7 +49,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
     if (busyTicket(u.id)) fail('busy');
     if (p.coins < stake) fail('no_coins');
     p.coins -= stake;
-    const t = { id: rid(16), uid: u.id, name: u.name, stake, mode, team: [...p.team], faction: p.faction || null,
+    const t = { id: rid(16), uid: u.id, name: u.name, stake, mode, team: [...p.team], faction: p.faction || null, perks: ECON.perksOf(p),
       levels: Object.fromEntries(p.team.map(id => [id, p.owned[id]])), power: Math.round(ECON.teamPower(p)),
       status: 'waiting', client: null, auto: false, created: now(), lastSeen: now() };
     db.escrow[t.id] = { uid: u.id, stake };
@@ -87,7 +88,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
 
   function startMatch(a, b) {
     unlist(a); unlist(b);
-    const B = E.createPvpBattle(a.team, a.levels, b.team, b.levels, crypto.randomInt(2 ** 32), a.faction || null, b.faction || null, market());
+    const B = E.createPvpBattle(a.team, a.levels, b.team, b.levels, crypto.randomInt(2 ** 32), a.faction || null, b.faction || null, market(), a.perks || null, b.perks || null);
     const m = { id: rid(8), ai: a.aiLevel || null, a, b, B, stake: a.stake, startAt: now() + COUNTDOWN_MS, inputs: [], ev: [], timer: null };
     a.side = 'hero'; b.side = 'enemy';
     for (const t of [a, b]) { t.match = m; t.status = 'playing'; send(t, 'match', matchInfo(m, t)); }
@@ -127,12 +128,12 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
       if (!winner) { result = 'draw'; if (p) p.coins += m.stake; }
       else if (t === winner) {
         result = 'win';
-        if (p) { p.coins += pot; p.gems = (p.gems || 0) + PVP_WIN_GEMS; p.stats.pvpWins = (p.stats.pvpWins || 0) + 1; ECON.track(p, 'wins', 1, now()); }
+        if (p) { p.coins += pot; p.gems = (p.gems || 0) + winGems(); p.stats.pvpWins = (p.stats.pvpWins || 0) + 1; ECON.track(p, 'wins', 1, now()); }
         onPoints(t.uid, 5, { kind: 'pvp', vs: (t === m.a ? m.b : m.a).uid });
       }
       else { result = 'lose'; if (p) p.stats.pvpLosses = (p.stats.pvpLosses || 0) + 1; }
       t.status = 'done';
-      t.end = { result, stake: m.stake, pot, gemsWon: result === 'win' ? PVP_WIN_GEMS : 0, coins: p ? p.coins : 0, gems: p ? p.gems : 0, opp: (t === m.a ? m.b : m.a).name };
+      t.end = { result, stake: m.stake, pot, gemsWon: result === 'win' ? winGems() : 0, coins: p ? p.coins : 0, gems: p ? p.gems : 0, opp: (t === m.a ? m.b : m.a).name };
       send(t, 'end', t.end);
       if (!t.client) notify(t.uid, t.end);
     }
@@ -160,7 +161,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
       ECON.track(p, 'wins', 1, now());
       onPoints(t.uid, 1, { kind: 'ai' });
       if (ECON.aiLeft(p, now()) > 0) {
-        reward = ECON.aiReward(p, m.ai);
+        reward = ECON.aiReward(p, m.ai, now());
         p.coins += reward.coins; p.gems = (p.gems || 0) + reward.gems;
         const d = ECON.day(now());
         p.aiDay = p.aiDay && p.aiDay.date === d ? { date: d, wins: p.aiDay.wins + 1 } : { date: d, wins: 1 };
@@ -250,7 +251,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
       if (!p) fail('no_profile');
       if (!p.team.length) fail('bad_team');
       if (busyTicket(u.id)) fail('busy');
-      const t = { id: rid(16), uid: u.id, name: u.name, stake: 0, mode: 'ai', team: [...p.team], faction: p.faction || null,
+      const t = { id: rid(16), uid: u.id, name: u.name, stake: 0, mode: 'ai', team: [...p.team], faction: p.faction || null, perks: ECON.perksOf(p),
         levels: Object.fromEntries(p.team.map(id => [id, p.owned[id]])), power: Math.round(ECON.teamPower(p)),
         status: 'waiting', client: null, auto: false, created: now(), lastSeen: now() };
       const ai = aiTeam(p, level);

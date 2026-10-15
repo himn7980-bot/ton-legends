@@ -107,6 +107,7 @@ module.exports = function createWar({ db, persist, weekKey, shareDir, profileOut
     if (base) {
       let mult = hasOwnCard(p) ? 2 : 1;
       if (cryOf(f) === 'rally') mult *= C.CRIES.rally.points;
+      if (ECON.eventOf(Date.now()) === 'war') mult *= ECON.EVENT_FX.war; // Monday: war day
       const opp = info.vs && db.users[info.vs] && db.users[info.vs].profile;
       if (kind === 'pvp' && opp && opp.faction && W.derby[f] === opp.faction) mult *= C.DERBY_MULT;
       got = Math.round(base * mult);

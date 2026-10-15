@@ -40,6 +40,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     res.end(JSON.stringify({ notcoin: { usd: 0.0042, usd_24h_change: 12.3 }, 'dogs-2': { usd: 0.0005, usd_24h_change: -4.1 } })); });
   await new Promise(r => cg.listen(0, r));
   process.env.MARKET_API = `http://127.0.0.1:${cg.address().port}`;
+  process.env.TL_EVENT = 'none'; // weekday events are tested explicitly below
   Object.assign(process.env, { ADMIN_IDS: '111', ART_DIR: path.join(path.dirname(dataFile), 'art'), BOT_TOKEN: TOKEN, WEBAPP_URL: 'https://game.example', PORT: '0', DATA_FILE: dataFile, TELEGRAM_API: `http://127.0.0.1:${fake.address().port}` });
   const srv = require('./server.js');
   srv.server.listen(0);
@@ -408,6 +409,19 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert.deepEqual(require('./market.js').parseTokens('paws=paws-x:PAWS, nope=x, f1=y'), { paws: { cg: 'paws-x', sym: 'PAWS' } });
   console.log('   market mood: token prices + community activity → battle boosts and dip bonus');
   cg.close();
+
+  // ---------- collection sets + weekly events ----------
+  Object.assign(srv.db.users['111'].profile.owned, { utya: 10, pengu: 10, babyshark: 10, dog: 10 });
+  process.env.TL_EVENT = 'coins';
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'stageStart', stage: 0 } });
+  assert.deepEqual(r.body.result.perks, { hp: 0.05 }, 'ocean set complete'); assert.equal(r.body.result.weekend, 0.5);
+  process.env.TL_EVENT = 'sale';
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'upgrade', id: 'egor' } }); assert.equal(r.status, 200);
+  process.env.TL_EVENT = 'war';
+  const wp = srv.db.war.points.notcoin || 0; srv.db.users['111'].profile.team = ['pinkbull']; srv.war.onWin('111', 'ai');
+  assert.equal(srv.db.war.points.notcoin - wp, 2, 'war day doubles points');
+  process.env.TL_EVENT = 'none';
+  console.log('   collection set perks; weekend coins, upgrade sale, war day');
 
   r = await fetch(base + '/api/status').then(x => x.json());
   assert.equal(r.webappUrlOk, true); assert.ok(r.updatesHandled >= 6); assert.equal(r.lastHandleError, null);

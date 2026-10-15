@@ -211,24 +211,28 @@ function marketMult(id, market) {
 // take less damage from basic attacks (tanks in front, archers and mages behind).
 const FRONT = 2, BACK_GUARD = 0.65;
 const rowOf = i => (i < FRONT ? 'front' : 'back');
-function teamUnits(B, side, team, levels, faction, market) {
+// perks: collection-set bonuses { hp: 0.05, atk: 0.05, energy: 25 } for the whole team.
+function teamUnits(B, side, team, levels, faction, market, perks) {
+  const pk = perks || {};
   return team.map((id, i) => {
     const s = heroStats(id, levels[id] || 1), k = factionMult(id, faction) * marketMult(id, market);
-    return makeUnit(B, side, { ...HERO_BY_ID[id], ...s, hp: s.hp * k, atk: s.atk * k, row: rowOf(i) });
+    const u = makeUnit(B, side, { ...HERO_BY_ID[id], ...s, hp: s.hp * k * (1 + (pk.hp || 0)), atk: s.atk * k * (1 + (pk.atk || 0)), row: rowOf(i) });
+    u.energy = Math.min(100, u.energy + (pk.energy || 0));
+    return u;
   });
 }
-function createBattle(team, levels, idx, seed = (Math.random() * 2 ** 32) >>> 0, faction = null, market = null) {
+function createBattle(team, levels, idx, seed = (Math.random() * 2 ** 32) >>> 0, faction = null, market = null, perks = null) {
   const B = newBattle(seed, false);
   B.idx = idx;
-  B.heroes = teamUnits(B, 'hero', team, levels, faction, market);
+  B.heroes = teamUnits(B, 'hero', team, levels, faction, market, perks);
   B.enemies = stageEnemies(idx).map((e, i) => makeUnit(B, 'enemy', { ...e, row: rowOf(i) }));
   return B;
 }
 // PvP: side A plays as 'hero', side B as 'enemy'; both sides use the same (hero) rules.
-function createPvpBattle(teamA, levelsA, teamB, levelsB, seed, factionA = null, factionB = null, market = null) {
+function createPvpBattle(teamA, levelsA, teamB, levelsB, seed, factionA = null, factionB = null, market = null, perksA = null, perksB = null) {
   const B = newBattle(seed, true);
-  B.heroes = teamUnits(B, 'hero', teamA, levelsA, factionA, market);
-  B.enemies = teamUnits(B, 'enemy', teamB, levelsB, factionB, market);
+  B.heroes = teamUnits(B, 'hero', teamA, levelsA, factionA, market, perksA);
+  B.enemies = teamUnits(B, 'enemy', teamB, levelsB, factionB, market, perksB);
   return B;
 }
 
@@ -416,8 +420,8 @@ function step(B) {
 }
 
 // Server-side verification of a stage battle: replay it from its seed and the player's inputs.
-function replayStage(team, levels, idx, seed, inputs, faction = null, market = null) {
-  const B = createBattle(team, levels, idx, seed, faction, market);
+function replayStage(team, levels, idx, seed, inputs, faction = null, market = null, perks = null) {
+  const B = createBattle(team, levels, idx, seed, faction, market, perks);
   const q = (Array.isArray(inputs) ? inputs : []).filter(x => Array.isArray(x) && Number.isInteger(x[0]) && Number.isInteger(x[1])).sort((a, b) => a[0] - b[0]);
   let i = 0, skills = 0;
   while (!B.over) {

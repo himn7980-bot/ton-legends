@@ -45,12 +45,24 @@ function dailyHtml(panel = true) {
 }
 function maybeDaily() { if (dailyCanClaim() && S.seenHelp) setTimeout(() => { if ($('#modal').hidden && !BT) openModal(dailyHtml(false), box => box.querySelector('#daily').onclick = claimDaily); }, 400); }
 
+// ---------- weekly events calendar ----------
+function calendarHtml() {
+  const t = T(), today = new Date().getUTCDay(), loc = L().locale;
+  // Monday-first week; the names come from the browser in the player's language.
+  const order = [1, 2, 3, 4, 5, 6, 0];
+  const name = d => new Date(Date.UTC(2024, 0, 7 + d)).toLocaleDateString(loc, { weekday: 'short', timeZone: 'UTC' });
+  return `<div class="panel"><div class="t">📅 ${t.calTitle}</div><div class="cal">${order.map(d => { const e = ECON.EVENTS[d];
+    return `<div class="cday ${d === today ? 'today' : ''}"><small>${name(d)}</small><b>${EVENT_ICON[e]}</b><span>${t.ev[e]}</span></div>`; }).join('')}</div>
+    <p class="small" style="margin:8px 0 0">${t.calToday}: <b>${EVENT_ICON[ECON.eventOf(Date.now())]} ${t.ev[ECON.eventOf(Date.now())]}</b> · ${t.evFx[ECON.eventOf(Date.now())]}</p></div>`;
+}
+
 // ---------- missions tab ----------
 function renderQuests() {
   const t = T();
   ECON.ensureDQ(S, now());
   const afk = afkAmount(), afkH = Math.min(AFK_CAP_H, (Date.now() - S.afkSince) / 3600e3);
   $('#screen').innerHTML = `
+    ${calendarHtml()}
     ${dailyHtml()}
     <div class="panel"><div class="row"><div class="t">${t.idleTitle}</div><span class="muted">${t.perHour(n(afkRate()))}</span></div>
       <p class="muted">${t.idleNote(n(AFK_CAP_H))}</p>

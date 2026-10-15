@@ -180,7 +180,8 @@ function renderMap() {
   // Extra coins today: market dip, your community's territory and the captain's "gold" cry (the server freezes these per battle).
   const dip = ECON.marketCoinBonus(moods(), S.team), C = ECON.COMMUNITY;
   const terr = WAR && WAR.owners && S.faction && WAR.owners[w] === S.faction ? C.TERRITORY_BONUS : 0, gold = WAR && WAR.cry === 'gold' ? C.CRIES.gold.coins : 0;
-  const reward = ECON.stageCoins(S, S.sel, S.team, dip + terr + gold), factor = ECON.replayFactor(S, S.sel);
+  const ev = ECON.eventOf(Date.now()), setCoins = ECON.perksOf(S).coins || 0, weekend = ev === 'coins' ? ECON.EVENT_FX.coins : 0;
+  const reward = ECON.stageCoins(S, S.sel, S.team, dip + terr + gold + setCoins + weekend), factor = ECON.replayFactor(S, S.sel);
   $('#screen').innerHTML = `
     <div class="world" style="background:${W.bg}">
       <div class="world-head">
@@ -190,12 +191,13 @@ function renderMap() {
       </div>
       <div class="stages">${nodes}</div>
     </div>
+    <button class="event-banner" id="to-cal">${EVENT_ICON[ev]} <b>${t.ev[ev]}</b> · ${t.evFx[ev]}</button>
     ${warBanner()}
     ${tickerHtml()}
     ${nextUnlock() ? `<div class="next-unlock">🔓 ${t.nextUnlock(t.feat[nextUnlock()], n(unlockWorld(nextUnlock())))}</div>` : ''}
     <div class="panel">
       <div class="row"><div class="h2" style="margin:0">${t.stage(stageLabel(S.sel))} ${isBossStage(S.sel) ? '· ' + t.boss : ''}</div>
-        <span class="tag gold">🪙 ${n(reward)}${first ? t.firstX2 : ` · 🔁 ${pct(factor * 100)}`}${dip ? ` · 📉 +${pct(dip * 100)}` : ''}${terr ? ` · 🏰 +${pct(terr * 100)}` : ''}${gold ? ` · 📯 +${pct(gold * 100)}` : ''}</span></div>
+        <span class="tag gold">🪙 ${n(reward)}${first ? t.firstX2 : ` · 🔁 ${pct(factor * 100)}`}${dip ? ` · 📉 +${pct(dip * 100)}` : ''}${terr ? ` · 🏰 +${pct(terr * 100)}` : ''}${gold ? ` · 📯 +${pct(gold * 100)}` : ''}${weekend ? ` · 🎉 +${pct(weekend * 100)}` : ''}</span></div>
       ${isBossStage(S.sel) ? weakHint(W.weak) : ''}
       <div class="muted" style="margin-top:8px">${t.enemyCards}</div>
       <div class="foes">${foes.map(f => `<div class="foe ${f.boss ? 'b' : ''}"><img src="${img(f.id)}" alt="${esc(f.name)}"></div>`).join('')}</div>
@@ -208,6 +210,7 @@ function renderMap() {
   document.querySelectorAll('.arrow').forEach(b => b.onclick = () => { S.world = +b.dataset.w; S.sel = -1; save(); renderMap(); });
   $('#edit-team').onclick = () => show('heroes');
   $('#to-war').onclick = () => show('war');
+  $('#to-cal').onclick = () => show('quests');
   if ($('#ticker')) $('#ticker').onclick = marketModal;
   $('#go').onclick = () => startBattle(S.sel);
 }
@@ -227,11 +230,17 @@ function renderHeroes() {
   $('#screen').innerHTML = `
     <div class="h2">${t.battleTeam} <span class="muted">(${n(S.team.length)}/${n(5)} · ${t.power} ${n(teamPower(S.team))})</span></div>
     <div class="row-labels"><span>${t.front}</span><span>${t.back}</span></div>
-    <div class="team-slots ${ARRANGE ? 'arranging' : ''}">${[0, 1, 2, 3, 4].map(i => `<button class="slot ${i < 2 ? 'front' : 'back'} ${ARRANGE && ARRANGE.sel === i ? 'sel' : ''}" data-slot-i="${i}" data-id="${S.team[i] || ''}">${S.team[i] ? `<img src="${img(S.team[i])}" alt="">` : '+'}</button>`).join('')}</div>
+    <div class="team-slots ${ARRANGE ? 'arranging' : ''}">${[0, 1, 2, 3, 4].map(i => `<button class="slot ${i < 2 ? 'row-front' : 'row-back'} ${ARRANGE && ARRANGE.sel === i ? 'sel' : ''}" data-slot-i="${i}" data-id="${S.team[i] || ''}">${S.team[i] ? `<img src="${img(S.team[i])}" alt="">` : '+'}</button>`).join('')}</div>
     <div class="row" style="margin-top:6px"><span class="muted small" style="flex:1">${ARRANGE ? t.arrangeHint : t.formationNote}</span>
       ${S.team.length > 1 ? `<button class="tag ${ARRANGE ? 'gold' : ''}" id="arrange">${ARRANGE ? '✓ ' + t.ok : t.arrange}</button>` : ''}</div>
     ${isOpen('duo') ? `<button class="btn wide lab-btn" id="to-lab">${t.openLab}</button>` : `<button class="btn wide ghost" disabled>${t.openLab} · 🔒 ${t.worldN(n(unlockWorld('duo')))}</button>`}
     <p class="muted small center" style="margin:6px 0 0">${t.teamRule}</p>
+    <div class="h2">${t.setsTitle}</div>
+    <div class="sets">${ECON.SETS.map(st => { const done = ECON.setDone(S, st), fx = Object.keys(st.perk)[0];
+      return `<div class="set ${done ? 'done' : ''}"><div class="row"><b>${st.ico} ${t.setName[st.id]}</b><span class="${done ? 'tag gold' : 'muted small'}">${done ? '✓ ' + t.setDone : n(st.heroes.filter(id => (S.owned[id] || 0) >= ECON.SET_LEVEL).length) + '/4'}</span></div>
+        <div class="set-heroes">${st.heroes.map(id => `<div class="${(S.owned[id] || 0) >= ECON.SET_LEVEL ? 'ok' : ''}"><img src="${img(id)}" alt=""><small>${S.owned[id] ? t.level(n(S.owned[id])) : '🔒'}</small></div>`).join('')}</div>
+        <div class="small ${done ? '' : 'muted'}">${t.setFx[fx]}</div></div>`; }).join('')}</div>
+    <p class="muted small">${t.setNote(n(ECON.SET_LEVEL))}</p>
     <div class="h2">${t.collection} <span class="muted">(${n(owned)}/${n(BASE_HEROES.length)}) · ${t.holoCount(n(holos), n(BASE_HEROES.length))}</span></div>
     <div class="grid">${order.map(cardHtml).join('')}</div>`;
   document.querySelectorAll('.card').forEach(c => c.onclick = () => c.dataset.id && heroModal(c.dataset.id));
@@ -249,12 +258,14 @@ function renderHeroes() {
   if ($('#arrange')) $('#arrange').onclick = () => { ARRANGE = ARRANGE ? null : { sel: null }; renderHeroes(); };
   if ($('#to-lab')) $('#to-lab').onclick = () => show('lab');
 }
+const starsHtml = lv => { const k = ECON.starsOf(lv); return k ? `<span class="stars">${'★'.repeat(k)}</span>` : ''; };
+const EVENT_ICON = { coins: '🎉', war: '⚔️', ai: '🤖', chest: '🎁', sale: '🏷️', arena: '🥊', none: '📅' };
 function cardHtml(h) {
   const t = T(), lv = S.owned[h.id], rc = RARITY[h.rarity].color;
   const canUp = lv && lv < MAX_LEVEL && S.coins >= ECON.upgradePrice(S, h.id, lv);
-  return `<button class="card ${lv ? '' : 'locked'} ${S.holo[h.id] ? 'holo' : ''} ${frameOf(h.id)}" data-id="${h.id}" style="--rc:${rc}">
+  return `<button class="card ${lv ? '' : 'locked'} ${S.holo[h.id] ? 'holo' : ''} ${frameOf(h.id)} ${ECON.starsOf(lv) === 5 ? 'awakened' : ''}" data-id="${h.id}" style="--rc:${rc}">
     <img src="${img(h.id)}" alt="${h.name}" loading="lazy">
-    ${lv ? `<span class="lv">${t.level(n(lv))}</span>` : '<span class="lock">🔒</span>'}
+    ${lv ? `<span class="lv">${t.level(n(lv))}</span>` : '<span class="lock">🔒</span>'}${starsHtml(lv)}
     <span class="rl">${ROLES[h.role].icon}</span>
     ${h.id === S.faction ? '<span class="fac-flag">🚩</span>' : ''}${canUp ? '<span class="up">⬆️</span>' : ''}${S.serials[h.id] ? `<span class="serial">#${n(S.serials[h.id])}</span>` : ''}
     <div class="info">${S.team.includes(h.id) ? `<span class="in-team">${t.inTeam}</span>` : ''}<div class="nm">${h.name}</div><div class="muted" style="font-size:11px">${heroText(h.id).title}</div></div>
@@ -273,6 +284,8 @@ function heroModal(id) {
       ${S.holo[id] ? `<span class="holo-tag">${t.holo}</span>` : ''}${S.serials[id] ? `<span class="serial big-serial">#${n(S.serials[id])}/${n(FUSION_RULES[h.parts.length].supply)}</span>` : ''}</div>
     <div class="row" style="margin-top:12px"><div><div class="big latin" style="font-size:26px">${h.name}</div><div class="muted">${ht.title}</div></div>
       <div class="end"><span class="tag" style="color:${R.color}">${L().rarity[h.rarity]}</span><div class="muted" style="margin-top:6px">${ROLES[h.role].icon} ${L().role[h.role]}</div></div></div>
+    ${lv ? `<div class="star-line">${ECON.STAR_LEVELS.map(l => `<span class="${lv >= l ? 'on' : ''}">★</span>`).join('')}
+      <small>${ECON.starsOf(lv) === 5 ? t.awakened : t.nextStar(n(ECON.STAR_LEVELS[ECON.starsOf(lv)]))}</small></div>` : ''}
     ${moodBadge(id)}
     ${mine > 1 ? `<div class="fac-badge">${id === S.faction ? `${t.yourCommunity} · ${t.factionPerkShort}` : `🚩 ${t.army(factionName(S.faction))} · +${n(Math.round((mine - 1) * 100))}%`}</div>` : ''}
     <div class="stats">
@@ -557,7 +570,7 @@ async function startBattle(idx) {
   if (BT) return;
   const r = await tryAct({ type: 'stageStart', stage: idx });
   if (!r) return;
-  const t = T(), B = createBattle(S.team, S.owned, idx, r.seed, S.faction || null, r.market || null);
+  const t = T(), B = createBattle(S.team, S.owned, idx, r.seed, S.faction || null, r.market || null, r.perks || null);
   // Taps are queued and applied at the next fixed tick, and recorded as [tick, code] so the server can replay the fight.
   BT = { mode: 'stage', B, idx, mySide: 'hero', inputs: [], queue: S.auto ? [-1] : [], acc: 0, last: performance.now(), raf: 0, ended: false };
   buildBattle({
