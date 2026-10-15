@@ -82,7 +82,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
     const opp = t === m.a ? m.b : m.a;
     return { side: t.side, ai: m.ai, stake: m.stake, pot: m.stake * 2, startIn: Math.max(0, m.startAt - now()),
       you: { name: t.name, power: t.power }, opp: { name: opp.name, power: opp.power },
-      units: [...m.B.heroes, ...m.B.enemies].map(u => ({ uid: u.uid, side: u.side, id: u.id, name: u.name, maxHp: u.maxHp })) };
+      units: [...m.B.heroes, ...m.B.enemies].map(u => ({ uid: u.uid, side: u.side, id: u.id, name: u.name, maxHp: u.maxHp, row: u.row })) };
   }
 
   function startMatch(a, b) {
@@ -101,6 +101,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
     B.autoBy.hero = m.a.client ? m.a.auto : true;
     B.autoBy.enemy = m.b.client ? m.b.auto : true;
     for (const inp of m.inputs.splice(0)) {
+      if (inp.code === -3) { E.castUlt(B, inp.side); continue; }
       const list = inp.side === 'hero' ? B.heroes : B.enemies;
       const u = list.find(x => x.uid === inp.code);
       if (u) E.castSkill(B, u);
@@ -108,7 +109,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
     E.step(B);
     m.ev.push(...B.events); B.events.length = 0;
     if (B.tick % 2 === 0 || B.over) {
-      const data = { t: B.t, ev: m.ev.splice(0), u: snapshot(B) };
+      const data = { t: B.t, ev: m.ev.splice(0), u: snapshot(B), ult: [B.ult.hero, B.ult.enemy] };
       send(m.a, 'tick', data); send(m.b, 'tick', data);
     }
     if (B.over) finish(m);
@@ -225,6 +226,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
       if (!m || m.B.over || t.status !== 'playing') return { ok: false };
       const code = Number(body.code);
       if (code === -1 || code === -2) t.auto = code === -1;
+      else if (code === -3) m.inputs.push({ side: t.side, code: -3 });
       else if (Number.isInteger(code)) m.inputs.push({ side: t.side, code });
       return { ok: true };
     },

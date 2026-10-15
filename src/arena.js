@@ -129,12 +129,12 @@ function startPvp(m) {
   const units = m.units.map(u => ({ ...u, hp: u.maxHp, shield: 0, energy: 20, alive: true, fx: {}, boss: false }));
   const mine = units.filter(u => u.side === m.side), theirs = units.filter(u => u.side !== m.side);
   BT = { mode: 'pvp', mySide: m.side, ticket: PV.ticket, es: PV.es, ended: false, raf: 0,
-    B: { t: 0, events: [], over: null, heroes: units.filter(u => u.side === 'hero'), enemies: units.filter(u => u.side === 'enemy') } };
+    B: { t: 0, events: [], over: null, ult: { hero: 0, enemy: 0 }, heroes: units.filter(u => u.side === 'hero'), enemies: units.filter(u => u.side === 'enemy') } };
   const input = code => Online.pvp('input', { ticket: BT.ticket, code }).catch(() => {});
   buildBattle({
     title: m.ai ? t.aiVs(t.aiLv[m.ai]) : `⚔️ ${t.pot(n(m.pot))}`, bg: ARENA_BG, mine, theirs,
     oppLabel: `🆚 ${esc(m.opp.name)} · ${t.power} ${n(m.opp.power)}`, myLabel: `🛡️ ${esc(m.you.name)} · ${t.power} ${n(m.you.power)}`,
-    onTap: u => input(u.uid), onAuto: on => input(on ? -1 : -2),
+    onTap: u => input(u.uid), onAuto: on => input(on ? -1 : -2), onUlt: () => input(-3),
   });
   if (S.auto) input(-1);
   // Emote bar: five quick reactions + your community mascot.
@@ -177,6 +177,7 @@ function onPvpTick(d) {
   if (!BT || BT.mode !== 'pvp') return;
   const B = BT.B;
   B.t = d.t;
+  if (d.ult) B.ult = { hero: d.ult[0], enemy: d.ult[1] };
   const byUid = new Map(allUnits().map(u => [u.uid, u]));
   for (const [uid, hp, sh, en, bits] of d.u) {
     const u = byUid.get(uid); if (!u) continue;

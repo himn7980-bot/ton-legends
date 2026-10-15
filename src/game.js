@@ -196,6 +196,7 @@ function renderMap() {
     <div class="panel">
       <div class="row"><div class="h2" style="margin:0">${t.stage(stageLabel(S.sel))} ${isBossStage(S.sel) ? '· ' + t.boss : ''}</div>
         <span class="tag gold">🪙 ${n(reward)}${first ? t.firstX2 : ` · 🔁 ${pct(factor * 100)}`}${dip ? ` · 📉 +${pct(dip * 100)}` : ''}${terr ? ` · 🏰 +${pct(terr * 100)}` : ''}${gold ? ` · 📯 +${pct(gold * 100)}` : ''}</span></div>
+      ${isBossStage(S.sel) ? weakHint(W.weak) : ''}
       <div class="muted" style="margin-top:8px">${t.enemyCards}</div>
       <div class="foes">${foes.map(f => `<div class="foe ${f.boss ? 'b' : ''}"><img src="${img(f.id)}" alt="${esc(f.name)}"></div>`).join('')}</div>
       <div class="row"><span class="muted">${t.yourTeam(n(teamPower(S.team)))}</span><button class="tag" id="edit-team">${t.editTeam}</button></div>
@@ -211,7 +212,13 @@ function renderMap() {
   $('#go').onclick = () => startBattle(S.sel);
 }
 
+// Boss weak spot: which status doubles its damage taken, and which of your heroes can cause it.
+function weakHint(k) {
+  const t = T(), by = WEAK_BY[k].map(id => `<span class="${S.owned[id] ? 'own' : ''}">${HERO_BY_ID[id].name}</span>`).join(' / ');
+  return `<div class="weak-hint">🎯 ${t.weakTo} <b>${STATUS_ICON[k]} ${t.st[k]}</b> · ${t.weakX2} · ${by}</div>`;
+}
 // ---------- heroes ----------
+let ARRANGE = null; // { sel: slot index | null } while swapping team positions
 function renderHeroes() {
   const t = T(), owned = BASE_HEROES.filter(h => S.owned[h.id]).length, holos = BASE_HEROES.filter(h => S.holo[h.id]).length;
   // Collection: all base heroes + the fusion cards you crafted (the rest live in the Fusion Lab).
@@ -219,12 +226,27 @@ function renderHeroes() {
     .sort((a, b) => (!!S.owned[b.id] - !!S.owned[a.id]) || ('XMLERC'.indexOf(a.rarity) - 'XMLERC'.indexOf(b.rarity)));
   $('#screen').innerHTML = `
     <div class="h2">${t.battleTeam} <span class="muted">(${n(S.team.length)}/${n(5)} · ${t.power} ${n(teamPower(S.team))})</span></div>
-    <div class="team-slots">${[0, 1, 2, 3, 4].map(i => `<button class="slot" data-id="${S.team[i] || ''}">${S.team[i] ? `<img src="${img(S.team[i])}" alt="">` : '+'}</button>`).join('')}</div>
+    <div class="row-labels"><span>${t.front}</span><span>${t.back}</span></div>
+    <div class="team-slots ${ARRANGE ? 'arranging' : ''}">${[0, 1, 2, 3, 4].map(i => `<button class="slot ${i < 2 ? 'front' : 'back'} ${ARRANGE && ARRANGE.sel === i ? 'sel' : ''}" data-slot-i="${i}" data-id="${S.team[i] || ''}">${S.team[i] ? `<img src="${img(S.team[i])}" alt="">` : '+'}</button>`).join('')}</div>
+    <div class="row" style="margin-top:6px"><span class="muted small" style="flex:1">${ARRANGE ? t.arrangeHint : t.formationNote}</span>
+      ${S.team.length > 1 ? `<button class="tag ${ARRANGE ? 'gold' : ''}" id="arrange">${ARRANGE ? '✓ ' + t.ok : t.arrange}</button>` : ''}</div>
     ${isOpen('duo') ? `<button class="btn wide lab-btn" id="to-lab">${t.openLab}</button>` : `<button class="btn wide ghost" disabled>${t.openLab} · 🔒 ${t.worldN(n(unlockWorld('duo')))}</button>`}
     <p class="muted small center" style="margin:6px 0 0">${t.teamRule}</p>
     <div class="h2">${t.collection} <span class="muted">(${n(owned)}/${n(BASE_HEROES.length)}) · ${t.holoCount(n(holos), n(BASE_HEROES.length))}</span></div>
     <div class="grid">${order.map(cardHtml).join('')}</div>`;
-  document.querySelectorAll('.card, .slot').forEach(c => c.onclick = () => c.dataset.id && heroModal(c.dataset.id));
+  document.querySelectorAll('.card').forEach(c => c.onclick = () => c.dataset.id && heroModal(c.dataset.id));
+  // Arrange mode: tap two team slots to swap them (the first two cards form the front row).
+  document.querySelectorAll('.slot').forEach(c => c.onclick = async () => {
+    const i = +c.dataset.slotI;
+    if (!ARRANGE) return c.dataset.id && heroModal(c.dataset.id);
+    if (!S.team[i]) return;
+    if (ARRANGE.sel === null) { ARRANGE.sel = i; return renderHeroes(); }
+    const team = [...S.team], j = ARRANGE.sel; [team[i], team[j]] = [team[j], team[i]];
+    ARRANGE.sel = null;
+    if (i !== j) { haptic('light'); await tryAct({ type: 'team', team }); }
+    renderHeroes();
+  });
+  if ($('#arrange')) $('#arrange').onclick = () => { ARRANGE = ARRANGE ? null : { sel: null }; renderHeroes(); };
   if ($('#to-lab')) $('#to-lab').onclick = () => show('lab');
 }
 function cardHtml(h) {
@@ -479,6 +501,7 @@ function fusionReveal(r) {
 // BT.mode: 'stage' (simulated here, verified by the server afterwards) or 'pvp' (simulated by the server, streamed here).
 let BT = null;
 const STATUS_ICONS = [['freeze', '❄️'], ['stun', '💫'], ['slow', '🐌'], ['poison', '☠️'], ['vuln', '💔'], ['weak', '🔻'], ['buff', '🔥'], ['dodge', '👻']];
+const STATUS_ICON = Object.fromEntries(STATUS_ICONS);
 const isMine = u => u.side === ((BT && BT.mySide) || 'hero');
 const allUnits = () => [...BT.B.heroes, ...BT.B.enemies];
 
@@ -488,13 +511,13 @@ function unitCard(u) {
   const mine = isMine(u);
   const rc = !mine ? (u.boss ? '#ff3b3b' : '#e0475a') : RARITY[HERO_BY_ID[u.id].rarity].color;
   return `<div class="hcard ${mine ? 'hero' : 'enemy'} ${u.boss ? 'boss' : ''} ${mine ? frameOf(u.id) : ''}" data-uid="${u.uid}" style="--rc:${rc}">
-    ${mine ? '<span class="ready">⚡</span>' : ''}${u.boss ? '<span class="crown">👑</span>' : ''}
+    ${mine ? '<span class="ready">⚡</span>' : ''}${u.boss ? '<span class="crown">👑</span>' : ''}${u.weak ? `<span class="weak-tag">🎯${STATUS_ICON[u.weak]}</span>` : ''}${u.row === 'front' ? '<span class="row-tag">🛡️</span>' : ''}
     <img src="${img(u.id)}" alt=""><div class="status"></div>
     <div class="hc-name ${u.name.length > 12 ? 'long' : ''}">${u.name}</div><div class="bar hp ${mine ? 'h' : ''}"><i></i><i class="sh" style="width:0"></i></div><div class="bar en"><i></i></div></div>`;
 }
 
 // Draws the battle screen for the current BT. mine = my cards (bottom), theirs = opponent cards (top).
-function buildBattle({ title, bg, mine, theirs, oppLabel, myLabel, onTap, onAuto, showSpeed }) {
+function buildBattle({ title, bg, mine, theirs, oppLabel, myLabel, onTap, onAuto, onUlt, showSpeed }) {
   const t = T(), el = $('#battle');
   el.style.background = bg; el.classList.remove('has-emotes');
   el.innerHTML = `
@@ -510,6 +533,7 @@ function buildBattle({ title, bg, mine, theirs, oppLabel, myLabel, onTap, onAuto
     <div class="b-mid"><div id="b-banner"></div></div>
     <div class="b-heroes ${tallNames(mine)}">${mine.map(unitCard).join('')}</div>
     ${myLabel ? `<div class="b-name me">${myLabel}</div>` : ''}
+    <div class="ult-wrap"><div class="ult-bar"><i id="b-ult-i"></i></div><button id="b-ult" disabled>${t.ult}</button></div>
     <div class="b-hint">${t.tapHint}</div>
     <div id="b-fx"></div>`;
   el.hidden = false;
@@ -522,6 +546,7 @@ function buildBattle({ title, bg, mine, theirs, oppLabel, myLabel, onTap, onAuto
     if (BT && !BT.ended && u && u.alive && u.energy >= 100) { haptic('medium'); onTap(u); }
   });
   $('#b-exit').onclick = confirmLeave;
+  $('#b-ult').onclick = () => { if (BT && !BT.ended && BT.B.ult && BT.B.ult[BT.mySide] >= 100) { haptic('heavy'); onUlt(); } };
   if (showSpeed) $('#b-speed').onclick = e => { S.speed = S.speed === 1 ? 2 : S.speed === 2 ? 3 : 1; save(); e.target.textContent = '×' + n(S.speed); };
   $('#b-auto').onclick = e => { S.auto = !S.auto; save(); e.target.classList.toggle('on', S.auto); onAuto(S.auto); };
   render();
@@ -538,7 +563,7 @@ async function startBattle(idx) {
   buildBattle({
     title: `${t.stage(stageLabel(idx))}${isBossStage(idx) ? ' · ' + t.bossCrown : ''}`, bg: WORLDS[Math.floor(idx / STAGES_PER_WORLD)].bg,
     mine: B.heroes, theirs: B.enemies, showSpeed: true,
-    onTap: u => BT.queue.push(u.uid), onAuto: on => BT.queue.push(on ? -1 : -2),
+    onTap: u => BT.queue.push(u.uid), onAuto: on => BT.queue.push(on ? -1 : -2), onUlt: () => BT.queue.push(-3),
   });
   Sound.music('battle');
   BT.raf = requestAnimationFrame(loop);
@@ -587,6 +612,13 @@ function flush() { processEvents(); render(); }
 
 function render() {
   const B = BT.B;
+  const ult = B.ult ? Math.round(B.ult[BT.mySide] || 0) : 0;
+  if (BT.lastUlt !== ult) {
+    BT.lastUlt = ult;
+    const bar = $('#b-ult-i'), btn = $('#b-ult');
+    if (bar) bar.style.width = ult + '%';
+    if (btn) { btn.disabled = ult < 100; btn.classList.toggle('ready', ult >= 100); }
+  }
   for (const u of allUnits()) {
     const e = BT.els.get(u.uid); if (!e) continue;
     const Lst = e.last;
@@ -653,6 +685,12 @@ function processEvents() {
         flashScreen(enemy ? '#ff2a2a' : SKILL_COLORS[ev.id]);
         break;
       }
+      case 'combo': float(ev.uid, t.combo[ev.kind], 'combo'); Sound.play('crit'); break;
+      case 'weakhit': float(ev.uid, t.weakHit, 'weak'); haptic('medium'); break;
+      case 'ult':
+        flashScreen(ev.side === BT.mySide ? '#ffd85a' : '#ff3b3b'); anim($('#battle'), 'shake'); haptic('heavy'); Sound.play('legend');
+        $('#b-banner').innerHTML = `<div class="banner ${ev.side === BT.mySide ? '' : 'enemy'}"><div class="s">${t.ultBanner}</div></div>`;
+        break;
       case 'enrage':
         flashScreen('#ff6a00'); haptic('heavy'); Sound.play('boss');
         $('#b-banner').innerHTML = `<div class="banner enemy"><div class="s">${t.enrage}</div></div>`;

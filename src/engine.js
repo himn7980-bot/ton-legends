@@ -105,13 +105,16 @@ const THEMES = {
     foes: [['noctis', 'volya', 'paws', 'pinkbull'], ['virus', 'noctis', 'volya', 'paws'], ['noctis', 'virus', 'notcoin', 'volya'], [fz('virus', 'yoda'), 'virus', fz('paws', 'noctis'), 'noctis']],
     boss: ['virus', 'noctis', fz('noctis', 'virus'), fz('paws', 'noctis', 'virus')] },
 };
+// Each theme's boss has a weak spot: while it suffers that status it takes double damage.
+const BOSS_WEAK = { ocean: 'slow', cave: 'vuln', city: 'stun', temple: 'poison', lab: 'freeze' };
+const WEAK_BY = { slow: ['utya'], vuln: ['egor'], stun: ['pinkbull', 'pengu'], poison: ['virus'], freeze: ['pengu'] };
 const CHAPTER_TINT = ['', 'linear-gradient(180deg,rgba(90,0,140,.30),rgba(0,0,0,.25)),', 'linear-gradient(180deg,rgba(150,10,40,.35),rgba(0,0,0,.35)),',
   'linear-gradient(180deg,rgba(0,0,0,.55),rgba(60,0,90,.45)),'];
 const WORLDS = [];
 for (let ch = 0; ch < 4; ch++) {
   for (const key of ['ocean', 'cave', 'city', 'temple', 'lab']) {
     const th = THEMES[key];
-    WORLDS.push({ key, chapter: ch, bg: CHAPTER_TINT[ch] + th.bg, boss: th.boss[ch], foes: th.foes[ch] });
+    WORLDS.push({ key, chapter: ch, bg: CHAPTER_TINT[ch] + th.bg, boss: th.boss[ch], foes: th.foes[ch], weak: BOSS_WEAK[key] });
   }
 }
 const STAGES_PER_WORLD = 10;
@@ -144,8 +147,8 @@ function stageReward(idx) {
 const ENEMY_HP = 0.56, ENEMY_ATK = 0.23, SC2 = 0.13;
 // Worlds 1–4 keep their original hand-tuned curve (made for the starter cards); calibration starts at world 5.
 const CALIBRATED_FROM = 40;
-const WORLD_K = [1.907, 1.371, 1.198, 1.137, 0.887, 1.117, 1.383, 1.18, 1.631, 1.322, 1.452, 1.587, 1.374, 2.074, 1.545, 1.704, 1.795, 1.714, 2.517, 1.626];
-const LOCAL_K = [1.596, 1.572, 1.532, 1.195, 1.246, 0.956, 0.958, 1.019, 0.848, 1.025]; // per stage inside a world (more enemy cards later in a world); see tools/calibrate.js
+const WORLD_K = [1, 1, 1, 1, 0.945, 1.219, 1.527, 1.328, 1.778, 1.366, 1.591, 1.777, 1.569, 2.164, 1.696, 1.794, 1.918, 1.91, 2.665, 1.716];
+const LOCAL_K = [1.4, 1.404, 1.428, 1.134, 1.217, 0.978, 1.003, 1.043, 0.914, 1.045]; // per stage inside a world (more enemy cards later in a world); see tools/calibrate.js
 function stageEnemies(idx) {
   const w = WORLDS[Math.floor(idx / STAGES_PER_WORLD)], local = idx % STAGES_PER_WORLD;
   // Difficulty follows the level a team of five non-fusion cards needs: ~5 at stage 20, ~45 at stage 100, ~95 at stage 200.
@@ -156,7 +159,7 @@ function stageEnemies(idx) {
     // Enemy fusion cards bring their combined skills, not the fusion level bonus (that would make chapters III–IV a wall).
     const b = h.fusion ? h.parts.map(p => heroStats(p, 1)).reduce((a, x) => ({ hp: a.hp + x.hp / h.parts.length, atk: a.atk + x.atk / h.parts.length }), { hp: 0, atk: 0 }) : heroStats(id, 1);
     const hpM = boss ? 3.2 : 1, atkM = boss ? 1.35 : 1;
-    return { id, role: HERO_BY_ID[id].role, name: HERO_BY_ID[id].name, boss: !!boss,
+    return { id, role: HERO_BY_ID[id].role, name: HERO_BY_ID[id].name, boss: !!boss, weak: boss ? w.weak : null,
       hp: b.hp * ENEMY_HP * sc * hpM, atk: b.atk * ENEMY_ATK * sc * atkM * (r.spd / 1.3), spd: r.spd };
   };
   if (local === STAGES_PER_WORLD - 1) return [card(w.foes[0]), card(w.boss, true), card(w.foes[1])];
@@ -178,7 +181,7 @@ function mulberry32(a) {
 }
 function makeUnit(B, side, o) {
   return {
-    uid: B.nextUid++, side, id: o.id, name: o.name, role: o.role, boss: !!o.boss,
+    uid: B.nextUid++, side, id: o.id, name: o.name, role: o.role, boss: !!o.boss, weak: o.weak || null, row: o.row || 'front',
     maxHp: Math.round(o.hp), hp: Math.round(o.hp), atk: o.atk, spd: o.spd,
     timer: B.rng() * o.spd * 0.6, energy: side === 'hero' || B.pvp ? 20 : 0, shield: 0, fx: {}, alive: true,
     bossCd: 7, poisonNext: 0, shieldUntil: 0, skillK: 1,
@@ -186,7 +189,7 @@ function makeUnit(B, side, o) {
 }
 function newBattle(seed, pvp) {
   return { t: 0, tick: 0, seed: seed >>> 0, rng: mulberry32(seed >>> 0), nextUid: 1, events: [], over: null, pvp: !!pvp,
-    autoBy: { hero: false, enemy: !pvp } };
+    autoBy: { hero: false, enemy: !pvp }, ult: { hero: 0, enemy: 0 }, casting: false, comboSeen: null };
 }
 // Community (faction): every player backs one of the 16 heroes. That hero's card fights harder for them,
 // and so (a little) does any fusion card that contains it.
@@ -204,17 +207,21 @@ function marketMult(id, market) {
   if (!h || !h.fusion) return market[id] || 1;
   return 1 + Math.max(0, ...h.parts.map(p => (market[p] || 1) - 1)) * 0.5;
 }
+// Formation: the first two cards stand in the front row; while a front-row ally stands, back-row cards
+// take less damage from basic attacks (tanks in front, archers and mages behind).
+const FRONT = 2, BACK_GUARD = 0.65;
+const rowOf = i => (i < FRONT ? 'front' : 'back');
 function teamUnits(B, side, team, levels, faction, market) {
-  return team.map(id => {
+  return team.map((id, i) => {
     const s = heroStats(id, levels[id] || 1), k = factionMult(id, faction) * marketMult(id, market);
-    return makeUnit(B, side, { ...HERO_BY_ID[id], ...s, hp: s.hp * k, atk: s.atk * k });
+    return makeUnit(B, side, { ...HERO_BY_ID[id], ...s, hp: s.hp * k, atk: s.atk * k, row: rowOf(i) });
   });
 }
 function createBattle(team, levels, idx, seed = (Math.random() * 2 ** 32) >>> 0, faction = null, market = null) {
   const B = newBattle(seed, false);
   B.idx = idx;
   B.heroes = teamUnits(B, 'hero', team, levels, faction, market);
-  B.enemies = stageEnemies(idx).map(e => makeUnit(B, 'enemy', e));
+  B.enemies = stageEnemies(idx).map((e, i) => makeUnit(B, 'enemy', { ...e, row: rowOf(i) }));
   return B;
 }
 // PvP: side A plays as 'hero', side B as 'enemy'; both sides use the same (hero) rules.
@@ -251,6 +258,13 @@ function damage(B, src, tgt, amount, opts = {}) {
   if (!opts.pure && on(B, tgt, 'dodge')) { B.events.push({ type: 'miss', uid: tgt.uid }); return 0; }
   let dmg = amount * rage(B);
   if (on(B, tgt, 'vuln')) dmg *= 1.3;
+  // Combos: skills hit harder on frozen (shatter), stunned (crush) or poisoned (toxic) targets.
+  if (B.casting && src && !opts.pure) {
+    const c = on(B, tgt, 'freeze') ? ['shatter', 1.5] : on(B, tgt, 'stun') ? ['crush', 1.3] : on(B, tgt, 'poison') ? ['toxic', 1.25] : null;
+    if (c) { dmg *= c[1]; if (B.comboSeen && !B.comboSeen.has(tgt.uid)) { B.comboSeen.add(tgt.uid); B.events.push({ type: 'combo', uid: tgt.uid, kind: c[0] }); } }
+  }
+  if (tgt.weak && on(B, tgt, tgt.weak)) { dmg *= 2; if (!tgt.weakShown || B.t - tgt.weakShown > 2) { tgt.weakShown = B.t; B.events.push({ type: 'weakhit', uid: tgt.uid }); } }
+  if (opts.basic && tgt.row === 'back' && friendsOf(B, tgt).some(f => f.row === 'front')) dmg *= BACK_GUARD;
   let crit = false;
   if (src && heroRules(B, src) && !opts.pure && B.rng() < 0.12) { dmg *= 1.6; crit = true; }
   dmg = Math.max(1, Math.round(dmg * (0.92 + B.rng() * 0.16)));
@@ -291,7 +305,7 @@ function basicAttack(B, u) {
   const t = hr ? heroTarget(B, u) : enemyTarget(B, u);
   if (!t) return;
   B.events.push({ type: 'atk', uid: u.uid, target: t.uid });
-  damage(B, u, t, atkOf(B, u));
+  damage(B, u, t, atkOf(B, u), { basic: true });
   if (u.role === 'healer') heal(B, lowest(friendsOf(B, u)), atkOf(B, u) * 0.5);
   u.energy = Math.min(100, u.energy + (hr ? 14 : 10));
 }
@@ -325,7 +339,29 @@ function castSkill(B, u) {
   if (!u || !u.alive || u.energy < 100 || B.over || !foesOf(B, u).length) return false;
   u.energy = 0;
   B.events.push({ type: 'skill', uid: u.uid, id: u.id, side: u.side });
-  SKILLS[u.id](B, u);
+  B.casting = true; B.comboSeen = new Set();
+  try { SKILLS[u.id](B, u); } finally { B.casting = false; B.comboSeen = null; }
+  // Every skill charges the team's ultimate.
+  if (B.pvp || u.side === 'hero') B.ult[u.side] = Math.min(100, B.ult[u.side] + ULT_PER_SKILL);
+  checkEnd(B);
+  return true;
+}
+
+// Team ultimate: when the meter is full, every living card strikes together (250% of the team's average attack
+// to every enemy) and the team heals 15%. In stages only the player has it; in PvP both sides do.
+const ULT_PER_SKILL = 25;
+function castUlt(B, side) {
+  if (B.over || B.ult[side] < 100) return false;
+  const mine = alive(side === 'hero' ? B.heroes : B.enemies);
+  if (!mine.length) return false;
+  B.ult[side] = 0;
+  const atk = mine.reduce((a, u) => a + atkOf(B, u), 0) / mine.length;
+  B.events.push({ type: 'ult', side });
+  B.casting = true; B.comboSeen = new Set();
+  try {
+    for (const e of alive(side === 'hero' ? B.enemies : B.heroes)) damage(B, mine[0], e, atk * 2.5);
+    for (const f of mine) heal(B, f, f.maxHp * 0.15);
+  } finally { B.casting = false; B.comboSeen = null; }
   checkEnd(B);
   return true;
 }
@@ -336,10 +372,11 @@ function checkEnd(B) {
   else if (!alive(B.heroes).length) B.over = 'lose';
 }
 
-// Inputs are [tick, code]: code > 0 casts the skill of unit `code`; -1 / -2 turn hero auto on / off.
+// Inputs are [tick, code]: code > 0 casts the skill of unit `code`; -1 / -2 turn hero auto on / off; -3 = team ultimate.
 function applyInput(B, code) {
   if (code === -1) B.autoBy.hero = true;
   else if (code === -2) B.autoBy.hero = false;
+  else if (code === -3) castUlt(B, 'hero');
   else { const u = B.heroes.find(x => x.uid === code); if (u) castSkill(B, u); }
 }
 
@@ -367,6 +404,7 @@ function step(B) {
     }
     if (u.energy >= 100 && B.autoBy[u.side]) castSkill(B, u);
   }
+  for (const side of ['hero', 'enemy']) if (B.autoBy[side] && B.ult[side] >= 100) castUlt(B, side);
   checkEnd(B);
   // Time's up: the side with more HP left (as a share of its total) wins.
   if (B.tick >= MAX_TICKS && !B.over) {
@@ -394,5 +432,5 @@ function replayStage(team, levels, idx, seed, inputs, faction = null, market = n
 
 if (typeof module !== 'undefined') {
   module.exports = { RARITY, ROLES, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, fusionStartLevel, TEAM_MAX_FUSIONS, TEAM_MAX_TRIOS, teamError, duosWithin, ENRAGE_AT, LEGACY_FUSION_IDS, HERO_BY_ID, STARTERS, WORLDS, TOTAL_STAGES, STAGES_PER_WORLD, MAX_LEVEL, COIN_BONUS, TICK,
-    WORLD_K, LOCAL_K, FACTION_BONUS, FACTION_FUSION_BONUS, factionMult, marketMult, heroStats, upgradeCost, stageReward, stageEnemies, createBattle, createPvpBattle, step, castSkill, applyInput, replayStage };
+    WORLD_K, LOCAL_K, FACTION_BONUS, FACTION_FUSION_BONUS, factionMult, marketMult, BOSS_WEAK, WEAK_BY, heroStats, upgradeCost, stageReward, stageEnemies, createBattle, createPvpBattle, step, castSkill, castUlt, applyInput, replayStage };
 }
