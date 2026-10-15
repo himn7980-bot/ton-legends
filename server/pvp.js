@@ -128,7 +128,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
       if (!winner) { result = 'draw'; if (p) p.coins += m.stake; }
       else if (t === winner) {
         result = 'win';
-        if (p) { p.coins += pot; p.gems = (p.gems || 0) + winGems(); p.stats.pvpWins = (p.stats.pvpWins || 0) + 1; ECON.track(p, 'wins', 1, now()); }
+        if (p) { ECON.addPassXp(p, ECON.PASS.XP.pvp, now()); p.coins += pot; p.gems = (p.gems || 0) + winGems(); p.stats.pvpWins = (p.stats.pvpWins || 0) + 1; ECON.track(p, 'wins', 1, now()); }
         onPoints(t.uid, 5, { kind: 'pvp', vs: (t === m.a ? m.b : m.a).uid });
       }
       else { result = 'lose'; if (p) p.stats.pvpLosses = (p.stats.pvpLosses || 0) + 1; }
@@ -160,6 +160,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
       p.stats.aiWins = (p.stats.aiWins || 0) + 1;
       ECON.track(p, 'wins', 1, now());
       onPoints(t.uid, 1, { kind: 'ai' });
+      ECON.addPassXp(p, ECON.PASS.XP.ai, now());
       if (ECON.aiLeft(p, now()) > 0) {
         reward = ECON.aiReward(p, m.ai, now());
         p.coins += reward.coins; p.gems = (p.gems || 0) + reward.gems;

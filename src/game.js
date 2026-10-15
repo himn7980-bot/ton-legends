@@ -126,7 +126,7 @@ function goBack() {
   if (BT) return BT.ended ? undefined : confirmLeave();
   if (S.tab !== 'map') show(PARENT_TAB[S.tab] || 'map');
 }
-const PARENT_TAB = { clan: 'rank', lab: 'heroes' };
+const PARENT_TAB = { clan: 'rank', lab: 'heroes', pass: 'quests' };
 function syncNav() {
   const can = canGoBack(), w = Online.tg();
   const back = $('#back'); if (back) back.hidden = S.tab === 'map';
@@ -152,7 +152,7 @@ window.addEventListener('popstate', () => {
 function show(tab) {
   S.tab = tab; save();
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === (PARENT_TAB[tab] || tab)));
-  ({ map: renderMap, arena: renderArena, lab: renderLab, heroes: renderHeroes, chest: renderChest, quests: renderQuests, rank: renderRank, clan: renderClan, war: renderWar })[tab]();
+  ({ map: renderMap, arena: renderArena, lab: renderLab, heroes: renderHeroes, chest: renderChest, quests: renderQuests, rank: renderRank, clan: renderClan, war: renderWar, pass: renderPass })[tab]();
   updateBadge();
   window.scrollTo(0, 0);
   syncNav();

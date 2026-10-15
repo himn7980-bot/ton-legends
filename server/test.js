@@ -437,6 +437,30 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert.ok(['notcoin', 'volya', 'noctis'].includes(r.body.result.hero), 'day 7: a Legendary hero');
   console.log('   rookie journey: daily unlocks, claims, Legendary on day 7');
 
+  // ---------- season pass ----------
+  const ECONp = require('../src/economy.js');
+  const pa = () => srv.db.users['111'].profile; // the server re-normalizes (copies) the profile on every request
+  ECONp.passOf(pa(), Date.now()).xp = 0;
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'daily' } }); // +20 XP (or already claimed today)
+  ECONp.passOf(pa(), Date.now()).xp = 310;                                               // tier 2
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'pass', tier: 3, track: 'free' } }); assert.equal(r.body.error, 'not_ready');
+  const pc0 = pa().coins;
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'pass', tier: 2, track: 'free' } }); assert.equal(r.body.result.coins, 500); assert.equal(r.body.profile.coins, pc0 + 500);
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'pass', tier: 2, track: 'free' } }); assert.equal(r.body.error, 'claimed');
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'pass', tier: 1, track: 'prem' } }); assert.equal(r.body.error, 'no_pass');
+  r = await post('/api/invoice', { initData: initData(alice), pack: 'pass' }); assert.equal(r.status, 200);
+  assert.equal(calls.filter(c => c.method === 'createInvoiceLink').pop().data.prices[0].amount, ECONp.PASS.PRICE_STARS);
+  queue.push({ update_id: 9100, pre_checkout_query: { id: 'pcp', from: alice, currency: 'XTR', total_amount: ECONp.PASS.PRICE_STARS, invoice_payload: '111:pass' } });
+  queue.push({ update_id: 9101, message: { chat: { id: 111 }, from: alice, successful_payment: { telegram_payment_charge_id: 'chpass', total_amount: ECONp.PASS.PRICE_STARS, invoice_payload: '111:pass' } } });
+  await sleep(1200);
+  r = await post('/api/claim', { initData: initData(alice) }); assert.equal(r.body.pass, true); assert.equal(r.body.profile.pass.prem, true);
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'pass', tier: 1, track: 'prem' } }); assert.equal(r.body.result.gems, 5);
+  r = await post('/api/invoice', { initData: initData(alice), pack: 'pass' }); assert.equal(r.body.error, 'claimed', 'one premium pass per season');
+  ECONp.passOf(pa(), Date.now()).xp = 10 * ECONp.PASS.XP_PER_TIER;
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'pass', tier: 10, track: 'prem' } }); assert.ok(r.body.result.chestResult, 'tier 10 premium: Gem Chest');
+  r = await fetch(base + '/api/health').then(x => x.json()); assert.ok(!r.packs.some(p => p.id === 'pass'), 'the pass is not in the gem shop');
+  console.log('   season pass: XP tiers, free/premium claims, Stars purchase, one per season');
+
   // ---------- analytics (/stats for admins) ----------
   srv.db.users['555'].seen = Date.now() - 5 * 864e5; srv.db.users['555'].created = Date.now() - 9 * 864e5; srv.db.users['555'].profile.cleared = 11;
   const rep = srv.analytics.report();

@@ -106,6 +106,7 @@ function renderQuests() {
   ECON.ensureDQ(S, now());
   const afk = afkAmount(), afkH = Math.min(AFK_CAP_H, (Date.now() - S.afkSince) / 3600e3);
   $('#screen').innerHTML = `
+    ${passBanner()}
     ${ECON.rookieActive(S) ? rookieHtml() : ''}
     ${calendarHtml()}
     ${dailyHtml()}
@@ -123,6 +124,7 @@ function renderQuests() {
     }).join('')}`;
   $('#daily').onclick = claimDaily;
   bindRookie();
+  $('#to-pass').onclick = () => show('pass');
   $('#afk').onclick = async () => { if (await tryAct({ type: 'afk' })) renderQuests(); };
   document.querySelectorAll('[data-q]').forEach(b => b.onclick = async () => {
     const [kind, id] = b.dataset.q.split('-');

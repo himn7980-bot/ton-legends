@@ -22,6 +22,22 @@
   const needUnlock = (p, key) => { if (!unlocked(p, key)) fail('locked_feature'); };
   // AI duels: no stake; the first AI_DAILY wins each day pay a reward based on progress.
   const AI_DAILY = 5;
+  // Season pass: 30-day seasons, 30 tiers. Playing earns XP; each tier has a free reward and a premium one
+  // (premium is unlocked with Telegram Stars for the current season).
+  const PASS = { DAYS: 30, EPOCH: Date.UTC(2026, 0, 1), TIERS: 30, XP_PER_TIER: 150, PRICE_STARS: 250,
+    XP: { stage: 10, first: 20, ai: 10, pvp: 25, quest: 15, daily: 20, ach: 30 } };
+  const seasonOf = now => Math.floor((now - PASS.EPOCH) / (PASS.DAYS * 864e5));
+  const seasonEnds = now => PASS.EPOCH + (seasonOf(now) + 1) * PASS.DAYS * 864e5;
+  const passReward = (tier, track) => track === 'prem'
+    ? (tier % 10 === 0 ? { chest: 'gem' } : tier % 5 === 0 ? { gems: 25 } : { gems: 5 })
+    : (tier % 10 === 0 ? { chest: 'royal' } : tier % 5 === 0 ? { gems: 5 } : { coins: 300 + tier * 100 });
+  function passOf(p, now) {
+    const s = seasonOf(now);
+    if (!p.pass || p.pass.s !== s) p.pass = { s, xp: 0, prem: false, cf: [], cp: [] };
+    return p.pass;
+  }
+  const passTier = (p, now) => Math.min(PASS.TIERS, Math.floor(passOf(p, now).xp / PASS.XP_PER_TIER));
+  const addPassXp = (p, xp, now) => { passOf(p, now).xp += xp; };
   // Rookie journey: 7 days of 3 simple tasks for new players; day N opens N-1 days after joining (missed days
   // stay open), and day 7 gives a Legendary hero. Tasks count totals, so progress is never lost.
   const ROOKIE = [
@@ -108,7 +124,7 @@
   const DAILY_REWARDS = [200, 300, 400, 500, 700, 900, 'royal'];
   const AFK_CAP_H = 8;
   const HOLO_CHANCE = 0.03; // a chest card has a 3% chance to come out as a shimmering Holo variant (cosmetic)
-  const KEYS = ['rookie', 'fv', 'faction', 'factionAt', 'shareDay', 'coins', 'gems', 'owned', 'team', 'cleared', 'stats', 'daily', 'dq', 'ach', 'afkSince', 'pending', 'serials', 'holo', 'replays', 'aiDay'];
+  const KEYS = ['pass', 'rookie', 'fv', 'faction', 'factionAt', 'shareDay', 'coins', 'gems', 'owned', 'team', 'cleared', 'stats', 'daily', 'dq', 'ach', 'afkSince', 'pending', 'serials', 'holo', 'replays', 'aiDay'];
 
   function newProfile(now) {
     return { rookie: { start: day(now), claimed: [] }, fv: FUSION_VERSION, faction: null, factionAt: 0, shareDay: null, coins: 300, gems: START_GEMS, aiDay: null, owned: Object.fromEntries(E.STARTERS.map(id => [id, 1])), team: [...E.STARTERS], cleared: 0,
@@ -237,7 +253,7 @@
       }
       case 'daily': {
         if (!dailyCanClaim(p, now)) fail('claimed');
-        p.daily.streak = dailyNext(p, now); p.daily.last = day(now);
+        p.daily.streak = dailyNext(p, now); p.daily.last = day(now); addPassXp(p, PASS.XP.daily, now);
         const r = DAILY_REWARDS[p.daily.streak - 1];
         if (r === 'royal') { p.gems += DAY7_GEMS; return { day: p.daily.streak, gems: DAY7_GEMS, chest: openChest(p, 'royal', rng, now) }; }
         p.coins += r;
@@ -252,7 +268,7 @@
         ensureDQ(p, now);
         const q = DAILY_QUESTS.find(x => x.id === a.id);
         if (!q || p.dq.c[q.id] || (p.dq.p[q.id] || 0) < q.goal) fail('not_ready');
-        const coins = dqReward(p, q); p.dq.c[q.id] = true; p.coins += coins;
+        const coins = dqReward(p, q); p.dq.c[q.id] = true; p.coins += coins; addPassXp(p, PASS.XP.quest, now);
         return { coins };
       }
       case 'ach': {
@@ -260,7 +276,7 @@
         if (!x) fail('not_ready');
         const tier = achTier(p, x);
         if (tier >= x.tiers.length || x.stat(p) < x.tiers[tier]) fail('not_ready');
-        const coins = x.r[tier], gems = achGems(tier); p.ach[x.id] = tier + 1; p.coins += coins; p.gems += gems;
+        const coins = x.r[tier], gems = achGems(tier); p.ach[x.id] = tier + 1; p.coins += coins; p.gems += gems; addPassXp(p, PASS.XP.ach, now);
         return { coins, gems };
       }
       case 'exchange': {
@@ -283,6 +299,17 @@
         }
         p.faction = id; p.factionAt = now;
         return { faction: id };
+      }
+      case 'pass': {
+        const tier = a.tier | 0, track = a.track === 'prem' ? 'prem' : 'free', ps = passOf(p, now), list = track === 'prem' ? ps.cp : ps.cf;
+        if (tier < 1 || tier > PASS.TIERS || tier > passTier(p, now)) fail('not_ready');
+        if (track === 'prem' && !ps.prem) fail('no_pass');
+        if (list.includes(tier)) fail('claimed');
+        list.push(tier);
+        const r = passReward(tier, track);
+        if (r.coins) p.coins += r.coins;
+        if (r.gems) p.gems += r.gems;
+        return { tier, track, ...r, chestResult: r.chest ? openChest(p, r.chest, rng, now) : null };
       }
       case 'rookie': {
         const d = a.day | 0;
@@ -358,6 +385,7 @@
         if (first) p.cleared = Math.min(E.TOTAL_STAGES, p.cleared + 1);
         else p.replays[pd.stage] = (p.replays[pd.stage] || 0) + 1;
         p.coins += coins;
+        addPassXp(p, first ? PASS.XP.first : PASS.XP.stage, now);
         track(p, 'wins', 1, now);
         if (pd.stage % E.STAGES_PER_WORLD === E.STAGES_PER_WORLD - 1) track(p, 'bosses', 1, now);
         return { result: 'win', stage: pd.stage, coins, first };
@@ -382,6 +410,6 @@
     return p;
   }
 
-  return { ROOKIE, rookieStat, rookieOpenDays, rookieDayDone, rookieActive, SET_LEVEL, SETS, setDone, perksOf, STAR_LEVELS, starsOf, EVENTS, EVENT_FX, eventOf, COMMUNITY, MOODS, moodOf, marketBoosts, marketCoinBonus, FACTION_SWITCH_GEMS, FACTION_SWITCH_DAYS, FACTION_UPGRADE_DISCOUNT, FACTION_CHEST_WEIGHT, SHARE_GEMS, upgradePrice, UNLOCKS, unlocked, START_GEMS, DAY7_GEMS, WARP_COST, WARP_HOURS, gemRate, achGems, AI_DAILY, AI_LEVELS, aiLeft, aiReward, migrateIds, HOLO_CHANCE, CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
+  return { PASS, seasonOf, seasonEnds, passReward, passOf, passTier, addPassXp, ROOKIE, rookieStat, rookieOpenDays, rookieDayDone, rookieActive, SET_LEVEL, SETS, setDone, perksOf, STAR_LEVELS, starsOf, EVENTS, EVENT_FX, eventOf, COMMUNITY, MOODS, moodOf, marketBoosts, marketCoinBonus, FACTION_SWITCH_GEMS, FACTION_SWITCH_DAYS, FACTION_UPGRADE_DISCOUNT, FACTION_CHEST_WEIGHT, SHARE_GEMS, upgradePrice, UNLOCKS, unlocked, START_GEMS, DAY7_GEMS, WARP_COST, WARP_HOURS, gemRate, achGems, AI_DAILY, AI_LEVELS, aiLeft, aiReward, migrateIds, HOLO_CHANCE, CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
     dqReward, dailyCanClaim, dailyNext, afkRate, afkAmount, achTier, coinBonus, replayFactor, stageCoins, teamPower, claimable, act, importLocal };
 });

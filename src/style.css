@@ -562,3 +562,20 @@ img.mini.big { width: 84px; height: 84px; border-width: 3px; border-color: var(-
 .unl { margin-top: 6px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .unl + .unl { border-top: 1px solid rgba(75,227,122,.3); padding-top: 8px; }
 .unl .btn { padding: 8px 16px; font-size: 13px; }
+/* ---------- season pass ---------- */
+.pass-banner { width: 100%; text-align: start; display: block; border-color: rgba(212,155,255,.45); background: linear-gradient(135deg, rgba(212,155,255,.14), rgba(255,197,49,.08)), var(--panel); }
+.prem-off { border-color: var(--gold); background: linear-gradient(135deg, rgba(255,197,49,.14), transparent), var(--panel); }
+.prem-on { border-color: var(--gold); color: var(--gold); font-weight: 700; text-align: center; }
+.ptrack-head, .prow { display: grid; grid-template-columns: 36px minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-items: center; }
+.ptrack-head { font-size: 12px; font-weight: 700; color: var(--muted); text-align: center; margin-bottom: 6px; }
+.prow { padding: 4px 0; }
+.prow .pt { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--panel2); font-weight: 900; font-size: 13px; color: var(--muted); }
+.prow.reached .pt { background: var(--ton); color: #fff; }
+.prow.cur .pt { box-shadow: 0 0 0 3px var(--gold); }
+.pcell { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+.pcell span { font-weight: 900; font-size: 14px; white-space: nowrap; }
+.pcell small { font-size: 10px; color: var(--muted); min-height: 12px; }
+.pcell.prem { background: linear-gradient(180deg, rgba(255,197,49,.10), transparent), var(--panel); border-color: rgba(255,197,49,.35); }
+.pcell.ready { border-color: var(--green); box-shadow: 0 0 12px -3px var(--green); }
+.pcell.ready small { color: var(--green); font-weight: 700; }
+.pcell.got { opacity: .45; } .pcell.far { opacity: .65; } .pcell.lock { opacity: .7; }

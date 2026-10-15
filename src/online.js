@@ -94,9 +94,9 @@ const Online = (() => {
     const { link } = await call('invoice', { pack: packId });
     const status = await new Promise(res => w.openInvoice(link, res));
     if (status !== 'paid') return { status, coins: 0, gems: 0 };
-    let coins = 0, gems = 0, profile = null;
-    for (let i = 0; i < 5 && !coins && !gems; i++) { await new Promise(r => setTimeout(r, 1200)); const c = await claim(); coins = c.coins || 0; gems = c.gems || 0; profile = c.profile; }
-    return { status, coins, gems, profile };
+    let coins = 0, gems = 0, pass = false, profile = null;
+    for (let i = 0; i < 5 && !coins && !gems && !pass; i++) { await new Promise(r => setTimeout(r, 1200)); const c = await claim(); coins = c.coins || 0; gems = c.gems || 0; pass = !!c.pass; profile = c.profile; }
+    return { status, coins, gems, pass, profile };
   }
 
   function inviteLink() {

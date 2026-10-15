@@ -48,7 +48,9 @@ const PACKS = [
 ];
 // Older coin packs: only honoured if a payment for one arrives after the switch.
 const OLD_PACKS = [{ id: 'coins_s', coins: 3000, stars: 25 }, { id: 'coins_m', coins: 10000, stars: 75 }, { id: 'coins_l', coins: 30000, stars: 200 }];
-const findPack = id => PACKS.find(p => p.id === id) || OLD_PACKS.find(p => p.id === id);
+// The premium season pass is sold separately from the gem packs.
+const PASS_PACK = { id: 'pass', stars: ECON.PASS.PRICE_STARS, pass: true };
+const findPack = id => PACKS.find(p => p.id === id) || OLD_PACKS.find(p => p.id === id) || (id === 'pass' ? PASS_PACK : null);
 
 // Bot texts: Persian for Telegram users with a Persian UI, English for everyone else.
 const TEXT = {
@@ -57,6 +59,7 @@ const TEXT = {
     play: '🎮 Play', open: '🎮 Open game', menu: '🎮 Play',
     paid: c => `✅ Payment successful! ${c.toLocaleString('en-US')} coins were added. Open the game to collect them.`,
     paidGems: g => `✅ Payment successful! ${g} 💎 gems were added to your account.`,
+    paidPass: '✅ Payment successful! Your premium Season Pass is unlocked — open the game to claim the rewards.',
     packTitle: c => `${c.toLocaleString('en-US')} coins`, packDesc: c => `${c.toLocaleString('en-US')} coins for TON Legends`,
     cmd: 'Play TON Legends',
     arena: e => e.result === 'win' ? `🏆 You won the arena duel vs ${e.opp}! +${e.pot.toLocaleString('en-US')} coins.`
@@ -67,6 +70,7 @@ const TEXT = {
     play: '🎮 شروع بازی', open: '🎮 ورود به بازی', menu: '🎮 بازی',
     paid: c => `✅ پرداخت موفق! ${c.toLocaleString('fa-IR')} سکه به حسابت اضافه شد. بازی را باز کن تا دریافت کنی.`,
     paidGems: g => `✅ پرداخت موفق! ${g.toLocaleString('fa-IR')} جم 💎 به حسابت اضافه شد.`,
+    paidPass: '✅ پرداخت موفق! پاس فصل ویژه‌ت فعال شد — وارد بازی شو و جایزه‌هات رو بگیر.',
     packTitle: c => `${c.toLocaleString('fa-IR')} سکه`, packDesc: c => `${c.toLocaleString('fa-IR')} سکه برای بازی TON Legends`,
     cmd: 'شروع بازی TON Legends',
     arena: e => e.result === 'win' ? `🏆 دوئل آرنا را از ${e.opp} بردی! +${e.pot.toLocaleString('fa-IR')} سکه.`
@@ -275,12 +279,13 @@ async function handleUpdate(up) {
     if (!pack) return;
     const u = userRec(m.from);
     if (String(u.id) !== uid) return;
-    credit(u, pack.coins || 0, pack.gems || 0);
+    if (pack.pass) { if (u.profile) ECON.passOf(u.profile, Date.now()).prem = true; else u.pendingPass = ECON.seasonOf(Date.now()); u.passGift = true; }
+    else credit(u, pack.coins || 0, pack.gems || 0);
     db.payments[chargeId] = { uid, pack: packId, stars: p.total_amount, at: Date.now() };
     analytics.payment(p.total_amount);
     persist();
     const L = tx(m.from.language_code);
-    await tg('sendMessage', { chat_id: m.chat.id, text: pack.gems ? L.paidGems(pack.gems) : L.paid(pack.coins),
+    await tg('sendMessage', { chat_id: m.chat.id, text: pack.pass ? ((BOT_TEXT[String(m.from.language_code || '').slice(0, 2)] || {}).paidPass || L.paidPass) : pack.gems ? L.paidGems(pack.gems) : L.paid(pack.coins),
       reply_markup: { inline_keyboard: [[{ text: L.open, web_app: { url: WEBAPP_URL } }]] } });
     return;
   }
@@ -419,6 +424,7 @@ const routes = {
   // The server keeps each Telegram player's coins and heroes. First visit imports the offline save (clamped).
   'POST /api/profile': (body, u) => {
     if (!u.profile) { u.profile = ECON.importLocal(body.local, Date.now()); u.profile.coins += u.pending; u.profile.gems += u.pendingGems || 0; u.pending = 0; u.pendingGems = 0; }
+    if (u.pendingPass !== undefined) { if (u.pendingPass === ECON.seasonOf(Date.now())) ECON.passOf(u.profile, Date.now()).prem = true; delete u.pendingPass; }
     return { profile: profileOut(u), notify: !u.mute };
   },
   'POST /api/act': (body, u) => {
@@ -431,14 +437,15 @@ const routes = {
   },
   'POST /api/score': () => ({ ok: true }), // kept for older clients; leaderboard now uses server profiles
   'POST /api/leaderboard': (body, u) => leaderboard(u.id),
-  'POST /api/claim': (body, u) => { const coins = u.gift || 0, gems = u.giftGems || 0; u.gift = 0; u.giftGems = 0; return { ok: true, coins, gems, profile: u.profile ? profileOut(u) : null }; },
+  'POST /api/claim': (body, u) => { const coins = u.gift || 0, gems = u.giftGems || 0, pass = !!u.passGift; u.gift = 0; u.giftGems = 0; u.passGift = false; return { ok: true, coins, gems, pass, profile: u.profile ? profileOut(u) : null }; },
   ...arena.routes,
   ...clans.routes,
   ...war.routes,
   'POST /api/invoice': async (body, u) => {
-    const pack = PACKS.find(p => p.id === body.pack);
+    const pack = body.pack === 'pass' ? PASS_PACK : PACKS.find(p => p.id === body.pack);
     if (!pack) throw Object.assign(new Error('unknown pack'), { code: 400 });
-    const title = `${pack.gems} 💎`;
+    if (pack.pass && u.profile && ECON.passOf(u.profile, Date.now()).prem) throw Object.assign(new Error('claimed'), { code: 400 });
+    const title = pack.pass ? `Season Pass #${ECON.seasonOf(Date.now()) + 1}` : `${pack.gems} 💎`;
     const link = await tg('createInvoiceLink', {
       title: `TON Legends · ${title}`, description: `TON Legends · ${title}`,
       payload: `${u.id}:${pack.id}`, currency: 'XTR', prices: [{ label: title, amount: pack.stars }],
