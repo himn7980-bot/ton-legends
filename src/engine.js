@@ -147,13 +147,14 @@ function stageReward(idx) {
 const ENEMY_HP = 0.56, ENEMY_ATK = 0.23, SC2 = 0.13;
 // Worlds 1–4 keep their original hand-tuned curve (made for the starter cards); calibration starts at world 5.
 const CALIBRATED_FROM = 40;
-const WORLD_K = [1, 1, 1, 1, 0.945, 1.219, 1.527, 1.328, 1.778, 1.366, 1.591, 1.777, 1.569, 2.164, 1.696, 1.794, 1.918, 1.91, 2.665, 1.716];
-const LOCAL_K = [1.4, 1.404, 1.428, 1.134, 1.217, 0.978, 1.003, 1.043, 0.914, 1.045]; // per stage inside a world (more enemy cards later in a world); see tools/calibrate.js
+// Per-stage difficulty factor (worlds 5–20), calibrated by tools/calibrate.js against several reference teams so
+// the level a stage needs rises smoothly: a little easier at a world's start, a bump for the boss.
+const STAGE_K = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1.773, 1.98, 2.319, 1.28, 1.335, 1.217, 1.122, 1.062, 1.023, 1.14, 2.118, 2.581, 2.245, 1.438, 1.81, 1.498, 1.334, 1.303, 1.293, 1.209, 2.466, 2.789, 2.294, 1.972, 2.088, 1.52, 1.7, 1.683, 1.419, 1.501, 1.964, 2.047, 2.498, 1.876, 1.577, 1.693, 1.526, 1.547, 1.37, 1.508, 4.573, 4.067, 2.308, 2.204, 3.278, 1.782, 1.908, 1.975, 1.63, 2.365, 2.444, 2.074, 2.255, 1.73, 1.905, 1.454, 1.432, 1.445, 1.311, 1.305, 3.069, 2.522, 2.314, 2.167, 1.963, 1.561, 1.611, 1.65, 1.388, 1.885, 2.545, 2.546, 2.94, 2.119, 2.074, 2.026, 1.931, 1.777, 1.708, 1.766, 2.651, 2.317, 2.154, 2.07, 1.847, 1.374, 1.688, 1.593, 1.212, 1.855, 4.473, 2.827, 3.451, 3.576, 2.581, 2.343, 2.739, 2.188, 1.938, 2.642, 2.371, 3.389, 2.547, 1.925, 2.204, 1.668, 1.484, 1.689, 1.483, 1.618, 3.005, 3.362, 3.318, 2.262, 2.55, 1.795, 1.836, 1.993, 1.593, 1.764, 2.734, 2.995, 2.887, 2.337, 2.392, 2.06, 1.93, 2.072, 1.872, 1.771, 2.873, 2.857, 2.795, 2.145, 2.302, 2.003, 1.768, 1.85, 1.771, 1.795, 4.649, 4.224, 4.514, 3.709, 3.303, 2.654, 2.597, 2.795, 2.346, 2.752, 3.192, 3.073, 2.213, 2.173, 2.398, 1.757, 1.849, 1.811, 1.563, 1.918];
 function stageEnemies(idx) {
   const w = WORLDS[Math.floor(idx / STAGES_PER_WORLD)], local = idx % STAGES_PER_WORLD;
   // Difficulty follows the level a team of five non-fusion cards needs: ~5 at stage 20, ~45 at stage 100, ~95 at stage 200.
-  // The per-world factor (tools/calibrate.js) evens out how strong each world's line-up is.
-  const sc = (idx < 50 ? 2.4 + 0.32 * idx : 18.08 + SC2 * (idx - 50)) * (idx < CALIBRATED_FROM ? 1 : WORLD_K[Math.floor(idx / STAGES_PER_WORLD)] * LOCAL_K[idx % STAGES_PER_WORLD]);
+  // The per-stage factor (tools/calibrate.js) evens out how strong each stage's line-up is.
+  const sc = (idx < 50 ? 2.4 + 0.32 * idx : 18.08 + SC2 * (idx - 50)) * (idx < CALIBRATED_FROM ? 1 : STAGE_K[idx] || 1);
   const card = (id, boss) => {
     const h = HERO_BY_ID[id], r = ROLES[h.role];
     // Enemy fusion cards bring their combined skills, not the fusion level bonus (that would make chapters III–IV a wall).
@@ -437,5 +438,5 @@ function replayStage(team, levels, idx, seed, inputs, faction = null, market = n
 
 if (typeof module !== 'undefined') {
   module.exports = { RARITY, ROLES, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, fusionStartLevel, TEAM_MAX_FUSIONS, TEAM_MAX_TRIOS, teamError, duosWithin, ENRAGE_AT, LEGACY_FUSION_IDS, HERO_BY_ID, STARTERS, WORLDS, TOTAL_STAGES, STAGES_PER_WORLD, MAX_LEVEL, COIN_BONUS, TICK,
-    WORLD_K, LOCAL_K, FACTION_BONUS, FACTION_FUSION_BONUS, factionMult, marketMult, BOSS_WEAK, WEAK_BY, heroStats, upgradeCost, stageReward, stageEnemies, createBattle, createPvpBattle, step, castSkill, castUlt, applyInput, replayStage };
+    STAGE_K, CALIBRATED_FROM, FACTION_BONUS, FACTION_FUSION_BONUS, factionMult, marketMult, BOSS_WEAK, WEAK_BY, heroStats, upgradeCost, stageReward, stageEnemies, createBattle, createPvpBattle, step, castSkill, castUlt, applyInput, replayStage };
 }

@@ -290,12 +290,14 @@ const EVENT_ICON = { coins: '🎉', war: '⚔️', ai: '🤖', chest: '🎁', sa
 function cardHtml(h) {
   const t = T(), lv = S.owned[h.id], rc = RARITY[h.rarity].color;
   const canUp = lv && lv < MAX_LEVEL && S.coins >= ECON.upgradePrice(S, h.id, lv);
-  return `<button class="card ${lv ? '' : 'locked'} ${S.holo[h.id] ? 'holo' : ''} ${frameOf(h.id)} ${ECON.starsOf(lv) === 5 ? 'awakened' : ''}" data-id="${h.id}" style="--rc:${rc}">
+  const deck = S.team.indexOf(h.id);
+  return `<button class="card ${lv ? '' : 'locked'} ${deck >= 0 ? 'in-deck' : ''} ${S.holo[h.id] ? 'holo' : ''} ${frameOf(h.id)} ${ECON.starsOf(lv) === 5 ? 'awakened' : ''}" data-id="${h.id}" style="--rc:${rc}">
     <img src="${img(h.id)}" alt="${h.name}" loading="lazy">
     ${lv ? `<span class="lv">${t.level(n(lv))}</span>` : '<span class="lock">🔒</span>'}${starsHtml(lv)}
     <span class="rl">${ROLES[h.role].icon}</span>
     ${h.id === S.faction ? '<span class="fac-flag">🚩</span>' : ''}${canUp ? '<span class="up">⬆️</span>' : ''}${S.serials[h.id] ? `<span class="serial">#${n(S.serials[h.id])}</span>` : ''}
-    <div class="info">${S.team.includes(h.id) ? `<span class="in-team">${t.inTeam}</span>` : ''}<div class="nm">${h.name}</div><div class="muted" style="font-size:11px">${heroText(h.id).title}</div></div>
+    ${deck >= 0 ? `<span class="deck-mark"><b>✓</b>${t.inTeam} · ${n(deck + 1)}</span>` : ''}
+    <div class="info"><div class="nm">${h.name}</div><div class="muted" style="font-size:11px">${heroText(h.id).title}</div></div>
   </button>`;
 }
 function heroModal(id) {

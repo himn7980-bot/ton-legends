@@ -589,3 +589,9 @@ img.mini.big { width: 84px; height: 84px; border-width: 3px; border-color: var(-
 .ally-m.lead{border-color:#ffd166;box-shadow:0 0 0 1px #ffd166 inset}
 .ally-m:disabled{opacity:1}
 .ally-banner{margin:8px 0;padding:10px 12px;border-radius:12px;background:linear-gradient(90deg,rgba(255,209,102,.18),rgba(255,209,102,.05));border:1px solid rgba(255,209,102,.4);font-weight:700;font-size:13px}
+/* cards already in the deck: dimmed, with a clear check, so the player sees at a glance what is picked */
+.card.in-deck img { filter: grayscale(.85) brightness(.4); }
+.card.in-deck { outline: 2px solid var(--green); outline-offset: -2px; }
+.card .deck-mark { position: absolute; top: 34%; left: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 2px;
+  font-size: 11px; font-weight: 800; color: #fff; text-shadow: 0 1px 3px #000; white-space: nowrap; pointer-events: none; }
+.card .deck-mark b { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--green); color: #002a10; font-size: 20px; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
