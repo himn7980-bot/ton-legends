@@ -694,3 +694,9 @@ img.mini.big { width: 84px; height: 84px; border-width: 3px; border-color: var(-
 .av-pick img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 15%; }
 .av-pick.on { border-color: var(--gold); box-shadow: 0 0 10px -2px var(--gold); }
 .av-pick span { position: absolute; bottom: 0; inset-inline-end: 0; font-size: 12px; }
+/* saved decks 1–5 */
+.deck-switch { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 6px 0 8px; }
+.dk { display: flex; flex-direction: column; align-items: center; padding: 5px 2px; border-radius: 10px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.04); color: var(--text); font: inherit; }
+.dk b { font-size: 15px; } .dk small { font-size: 10px; color: var(--muted); white-space: nowrap; }
+.dk.on { border-color: var(--gold); background: rgba(255,200,60,.14); box-shadow: 0 0 10px -4px var(--gold); } .dk.on small { color: var(--gold); }
+.dk.empty { border-style: dashed; opacity: .75; }

@@ -176,10 +176,10 @@
   const DAILY_REWARDS = [200, 300, 400, 500, 700, 900, 'royal'];
   const AFK_CAP_H = 8;
   const HOLO_CHANCE = 0.03; // a chest card has a 3% chance to come out as a shimmering Holo variant (cosmetic)
-  const KEYS = ['avatar', 'cos', 'leaders', 'pass', 'rookie', 'fv', 'faction', 'factionAt', 'shareDay', 'coins', 'gems', 'owned', 'team', 'cleared', 'stats', 'daily', 'dq', 'ach', 'afkSince', 'pending', 'serials', 'holo', 'replays', 'aiDay'];
+  const KEYS = ['decks', 'deck', 'avatar', 'cos', 'leaders', 'pass', 'rookie', 'fv', 'faction', 'factionAt', 'shareDay', 'coins', 'gems', 'owned', 'team', 'cleared', 'stats', 'daily', 'dq', 'ach', 'afkSince', 'pending', 'serials', 'holo', 'replays', 'aiDay'];
 
   function newProfile(now) {
-    return { avatar: null, cos: { own: [], on: null }, leaders: {}, rookie: { start: day(now), claimed: [] }, fv: FUSION_VERSION, faction: null, factionAt: 0, shareDay: null, coins: 300, gems: START_GEMS, aiDay: null, owned: Object.fromEntries(E.STARTERS.map(id => [id, 1])), team: [...E.STARTERS], cleared: 0,
+    return { decks: null, deck: 0, avatar: null, cos: { own: [], on: null }, leaders: {}, rookie: { start: day(now), claimed: [] }, fv: FUSION_VERSION, faction: null, factionAt: 0, shareDay: null, coins: 300, gems: START_GEMS, aiDay: null, owned: Object.fromEntries(E.STARTERS.map(id => [id, 1])), team: [...E.STARTERS], cleared: 0,
       stats: { wins: 0, losses: 0, chests: 0, upgrades: 0, skills: 0, bosses: 0, pvpWins: 0, pvpLosses: 0 },
       daily: { last: null, streak: 0 }, dq: { date: null, p: {}, c: {} }, ach: {}, afkSince: now, pending: null, serials: {}, holo: {}, replays: {} };
   }
@@ -300,7 +300,16 @@
         if (t.length > 5 || new Set(t).size !== t.length || t.some(id => !p.owned[id])) fail('bad_team');
         const te = E.teamError(t); if (te) fail(te);
         p.team = [...t];
+        p.decks = fixDecks(p); p.decks[p.deck || 0] = [...t]; // editing the deck saves it into the active preset
         return {};
+      }
+      case 'deck': { // switch to one of the DECKS saved decks (an empty one starts as a copy of the current deck)
+        const i = Math.floor(Number(a.slot));
+        if (!(i >= 0 && i < DECKS)) fail('bad_action');
+        p.decks = fixDecks(p);
+        if (!p.decks[i] || !p.decks[i].length) p.decks[i] = [...p.team];
+        p.deck = i; p.team = [...p.decks[i]];
+        return { deck: i };
       }
       case 'upgrade': {
         const lv = p.owned[a.id];
@@ -506,7 +515,20 @@
   }
 
   // Shown next to the player's name everywhere: the chosen card, else their community's hero, else the deck leader.
+  // Saved decks: DECKS presets; the active one is p.team. Cards that are gone (or no longer fit) are dropped.
+  const DECKS = 5;
+  function fixDecks(p) {
+    const out = Array.from({ length: DECKS }, (_, i) => {
+      const d = Array.isArray(p.decks) && Array.isArray(p.decks[i]) ? p.decks[i] : null;
+      if (!d) return null;
+      const keep = [];
+      for (const id of d) if (typeof id === 'string' && Object.prototype.hasOwnProperty.call(E.HERO_BY_ID, id) && p.owned[id] && !keep.includes(id) && keep.length < 5 && !E.teamError([...keep, id])) keep.push(id);
+      return keep;
+    });
+    if (!out[p.deck || 0]) out[p.deck || 0] = [...(p.team || [])];
+    return out;
+  }
   const avatarOf = p => (p ? (p.avatar && p.owned && p.owned[p.avatar] ? p.avatar : p.faction || (p.team && p.team[0]) || null) : null);
-  return { avatarOf, COSMETICS, giveCosmetic, FEATURED_CHANCE, featuredOf, leaderOf, MASCOT_PER_TIER, ALLY_DEFAULT, ALLY_SHARE, allianceBoosts, PASS, seasonOf, seasonEnds, passReward, passOf, passTier, addPassXp, ROOKIE, rookieStat, rookieOpenDays, rookieDayDone, rookieActive, SET_LEVEL, SETS, SET_TIERS, SET_MULT, setTier, setDone, perksOf, STAR_LEVELS, starsOf, EVENTS, EVENT_FX, eventOf, COMMUNITY, MOODS, moodOf, marketBoosts, marketCoinBonus, FACTION_SWITCH_GEMS, FACTION_SWITCH_DAYS, FACTION_UPGRADE_DISCOUNT, FACTION_CHEST_WEIGHT, SHARE_GEMS, upgradePrice, UNLOCKS, unlocked, START_GEMS, DAY7_GEMS, WARP_COST, WARP_HOURS, gemRate, achGems, AI_DAILY, AI_LEVELS, aiLeft, aiReward, migrateIds, HOLO_CHANCE, CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
+  return { DECKS, fixDecks, avatarOf, COSMETICS, giveCosmetic, FEATURED_CHANCE, featuredOf, leaderOf, MASCOT_PER_TIER, ALLY_DEFAULT, ALLY_SHARE, allianceBoosts, PASS, seasonOf, seasonEnds, passReward, passOf, passTier, addPassXp, ROOKIE, rookieStat, rookieOpenDays, rookieDayDone, rookieActive, SET_LEVEL, SETS, SET_TIERS, SET_MULT, setTier, setDone, perksOf, STAR_LEVELS, starsOf, EVENTS, EVENT_FX, eventOf, COMMUNITY, MOODS, moodOf, marketBoosts, marketCoinBonus, FACTION_SWITCH_GEMS, FACTION_SWITCH_DAYS, FACTION_UPGRADE_DISCOUNT, FACTION_CHEST_WEIGHT, SHARE_GEMS, upgradePrice, UNLOCKS, unlocked, START_GEMS, DAY7_GEMS, WARP_COST, WARP_HOURS, gemRate, achGems, AI_DAILY, AI_LEVELS, aiLeft, aiReward, migrateIds, HOLO_CHANCE, CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
     dqReward, dailyCanClaim, dailyNext, afkRate, afkAmount, achTier, coinBonus, replayFactor, stageCoins, teamPower, claimable, act, importLocal };
 });

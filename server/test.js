@@ -649,6 +649,14 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   r = await post('/api/leaderboard', { initData: initData(alice) }); assert.equal(r.body.top.find(x => x.name === 'شیر طلایی').av, 'f1');
   { const p0 = ECON.newProfile(Date.now()); for (const id of ['utya', 'pengu', 'babyshark', 'dog']) p0.owned[id] = 30;
     assert.equal(ECON.setTier(p0, ECON.SETS[0]), 2); assert.equal(ECON.perksOf(p0).hp, 0.075, 'tier 2 = ×1.5'); }
+  // saved decks: switch, edit saves into the active one, cards stay valid
+  const team0 = [...srv.db.users['111'].profile.team];
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'deck', slot: 3 } }); assert.equal(r.body.profile.deck, 3); assert.deepEqual(r.body.profile.team, team0, 'empty deck starts as a copy');
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'team', team: [team0[0]] } }); assert.deepEqual(r.body.profile.decks[3], [team0[0]]);
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'deck', slot: 0 } }); assert.deepEqual(r.body.profile.team, team0, 'deck 1 kept');
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'deck', slot: 3 } }); assert.deepEqual(r.body.profile.team, [team0[0]]);
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'deck', slot: 9 } }); assert.equal(r.status, 400);
+  await post('/api/act', { initData: initData(alice), action: { type: 'deck', slot: 0 } });
   console.log('   profile: unique game name, card avatar in rankings; tiered sets');
   // the game's channel: join first, reward once; non-members are asked again
   r = await post('/api/profile', { initData: initData(alice) }); assert.deepEqual(r.body.channel, { url: 'https://t.me/gl_news', joined: false, coins: 500, gems: 20 });

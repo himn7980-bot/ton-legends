@@ -31,6 +31,7 @@ function renderArena() {
     <div class="panel">
       <div class="row"><div class="t">${t.stake}</div><span class="tag gold">${t.pot(n(S.stake * 2))}</span></div>
       <div class="stakes">${STAKES.map(v => `<button class="chip ${v === S.stake ? 'on' : ''}" data-stake="${v}" ${S.coins < v ? 'disabled' : ''}>🪙 ${n(v)}</button>`).join('')}</div>
+      ${deckSwitcher()}
       <div class="row"><span class="muted">${t.yourTeam(n(teamPower(S.team)))}</span><button class="tag" id="pv-team">${t.editTeam}</button></div>
       <div class="mini-team">${[0, 1, 2, 3, 4].map(i => S.team[i] ? `<img src="${img(S.team[i])}" alt="">` : '<div class="empty"></div>').join('')}</div>
       ${!isOpen('pvp') ? lockNote('pvp') : `<button class="btn wide gold" id="pv-find" ${S.coins < S.stake || !S.team.length ? 'disabled' : ''}>${t.findOpp}</button>

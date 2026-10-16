@@ -107,6 +107,19 @@ function showCoins(prev, prevGems) {
   updateBadge();
 }
 const teamPower = team => ECON.teamPower(S, team);
+// Saved decks 1–5: one tap switches the active deck (for a stage, the arena or the world boss).
+function deckSwitcher() {
+  const decks = ECON.fixDecks(S), cur = S.deck || 0, k = v => (v >= 1e4 ? n(Math.round(v / 1e3)) + 'k' : n(Math.round(v)));
+  return `<div class="deck-switch">${decks.map((d, i) => `<button class="dk ${i === cur ? 'on' : ''} ${d && d.length ? '' : 'empty'}" data-deck="${i}">
+    <b>${n(i + 1)}</b><small>${d && d.length ? '⚡' + k(teamPower(d)) : '+'}</small></button>`).join('')}</div>`;
+}
+document.addEventListener('click', async e => {
+  const b = e.target.closest && e.target.closest('[data-deck]');
+  if (!b || BT) return;
+  const i = +b.dataset.deck;
+  if (i === (S.deck || 0)) return;
+  if (await tryAct({ type: 'deck', slot: i })) { haptic('light'); refresh(); }
+});
 // Lighter battle effects by default on weaker phones (the player can change it in Settings).
 if (S.fx === undefined && ((navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 3)) S.fx = 1;
 // ---------- deck synergies (green = bonus, red = penalty, grey = could be added) ----------
@@ -269,6 +282,7 @@ function renderMap() {
       ${isBossStage(S.sel) ? weakHint(W.weak) : ''}
       <div class="muted" style="margin-top:8px">${t.enemyCards}</div>
       <div class="foes">${foes.map(f => `<div class="foe ${f.boss ? 'b' : ''}"><img src="${img(f.id)}" alt="${esc(f.name)}"></div>`).join('')}</div>
+      ${deckSwitcher()}
       <div class="row"><span class="muted">${t.yourTeam(n(teamPower(S.team)))}</span><button class="tag" id="edit-team">${t.editTeam}</button></div>
       <div class="mini-team">${[0, 1, 2, 3, 4].map(i => S.team[i] ? `<img src="${img(S.team[i])}" alt="">` : '<div class="empty"></div>').join('')}</div>
       <button class="btn wide" id="go" ${S.team.length ? '' : 'disabled'}>${t.fight}</button>
@@ -299,6 +313,7 @@ function renderHeroes() {
     .sort((a, b) => (!!S.owned[b.id] - !!S.owned[a.id]) || ('XMLERC'.indexOf(a.rarity) - 'XMLERC'.indexOf(b.rarity)));
   $('#screen').innerHTML = `
     <div class="h2">${t.battleTeam} <span class="muted">(${n(S.team.length)}/${n(5)} · ${t.power} ${n(teamPower(S.team))})</span></div>
+    ${deckSwitcher()}<p class="muted small" style="margin:2px 0 8px">${t.decksNote}</p>
     <div class="row-labels"><span>${t.front}</span><span>${t.back}</span></div>
     <div class="team-slots ${ARRANGE ? 'arranging' : ''}">${[0, 1, 2, 3, 4].map(i => `<button class="slot ${i < 2 ? 'row-front' : 'row-back'} ${ARRANGE && ARRANGE.sel === i ? 'sel' : ''}" data-slot-i="${i}" data-id="${S.team[i] || ''}">${S.team[i] ? `<img src="${img(S.team[i])}" alt="">` : '+'}</button>`).join('')}</div>
     <div class="row" style="margin-top:6px"><span class="muted small" style="flex:1">${ARRANGE ? t.arrangeHint : t.formationNote}</span>

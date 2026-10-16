@@ -106,6 +106,7 @@ async function renderRaid() {
     </div>
     ${weakHint(R.weak)}
     <p class="muted small">${t.raidNote(n(R.time))}</p>
+    ${deckSwitcher()}
     <button class="btn wide gold" id="rd-go" ${S.team.length ? '' : 'disabled'}>${R.tries > 0 ? t.raidFight(n(R.tries)) : t.raidBuy(n(R.extraGems))}</button>
     <div class="panel"><div class="ref-nums"><div><b>${n(R.mine.boss)}</b><small>${t.raidMineBoss}</small></div><div><b>${n(R.mine.week)}</b><small>${t.raidMineWeek}</small></div><div><b>${R.mine.rank ? '#' + n(R.mine.rank) : '—'}</b><small>${t.raidRank}</small></div></div>
       <p class="muted small" style="margin:8px 0 0">${t.raidRewards(n(R.rewards.kill), n(R.rewards.top), n(R.rewards.last))}</p></div>
