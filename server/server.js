@@ -58,9 +58,10 @@ const OLD_PACKS = [{ id: 'coins_s', coins: 3000, stars: 25 }, { id: 'coins_m', c
 const NAME_GEMS = 20;
 // The game's own channel (e.g. @gramlegends): new players join it first and get a welcome reward once.
 // The bot must be an admin of the channel to check membership; if it can't check, nobody is blocked.
-const GAME_CHANNEL = (process.env.GAME_CHANNEL || '').trim() || null, CHANNEL_COINS = 500, CHANNEL_GEMS = 20;
+// Default: the official channel. GAME_CHANNEL=off turns the requirement off; another @name replaces it.
+const GAME_CHANNEL = (() => { const v = (process.env.GAME_CHANNEL || '@gramlegends_game').trim(); return !v || v === 'off' ? null : v; })(), CHANNEL_COINS = 500, CHANNEL_GEMS = 20;
 const channelUrl = () => (GAME_CHANNEL ? (/^@/.test(GAME_CHANNEL) ? `https://t.me/${GAME_CHANNEL.slice(1)}` : GAME_CHANNEL) : null);
-const channelInfo = u => (GAME_CHANNEL && /^@\w{4,}$/.test(GAME_CHANNEL) ? { url: channelUrl(), joined: !!u.chanJoined, coins: CHANNEL_COINS, gems: CHANNEL_GEMS } : null);
+const channelInfo = u => (GAME_CHANNEL && /^@\w{4,}$/.test(GAME_CHANNEL) && diag.channelOk !== false ? { url: channelUrl(), joined: !!u.chanJoined, coins: CHANNEL_COINS, gems: CHANNEL_GEMS } : null);
 const PASS_PACK = { id: 'pass', stars: ECON.PASS.PRICE_STARS, pass: true };
 // Card frames sold for Telegram Stars (cosmetic only).
 const COS_PACKS = Object.entries(ECON.COSMETICS).filter(([, c]) => c.stars).map(([k, c]) => ({ id: 'cos_' + k, stars: c.stars, cos: k }));
@@ -686,6 +687,16 @@ async function setupBot() {
     const wantName = process.env.BOT_NAME || 'Gram Legends';
     const cur = await tg('getMyName', {}).catch(() => null);
     if (!cur || cur.name !== wantName) await tg('setMyName', { name: wantName }).catch(e => logErr('setupError', e));
+    // The channel check needs the bot to be an admin of the game channel: report it (status page + admins).
+    if (GAME_CHANNEL) {
+      const mem = await tg('getChatMember', { chat_id: GAME_CHANNEL, user_id: me.id }).catch(e => ({ error: e.message }));
+      diag.channelOk = !!(mem && ['administrator', 'creator'].includes(mem.status));
+      diag.channel = GAME_CHANNEL;
+      if (!diag.channelOk) {
+        logErr('channelError', new Error(`bot is not an admin of ${GAME_CHANNEL}: ${(mem && (mem.error || mem.status)) || 'unknown'}`));
+        for (const a of ADMIN_IDS) tg('sendMessage', { chat_id: Number(a), text: `⚠️ Add @${me.username} to ${GAME_CHANNEL} as an admin (no special rights needed). Until then players are not asked to join and get no welcome gift.` }).catch(() => {});
+      }
+    }
     if (WEBAPP_URL) await tg('setChatMenuButton', { menu_button: { type: 'web_app', text: TEXT.en.menu, web_app: { url: WEBAPP_URL } } });
     await tg('setMyCommands', { commands: [{ command: 'start', description: TEXT.en.cmd }] });
     for (const code of Object.keys(TEXT).filter(c => c !== 'en')) await tg('setMyCommands', { commands: [{ command: 'start', description: TEXT[code].cmd }], language_code: code });

@@ -11,7 +11,7 @@ const initData = user => { const p = new URLSearchParams({ auth_date: String(Mat
   p.set('hash', crypto.createHmac('sha256', crypto.createHmac('sha256', 'WebAppData').update(TOKEN).digest()).update(check).digest('hex')); return p.toString(); };
 (async () => {
   await new Promise(r => fake.listen(0, r));
-  Object.assign(process.env, { BOT_TOKEN: TOKEN, WEBAPP_URL: 'https://x', DATA_FILE: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tll-')), 'db.json'), TELEGRAM_API: `http://127.0.0.1:${fake.address().port}` });
+  Object.assign(process.env, { GAME_CHANNEL: 'off', BOT_TOKEN: TOKEN, WEBAPP_URL: 'https://x', DATA_FILE: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tll-')), 'db.json'), TELEGRAM_API: `http://127.0.0.1:${fake.address().port}` });
   const srv = require('../server/server.js'), ECON = require('../src/economy.js');
   srv.server.listen(0); await new Promise(r => srv.server.once('listening', r));
   const base = `http://127.0.0.1:${srv.server.address().port}`;

@@ -18,7 +18,7 @@ services:
         sync: false
       # The game's own channel (@name). New players must join it first (welcome reward). The bot must be an admin there.
       - key: GAME_CHANNEL
-        sync: false
+        value: "@gramlegends_game"
       # Heap size: ~400 on Starter (512 MB), ~1536 on Standard (2 GB)
       - key: NODE_OPTIONS
         value: --max-old-space-size=400

@@ -37,7 +37,7 @@ const tgScript = (user, startParam) => `
   const cg = http.createServer((req, res) => { res.writeHead(200); res.end(JSON.stringify({ notcoin: { usd: 0.004, usd_24h_change: 12.3 }, 'dogs-2': { usd: 0.0005, usd_24h_change: -4.1 } })); });
   await new Promise(r => cg.listen(0, r)); process.env.MARKET_API = `http://127.0.0.1:${cg.address().port}`;
   process.env.TL_EVENT = 'none';
-  Object.assign(process.env, { LB_CACHE_MS: '0', SAVE_MS: '1000', REF_MIN_AGE_MS: '1', RAID_MIN_MS: '0', BOT_TOKEN: TOKEN, WEBAPP_URL: 'https://x', DATA_FILE: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tle-')), 'db.json'), TELEGRAM_API: `http://127.0.0.1:${fake.address().port}` });
+  Object.assign(process.env, { LB_CACHE_MS: '0', SAVE_MS: '1000', GAME_CHANNEL: 'off', REF_MIN_AGE_MS: '1', RAID_MIN_MS: '0', BOT_TOKEN: TOKEN, WEBAPP_URL: 'https://x', DATA_FILE: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tle-')), 'db.json'), TELEGRAM_API: `http://127.0.0.1:${fake.address().port}` });
   const srv = require('../server/server.js');
   srv.server.listen(0); await new Promise(r => srv.server.once('listening', r));
   await srv.setupBot(); srv.pollLoop(); await srv.market.refresh();
