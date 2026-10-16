@@ -252,6 +252,28 @@ function createBattle(team, levels, idx, seed = (Math.random() * 2 ** 32) >>> 0,
   B.enemies = stageEnemies(idx).map((e, i) => makeUnit(B, 'enemy', { ...e, row: rowOf(i) }));
   return B;
 }
+// World boss (raid): one giant boss shared by every player. It never falls inside a fight — the fight lasts
+// RAID_TIME seconds (or until your deck is down) and what counts is the damage dealt. Its attack is set from your
+// own deck (so every player meets a fair fight) and keeps growing, so stronger decks last longer and hit harder.
+const RAID_TIME = 45;
+function createRaid(team, levels, seed, raid, faction = null, market = null, perks = null) {
+  const B = newBattle(seed, false);
+  B.raid = { dmg: 0 }; B.idx = -1;
+  B.heroes = teamUnits(B, 'hero', team, levels, faction, market, perks);
+  const h = HERO_BY_ID[raid.boss], avgHp = B.heroes.reduce((a, u) => a + u.maxHp, 0) / Math.max(1, B.heroes.length);
+  const atk = avgHp * 0.11 * (1 + 0.04 * ((raid.level || 1) - 1));
+  const u = makeUnit(B, 'enemy', { id: raid.boss, name: h.name, role: h.role, boss: true, weak: raid.weak || null, hp: 1e12, atk, spd: 1.4, row: 'front' });
+  u.raidBoss = true; u.baseAtk = atk;
+  B.enemies = [u];
+  return B;
+}
+function replayRaid(team, levels, seed, inputs, raid, faction = null, market = null, perks = null) {
+  const B = createRaid(team, levels, seed, raid, faction, market, perks);
+  const q = (Array.isArray(inputs) ? inputs : []).filter(x => Array.isArray(x) && Number.isInteger(x[0]) && Number.isInteger(x[1])).sort((a, b) => a[0] - b[0]);
+  let i = 0;
+  while (!B.over) { while (i < q.length && q[i][0] <= B.tick) applyInput(B, q[i++][1]); step(B); B.events.length = 0; }
+  return { dmg: Math.round(B.raid.dmg), time: +B.t.toFixed(2) };
+}
 // PvP: side A plays as 'hero', side B as 'enemy'; both sides use the same (hero) rules.
 function createPvpBattle(teamA, levelsA, teamB, levelsB, seed, factionA = null, factionB = null, market = null, perksA = null, perksB = null) {
   const B = newBattle(seed, true);
@@ -298,6 +320,7 @@ function damage(B, src, tgt, amount, opts = {}) {
   dmg = Math.max(1, Math.round(dmg * (0.92 + B.rng() * 0.16)));
   if (tgt.shield > 0) { const a = Math.min(tgt.shield, dmg); tgt.shield -= a; dmg -= a; if (dmg === 0) { B.events.push({ type: 'block', uid: tgt.uid }); return 0; } }
   tgt.hp -= dmg;
+  if (tgt.raidBoss && B.raid) B.raid.dmg += dmg;
   tgt.energy = Math.min(100, tgt.energy + (heroRules(B, tgt) ? 3 : 2));
   B.events.push({ type: 'dmg', uid: tgt.uid, amount: dmg, crit, poison: !!opts.poison });
   if (tgt.hp <= 0) { tgt.hp = 0; tgt.alive = false; B.events.push({ type: 'die', uid: tgt.uid }); }
@@ -414,6 +437,7 @@ function step(B) {
   B.tick++;
   B.t = B.tick * TICK;
   const dt = TICK;
+  if (B.raid) for (const e of B.enemies) if (e.raidBoss) e.atk = e.baseAtk * (1 + B.t / 12);
   if (!B.enraged && B.t >= ENRAGE_AT) { B.enraged = true; B.events.push({ type: 'enrage' }); }
   for (const u of [...B.heroes, ...B.enemies]) {
     if (!u.alive) continue;
@@ -434,6 +458,7 @@ function step(B) {
   }
   for (const side of ['hero', 'enemy']) if (B.autoBy[side] && B.ult[side] >= 100) castUlt(B, side);
   checkEnd(B);
+  if (B.raid && !B.over && B.t >= RAID_TIME) { B.over = 'win'; B.timeout = true; }
   // Time's up: the side with more HP left (as a share of its total) wins.
   if (B.tick >= MAX_TICKS && !B.over) {
     const share = arr => arr.reduce((a, u) => a + u.hp, 0) / arr.reduce((a, u) => a + u.maxHp, 0);
@@ -460,5 +485,5 @@ function replayStage(team, levels, idx, seed, inputs, faction = null, market = n
 
 if (typeof module !== 'undefined') {
   module.exports = { RARITY, ROLES, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, fusionStartLevel, TEAM_MAX_FUSIONS, TEAM_MAX_TRIOS, teamError, duosWithin, ENRAGE_AT, LEGACY_FUSION_IDS, HERO_BY_ID, STARTERS, WORLDS, TOTAL_STAGES, STAGES_PER_WORLD, MAX_LEVEL, COIN_BONUS, TICK,
-    SYNERGIES, deckSynergies, STAGE_K, CALIBRATED_FROM, FACTION_BONUS, FACTION_FUSION_BONUS, factionMult, marketMult, BOSS_WEAK, WEAK_BY, heroStats, upgradeCost, stageReward, stageEnemies, createBattle, createPvpBattle, step, castSkill, castUlt, applyInput, replayStage };
+    RAID_TIME, createRaid, replayRaid, SYNERGIES, deckSynergies, STAGE_K, CALIBRATED_FROM, FACTION_BONUS, FACTION_FUSION_BONUS, factionMult, marketMult, BOSS_WEAK, WEAK_BY, heroStats, upgradeCost, stageReward, stageEnemies, createBattle, createPvpBattle, step, castSkill, castUlt, applyInput, replayStage };
 }

@@ -73,6 +73,7 @@ const Online = (() => {
   }
   const clan = (op, body) => call('clan/' + op, body || {});
   const war = (op, body) => call('war/' + op, body || {});
+  const api = (path, body) => call(path, body || {});
   const uploadShare = image => call('share', { image });
   const setNotify = on => call('notify', { on });
   const duelLink = code => (state.bot ? `https://t.me/${state.bot}?startapp=duel_${code}` : null);
@@ -111,5 +112,5 @@ const Online = (() => {
   }
 
   return { state, ready, markReady: () => markReady(), tg, user, startParam, connect, hello, cloudLoad, cloudSave, submitScore, leaderboard, claim, buy,
-    inviteLink, share, loadProfile, act, pvp, clan, war, refreshMarket, uploadShare, setNotify, stream, duelLink, shareDuel, shareClan };
+    api, inviteLink, share, loadProfile, act, pvp, clan, war, refreshMarket, uploadShare, setNotify, stream, duelLink, shareDuel, shareClan };
 })();

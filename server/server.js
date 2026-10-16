@@ -21,6 +21,12 @@ const createNotifier = require('./notify.js');
 const createMarket = require('./market.js');
 const createAnalytics = require('./analytics.js');
 const createRunway = require('./runway.js');
+const createBackup = require('./backup.js');
+const createReferral = require('./referral.js');
+const createRaid = require('./raid.js');
+const createLeague = require('./league.js');
+const createPartners = require('./partners.js');
+const createWallet = require('./wallet.js');
 const BOT_TEXT = require('./bot-text.js');
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
@@ -38,7 +44,6 @@ const STATIC_DIR = path.join(__dirname, '..', 'src');
 const ADMIN_IDS = new Set(String(process.env.ADMIN_IDS || '').split(/[\s,]+/).filter(Boolean));
 const ART_DIR = process.env.ART_DIR || path.join(path.dirname(DATA_FILE), 'art');
 const E = require('../src/engine.js');
-const REF_INVITER = 500, REF_NEWCOMER = 300;
 
 // Coin packs sold for Telegram Stars (currency XTR). Server is the source of truth for prices.
 // Gem packs sold for Telegram Stars (currency XTR). Coins come from gems via the in-game exchange.
@@ -51,7 +56,9 @@ const PACKS = [
 const OLD_PACKS = [{ id: 'coins_s', coins: 3000, stars: 25 }, { id: 'coins_m', coins: 10000, stars: 75 }, { id: 'coins_l', coins: 30000, stars: 200 }];
 // The premium season pass is sold separately from the gem packs.
 const PASS_PACK = { id: 'pass', stars: ECON.PASS.PRICE_STARS, pass: true };
-const findPack = id => PACKS.find(p => p.id === id) || OLD_PACKS.find(p => p.id === id) || (id === 'pass' ? PASS_PACK : null);
+// Card frames sold for Telegram Stars (cosmetic only).
+const COS_PACKS = Object.entries(ECON.COSMETICS).filter(([, c]) => c.stars).map(([k, c]) => ({ id: 'cos_' + k, stars: c.stars, cos: k }));
+const findPack = id => PACKS.find(p => p.id === id) || OLD_PACKS.find(p => p.id === id) || COS_PACKS.find(p => p.id === id) || (id === 'pass' ? PASS_PACK : null);
 
 // Bot texts: Persian for Telegram users with a Persian UI, English for everyone else.
 const TEXT = {
@@ -61,6 +68,7 @@ const TEXT = {
     paid: c => `✅ Payment successful! ${c.toLocaleString('en-US')} coins were added. Open the game to collect them.`,
     paidGems: g => `✅ Payment successful! ${g} 💎 gems were added to your account.`,
     paidPass: '✅ Payment successful! Your premium Season Pass is unlocked — open the game to claim the rewards.',
+    paidFrame: '✅ Payment successful! Your new card frame is unlocked — open the game to see it.',
     packTitle: c => `${c.toLocaleString('en-US')} coins`, packDesc: c => `${c.toLocaleString('en-US')} coins for Gram Legends`,
     cmd: 'Play Gram Legends',
     arena: e => e.result === 'win' ? `🏆 You won the arena duel vs ${e.opp}! +${e.pot.toLocaleString('en-US')} coins.`
@@ -72,6 +80,7 @@ const TEXT = {
     paid: c => `✅ پرداخت موفق! ${c.toLocaleString('fa-IR')} سکه به حسابت اضافه شد. بازی را باز کن تا دریافت کنی.`,
     paidGems: g => `✅ پرداخت موفق! ${g.toLocaleString('fa-IR')} جم 💎 به حسابت اضافه شد.`,
     paidPass: '✅ پرداخت موفق! پاس فصل ویژه‌ت فعال شد — وارد بازی شو و جایزه‌هات رو بگیر.',
+    paidFrame: '✅ پرداخت موفق! قاب جدید کارت‌هات باز شد — وارد بازی شو و ببینش.',
     packTitle: c => `${c.toLocaleString('fa-IR')} سکه`, packDesc: c => `${c.toLocaleString('fa-IR')} سکه برای بازی Gram Legends`,
     cmd: 'شروع بازی Gram Legends',
     arena: e => e.result === 'win' ? `🏆 دوئل آرنا را از ${e.opp} بردی! +${e.pot.toLocaleString('fa-IR')} سکه.`
@@ -326,6 +335,20 @@ async function tg(method, body) {
   return j.result;
 }
 
+// Upload a file (multipart) — used for database backups.
+async function tgFile(method, field, chatId, name, buf, extra = {}) {
+  const form = new FormData();
+  form.append('chat_id', String(chatId));
+  for (const [k, v] of Object.entries(extra)) form.append(k, String(v));
+  form.append(field, new Blob([buf]), name);
+  const r = await fetch(TG + method, { method: 'POST', body: form });
+  const j = await r.json();
+  if (!j.ok) throw new Error(`${method}: ${j.description || r.status}`);
+  return j.result;
+}
+const backup = createBackup({ db, dataFile: DATA_FILE, admins: () => ADMIN_IDS, logErr: (k, e) => logErr(k, e),
+  sendDocument: (chat, name, buf, caption) => tgFile('sendDocument', 'document', chat, name, buf, { caption }) });
+
 let BOT_USERNAME = null;
 async function handleUpdate(up) {
   if (up.pre_checkout_query) {
@@ -348,17 +371,25 @@ async function handleUpdate(up) {
     const u = userRec(m.from);
     if (String(u.id) !== uid) return;
     if (pack.pass) { if (u.profile) ECON.passOf(u.profile, Date.now()).prem = true; else u.pendingPass = ECON.seasonOf(Date.now()); u.passGift = true; }
+    else if (pack.cos) { if (u.profile) ECON.giveCosmetic(u.profile, pack.cos); else (u.pendingCos = u.pendingCos || []).push(pack.cos); }
     else credit(u, pack.coins || 0, pack.gems || 0);
     db.payments[chargeId] = { uid, pack: packId, stars: p.total_amount, at: Date.now() };
     analytics.payment(p.total_amount);
     persist();
     const L = tx(m.from.language_code);
-    await tg('sendMessage', { chat_id: m.chat.id, text: pack.pass ? ((BOT_TEXT[String(m.from.language_code || '').slice(0, 2)] || {}).paidPass || L.paidPass) : pack.gems ? L.paidGems(pack.gems) : L.paid(pack.coins),
+    await tg('sendMessage', { chat_id: m.chat.id, text: pack.cos ? L.paidFrame : pack.pass ? ((BOT_TEXT[String(m.from.language_code || '').slice(0, 2)] || {}).paidPass || L.paidPass) : pack.gems ? L.paidGems(pack.gems) : L.paid(pack.coins),
       reply_markup: { inline_keyboard: [[{ text: L.open, web_app: { url: WEBAPP_URL } }]] } });
     return;
   }
   if (typeof m.text === 'string' && /^\/gen\b/.test(m.text)) return handleGen(m);
   if (typeof m.text === 'string' && /^\/ally\b/.test(m.text)) return handleAlly(m);
+  if (typeof m.text === 'string' && /^\/quest\b/.test(m.text)) return partners.handle(m);
+  if (typeof m.text === 'string' && /^\/nft\b/.test(m.text)) return wallet.handle(m);
+  if (typeof m.text === 'string' && /^\/backup\b/.test(m.text)) {
+    if (!ADMIN_IDS.has(String(m.from.id))) return tg('sendMessage', { chat_id: m.chat.id, text: `Your Telegram ID is ${m.from.id}. Only admins (ADMIN_IDS) can get backups.` });
+    await flushDb();
+    return backup.run([m.chat.id]).catch(e => tg('sendMessage', { chat_id: m.chat.id, text: '⚠️ Backup failed: ' + e.message }));
+  }
   if (typeof m.text === 'string' && /^\/stats\b/.test(m.text)) {
     if (ADMIN_IDS.has(String(m.from.id))) await tg('sendMessage', { chat_id: m.chat.id, text: analytics.text() });
     else await tg('sendMessage', { chat_id: m.chat.id, text: `Your Telegram ID is ${m.from.id}. Only admins (ADMIN_IDS) can see /stats.` });
@@ -383,21 +414,16 @@ async function handleUpdate(up) {
   }
 }
 
-const REF_MIN_STAGES = 5;
-function payReferral(u) {
-  if (!u.refBy || u.refPaid || !u.profile || u.profile.cleared < REF_MIN_STAGES) return;
-  const inviter = db.users[u.refBy];
-  u.refPaid = true;
-  if (inviter) credit(inviter, REF_INVITER);
-}
+// Invites: tiers, the friend-coins bank and the Friends screen live in referral.js.
+const referral = createReferral({ db, persist, credit, profileOut, inviteLink: u => (BOT_USERNAME ? `https://t.me/${BOT_USERNAME}?startapp=ref_${u.id}` : null) });
 function applyReferral(u, startParam) {
   if (!startParam || !startParam.startsWith('ref_') || u.refBy) return false;
   const inviterId = startParam.slice(4);
   const inviter = db.users[inviterId];
   if (!inviter || inviterId === u.id) return false;
   if (u.created < Date.now() - 10 * 60e3 && u.profile && u.profile.cleared > 0) return false; // only fresh players count
-  // The newcomer's gift is immediate; the inviter is paid once the newcomer has really played (see payReferral).
-  u.refBy = inviterId; credit(u, REF_NEWCOMER);
+  // The newcomer's gift is immediate; the inviter is paid once the newcomer reaches world 2 (referral.check).
+  u.refBy = inviterId; credit(u, referral.NEWCOMER_COINS);
   inviter.refs++;
   persist();
   return true;
@@ -467,13 +493,23 @@ const war = createWar({ db, persist, weekKey: clans.weekKey, shareDir: SHARE_DIR
 const market = createMarket({ db, persist, api: (process.env.MARKET_API || 'https://api.coingecko.com/api/v3').replace(/\/$/, ''), logErr });
 // Clan and community-war points come from the same wins (and feed the community activity behind the market mood).
 // kind: 'stageFirst' | 'stage' | 'ai' | 'pvp'; info: { stage, vs }
-const CLAN_POINTS = { stageFirst: 2, ai: 1, pvp: 5 };
+const CLAN_POINTS = { stageFirst: 2, ai: 1, pvp: 5, raid: 2 };
 const onWin = (uid, kind, info = {}) => {
   if (CLAN_POINTS[kind]) clans.addPoints(uid, CLAN_POINTS[kind]);
   const got = war.onWin(uid, kind, info);
   const u = db.users[uid]; if (u && u.profile) market.addActivity(u.profile.faction, Math.max(1, got));
 };
-const arena = createArena({ db, persist, onPoints: (uid, pts, info = {}) => onWin(uid, info.kind || (pts >= 5 ? 'pvp' : 'ai'), info), market: battleMarket, perksExtra: p => { const t = war.tierFor(p.faction); return t ? { mascot: t * ECON.MASCOT_PER_TIER } : {}; }, notify: (uid, end) => {
+// World boss: fights use the same frozen boosts as stages (market moods, official alliances, set perks, mascot tier).
+const raid = createRaid({ db, persist, weekKey: clans.weekKey, credit, profileOut, onDamage: uid => onWin(uid, 'raid', {}),
+  ctxFor: u => {
+    const p = u.profile, all = battleMarket(), t = war.tierFor(p.faction);
+    const market = Object.fromEntries(Object.entries(all).filter(([id]) => p.team.some(x => x === id || (E.HERO_BY_ID[x].fusion && E.HERO_BY_ID[x].parts.includes(id)))));
+    return { market, perks: { ...ECON.perksOf(p), ...(t ? { mascot: t * ECON.MASCOT_PER_TIER } : {}) } };
+  } });
+const league = createLeague({ db, persist, profileOut });
+const wallet = createWallet({ db, persist, tg, admins: () => ADMIN_IDS, E });
+const partners = createPartners({ db, persist, tg, credit, profileOut, admins: () => ADMIN_IDS });
+const arena = createArena({ db, persist, league, onPoints: (uid, pts, info = {}) => onWin(uid, info.kind || (pts >= 5 ? 'pvp' : 'ai'), info), market: battleMarket, perksExtra: p => { const t = war.tierFor(p.faction); return t ? { mascot: t * ECON.MASCOT_PER_TIER } : {}; }, notify: (uid, end) => {
   const u = db.users[uid];
   const L = tx(u && u.lang);
   if (end.result === 'cancelled') return;
@@ -494,13 +530,15 @@ const routes = {
   // The server keeps each Telegram player's coins and heroes. First visit imports the offline save (clamped).
   'POST /api/profile': (body, u) => {
     if (!u.profile) { u.profile = ECON.importLocal(body.local, Date.now()); u.profile.coins += u.pending; u.profile.gems += u.pendingGems || 0; u.pending = 0; u.pendingGems = 0; }
+    if (u.pendingCos) { for (const c of u.pendingCos) ECON.giveCosmetic(u.profile, c); delete u.pendingCos; }
     if (u.pendingPass !== undefined) { if (u.pendingPass === ECON.seasonOf(Date.now())) ECON.passOf(u.profile, Date.now()).prem = true; delete u.pendingPass; }
     return { profile: profileOut(u), notify: !u.mute };
   },
   'POST /api/act': (body, u) => {
     if (!u.profile) throw Object.assign(new Error('no_profile'), { code: 400 });
     const result = ECON.act(u.profile, body.action, { now: Date.now(), rng, mint, market: market.moods(), community: { ...war.community(u.profile), allies: activeAllies() } });
-    payReferral(u);
+    referral.check(u);
+    if (body.action && body.action.type === 'stageEnd' && result && result.result === 'win') referral.onCoins(u, result.coins);
     if (body.action && body.action.type === 'stageEnd' && result) analytics.battle(result.result === 'win');
     if (body.action && body.action.type === 'stageEnd' && result && result.result === 'win') onWin(u.id, result.first ? 'stageFirst' : 'stage', { stage: result.stage });
     return { profile: profileOut(u), result };
@@ -511,11 +549,17 @@ const routes = {
   ...arena.routes,
   ...clans.routes,
   ...war.routes,
+  ...referral.routes,
+  ...raid.routes,
+  ...league.routes,
+  ...partners.routes,
+  ...wallet.routes,
   'POST /api/invoice': async (body, u) => {
-    const pack = body.pack === 'pass' ? PASS_PACK : PACKS.find(p => p.id === body.pack);
+    const pack = body.pack === 'pass' ? PASS_PACK : PACKS.find(p => p.id === body.pack) || COS_PACKS.find(p => p.id === body.pack);
     if (!pack) throw Object.assign(new Error('unknown pack'), { code: 400 });
     if (pack.pass && u.profile && ECON.passOf(u.profile, Date.now()).prem) throw Object.assign(new Error('claimed'), { code: 400 });
-    const title = pack.pass ? `Season Pass #${ECON.seasonOf(Date.now()) + 1}` : `${pack.gems} 💎`;
+    if (pack.cos && u.profile && u.profile.cos && u.profile.cos.own.includes(pack.cos)) throw Object.assign(new Error('claimed'), { code: 400 });
+    const title = pack.pass ? `Season Pass #${ECON.seasonOf(Date.now()) + 1}` : pack.cos ? `${ECON.COSMETICS[pack.cos].ico} Card frame` : `${pack.gems} 💎`;
     const link = await tg('createInvoiceLink', {
       title: `Gram Legends · ${title}`, description: `Gram Legends · ${title}`,
       payload: `${u.id}:${pack.id}`, currency: 'XTR', prices: [{ label: title, amount: pack.stars }],
@@ -529,6 +573,12 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') return send(res, 204, {});
   const key = `${req.method} ${url.pathname}`;
   if (key === 'GET /api/pvp/stream') return arena.stream(req, res, url.searchParams.get('ticket'));
+  // TON Connect manifest (the wallet shows this name and icon when linking).
+  if (key === 'GET /tonconnect-manifest.json') {
+    const origin = (WEBAPP_URL && new URL(WEBAPP_URL).origin) || `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}`;
+    const self = `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}`;
+    return send(res, 200, { url: origin, name: 'Gram Legends', iconUrl: `${self}/images/icon-192.png` });
+  }
   const shareM = req.method === 'GET' && /^\/share\/(\d+)\.jpg$/.exec(url.pathname);
   if (shareM) {
     const f = path.join(SHARE_DIR, `${shareM[1]}.jpg`);
@@ -584,4 +634,4 @@ async function start() {
 }
 
 if (require.main === module) start();
-module.exports = { analytics, market, notifier, war, flushDb, server, verifyInitData, handleUpdate, pollLoop, setupBot, db, PACKS, stop: () => { polling = false; arena.stop(); notifier.stop(); market.stop(); server.close(); } };
+module.exports = { analytics, market, notifier, war, flushDb, server, verifyInitData, handleUpdate, pollLoop, setupBot, db, PACKS, stop: () => { polling = false; backup.stop(); arena.stop(); notifier.stop(); market.stop(); server.close(); } };

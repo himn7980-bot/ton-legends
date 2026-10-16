@@ -114,6 +114,7 @@ function renderQuests() {
       <p class="muted">${t.idleNote(n(AFK_CAP_H))}</p>
       <div class="bar xp"><i style="width:${afkH / AFK_CAP_H * 100}%"></i></div>
       <button class="btn wide" id="afk" style="margin-top:10px" ${afk > 0 ? '' : 'disabled'}>${t.claim(n(afk))}</button></div>
+    <div id="pq-box"></div>
     <div class="h2">${t.todayQuests}</div>
     ${DAILY_QUESTS.map(q => questRow('dq-' + q.id, '🎯', t.dq[q.id], Math.min(q.goal, S.dq.p[q.id] || 0), q.goal, dqReward(q), !!S.dq.c[q.id])).join('')}
     <div class="h2">${t.achievements}</div>
@@ -122,6 +123,7 @@ function renderQuests() {
       return questRow('ach-' + a.id, a.icon, t.ach[a.id](n(goal)) + (a.tiers.length > 1 ? ` <span class="muted">(${n(Math.min(tier + 1, a.tiers.length))}/${n(a.tiers.length)})</span>` : ''),
         Math.min(goal, a.stat(S)), goal, a.r[Math.min(tier, a.r.length - 1)], done, ECON.achGems(Math.min(tier, a.r.length - 1)));
     }).join('')}`;
+  partnerQuests($('#pq-box'));
   $('#daily').onclick = claimDaily;
   bindRookie();
   $('#to-pass').onclick = () => show('pass');
@@ -156,10 +158,13 @@ function renderRank() {
     ${Online.state.profile ? `<div class="panel row clan-entry" id="to-clan"><div class="t">${t.clanTitle}</div><button class="btn">${t.openClan} →</button></div>` : ''}
     ${Online.inviteLink() ? `<div class="panel"><div class="t">${t.invite}</div>
       <p class="muted">${t.inviteNote}</p>
-      <button class="btn wide" id="invite">${t.sendInvite}</button></div>` : ''}
+      <button class="btn wide" id="invite">${t.sendInvite}</button><button class="btn wide ghost" id="to-friends" style="margin-top:8px">👥 ${t.friendsTitle} →</button></div>` : ''}
+    ${Online.state.profile ? `<div class="panel row clan-entry" id="to-wallet"><div class="t">💠 ${t.walletTitle}</div><button class="btn">${t.openClan} →</button></div>` : ''}
     <div class="h2">${t.leaderboard}</div>
     <div id="board">${Online.state.server ? `<p class="muted center">${t.loading}</p>` : `<div class="panel center muted">${t.boardOffline}</div>`}</div>`;
   if ($('#invite')) $('#invite').onclick = () => Online.share(t.inviteText);
+  if ($('#to-friends')) $('#to-friends').onclick = () => show('friends');
+  if ($('#to-wallet')) $('#to-wallet').onclick = walletModal;
   if ($('#to-clan')) $('#to-clan').onclick = () => show('clan');
   $('#to-war2').onclick = () => show('war');
   if (Online.state.server) Online.leaderboard().then(d => {
@@ -186,6 +191,7 @@ function settingsModal() {
     <div class="setting"><span>${t.guide}</span><button class="tag" id="s-guide">${t.show}</button></div>
     <div class="setting"><span>${t.sfx}</span><button class="toggle ${S.sfx ? 'on' : ''}" id="t-sfx"></button></div>
     <div class="setting"><span>${t.music}</span><button class="toggle ${S.music ? 'on' : ''}" id="t-music"></button></div>
+    <div class="setting"><span>${t.fxTitle}</span><button class="tag" id="s-fx">${t.fxLevels[S.fx ?? 2]}</button></div>
     <div class="setting"><span>${t.howTo}</span><button class="tag" id="s-help">${t.show}</button></div>
     ${Online.state.profile ? `<div class="setting"><span>${t.notifications}</span><button class="toggle ${Online.state.notify ? 'on' : ''}" id="t-notify"></button></div>` : ''}
     ${Online.state.profile ? '' : `<div class="setting"><span>${t.reset}</span><button class="tag" id="s-reset" style="color:var(--red)">${t.erase}</button></div>`}
@@ -197,6 +203,7 @@ function settingsModal() {
     q('#t-sfx').onclick = e => { S.sfx = !S.sfx; save(); Sound.set({ sfx: S.sfx }); e.target.classList.toggle('on', S.sfx); };
     q('#t-music').onclick = e => { S.music = !S.music; save(); Sound.set({ music: S.music }); e.target.classList.toggle('on', S.music); };
     q('#s-help').onclick = help;
+    q('#s-fx').onclick = e => { S.fx = ((S.fx ?? 2) + 2) % 3; save(); e.target.textContent = t.fxLevels[S.fx]; };
     if (q('#t-notify')) q('#t-notify').onclick = async e => {
       const on = !Online.state.notify; e.target.classList.toggle('on', on);
       try { Online.state.notify = (await Online.setNotify(on)).on; } catch (err) { e.target.classList.toggle('on', !on); toast(errText(err)); }

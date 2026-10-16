@@ -26,6 +26,7 @@ function renderArena() {
       ${!isOpen('ai') ? lockNote('ai') : `<div class="ai-levels">${Object.keys(ECON.AI_LEVELS).map(lv => { const r = ECON.aiReward(S, lv);
         return `<button class="btn ${lv === 'hard' ? 'gem' : lv === 'normal' ? 'gold' : ''}" data-ai="${lv}" ${S.team.length ? '' : 'disabled'}>${t.aiLv[lv]}<small>🪙 ${n(r.coins)}${r.gems ? ` +💎${n(r.gems)}` : ''}</small></button>`; }).join('')}</div>`}</div>
     <div class="h2">${t.arenaTitle}</div>
+    <div id="lg-box"></div>
     <p class="muted">${t.arenaNote} <b style="color:var(--gem)">+💎 ${n(2)}</b></p>
     <div class="panel">
       <div class="row"><div class="t">${t.stake}</div><span class="tag gold">${t.pot(n(S.stake * 2))}</span></div>
@@ -39,6 +40,7 @@ function renderArena() {
       <div class="code-row"><input id="pv-code" maxlength="6" placeholder="${t.codePh}" autocomplete="off" autocapitalize="characters"><button class="btn" id="pv-join">${t.join}</button></div></div>
     <p class="muted center">${t.record(n(S.stats.pvpWins || 0), n(S.stats.pvpLosses || 0))}</p>
     <p class="muted small">${t.arenaRules}</p>`;
+  leaguePanel($('#lg-box'));
   document.querySelectorAll('[data-stake]').forEach(b => b.onclick = () => { S.stake = +b.dataset.stake; save(); renderArena(); });
   $('#pv-team').onclick = () => show('heroes');
   document.querySelectorAll('[data-ai]').forEach(b => b.onclick = () => startAi(b.dataset.ai));

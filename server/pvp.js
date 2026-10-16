@@ -18,7 +18,7 @@ const AI_NAMES = ['Neon Ronin', 'Frost Byte', 'Crypto Kraken', 'Shadow Bot', 'Lu
 
 const EMOTES = 6; // 😂 🔥 😱 👏 🤝 + the sender's community mascot
 const winGems = () => PVP_WIN_GEMS * (ECON.eventOf(Date.now()) === 'arena' ? ECON.EVENT_FX.arena : 1); // Friday: arena day
-module.exports = function createArena({ db, persist, notify = () => {}, onPoints = () => {}, market = () => null, perksExtra = () => ({}) }) {
+module.exports = function createArena({ db, persist, notify = () => {}, onPoints = () => {}, market = () => null, perksExtra = () => ({}), league = null }) {
   const tickets = new Map();   // ticket id (secret) -> ticket
   const queues = new Map();    // stake -> waiting tickets
   const rooms = new Map();     // invite code -> waiting host ticket
@@ -50,7 +50,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
     if (p.coins < stake) fail('no_coins');
     p.coins -= stake;
     const t = { id: rid(16), uid: u.id, name: u.name, stake, mode, team: [...p.team], faction: p.faction || null, perks: { ...ECON.perksOf(p), ...perksExtra(p) },
-      levels: Object.fromEntries(p.team.map(id => [id, p.owned[id]])), power: Math.round(ECON.teamPower(p)),
+      levels: Object.fromEntries(p.team.map(id => [id, p.owned[id]])), power: Math.round(ECON.teamPower(p)), rating: league ? league.ratingOf(u.id) : 0,
       status: 'waiting', client: null, auto: false, created: now(), lastSeen: now() };
     db.escrow[t.id] = { uid: u.id, stake };
     tickets.set(t.id, t);
@@ -121,6 +121,8 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
     const winner = m.B.over === 'win' ? m.a : m.B.over === 'lose' ? m.b : null;
     if (m.ai) return finishAi(m, winner);
     const pot = m.stake * 2;
+    // Ranked: quick-match duels move both players' league rating.
+    const ranked = league && m.a.mode === 'queue' && m.b.mode === 'queue' ? league.result(m.a.uid, m.b.uid, winner === m.a ? 1 : winner === m.b ? 0 : 0.5) : {};
     for (const t of [m.a, m.b]) {
       const u = db.users[t.uid], p = u && u.profile;
       delete db.escrow[t.id];
@@ -133,7 +135,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
       }
       else { result = 'lose'; if (p) p.stats.pvpLosses = (p.stats.pvpLosses || 0) + 1; }
       t.status = 'done';
-      t.end = { result, stake: m.stake, pot, gemsWon: result === 'win' ? winGems() : 0, coins: p ? p.coins : 0, gems: p ? p.gems : 0, opp: (t === m.a ? m.b : m.a).name };
+      t.end = { result, stake: m.stake, pot, gemsWon: result === 'win' ? winGems() : 0, coins: p ? p.coins : 0, gems: p ? p.gems : 0, opp: (t === m.a ? m.b : m.a).name, league: ranked[t.uid] || null };
       send(t, 'end', t.end);
       if (!t.client) notify(t.uid, t.end);
     }
@@ -192,7 +194,9 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
       const t = open(u, body.stake, 'queue');
       const q = (queues.get(t.stake) || []).filter(x => x.status === 'waiting' && x.uid !== u.id);
       if (q.length) {
-        const opp = q.reduce((best, x) => (Math.abs(x.power - t.power) < Math.abs(best.power - t.power) ? x : best), q[0]);
+        // Closest league rating first (then closest deck power).
+        const gap = x => Math.abs((x.rating || 0) - (t.rating || 0)) * 10 + Math.abs(x.power - t.power) / Math.max(1, t.power) * 100;
+        const opp = q.reduce((best, x) => (gap(x) < gap(best) ? x : best), q[0]);
         startMatch(opp, t);
       } else queues.set(t.stake, [...(queues.get(t.stake) || []), t]);
       return { ticket: t.id, coins: u.profile.coins };
@@ -253,7 +257,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
       if (!p.team.length) fail('bad_team');
       if (busyTicket(u.id)) fail('busy');
       const t = { id: rid(16), uid: u.id, name: u.name, stake: 0, mode: 'ai', team: [...p.team], faction: p.faction || null, perks: { ...ECON.perksOf(p), ...perksExtra(p) },
-        levels: Object.fromEntries(p.team.map(id => [id, p.owned[id]])), power: Math.round(ECON.teamPower(p)),
+        levels: Object.fromEntries(p.team.map(id => [id, p.owned[id]])), power: Math.round(ECON.teamPower(p)), rating: league ? league.ratingOf(u.id) : 0,
         status: 'waiting', client: null, auto: false, created: now(), lastSeen: now() };
       const ai = aiTeam(p, level);
       const bot = { id: rid(16), uid: null, ai: true, name: '🤖 ' + AI_NAMES[crypto.randomInt(AI_NAMES.length)], stake: 0, ...ai,

@@ -73,14 +73,18 @@ const Scene = (() => {
   function onTilt(e) { if (e.gamma == null) return; aim.x = Math.max(-1, Math.min(1, e.gamma / 30)); aim.y = Math.max(-1, Math.min(1, (e.beta - 45) / 30)); }
   function onMove(e) { if (!W) return; aim.x = (e.clientX / innerWidth - 0.5) * 1.6; aim.y = (e.clientY / innerHeight - 0.5) * 1.6; }
 
-  function start(canvas, key = 'galaxy', ch = 0) {
+  // level: 2 = full, 1 = lighter (fewer particles, cards stay still), 0 = off (plain background).
+  let level = 2;
+  function start(canvas, key = 'galaxy', ch = 0, lv = 2) {
     stop();
+    level = lv;
+    if (!level) return;
     cv = canvas; root = canvas.parentElement; ctx = cv.getContext('2d'); cfg = CFG[key] || CFG.galaxy; chapter = ch || 0;
     resize();
     const area = W * H / (390 * 760);
-    stars = Array.from({ length: Math.round(170 * area) }, () => ({ x: rnd(0, W), y: rnd(0, H), d: [0.25, 0.55, 1][Math.random() * 3 | 0], r: rnd(0.6, 1.9), ph: rnd(0, 6.28), sp: rnd(1, 3) }));
+    stars = Array.from({ length: Math.round(170 * area * (level < 2 ? 0.5 : 1)) }, () => ({ x: rnd(0, W), y: rnd(0, H), d: [0.25, 0.55, 1][Math.random() * 3 | 0], r: rnd(0.6, 1.9), ph: rnd(0, 6.28), sp: rnd(1, 3) }));
     const count = { bubbles: 46, crystals: 36, rain: 90, embers: 75, toxic: 42, galaxy: 340 }[cfg.kind];
-    parts = Array.from({ length: Math.round(count * (cfg.kind === 'galaxy' ? 1 : area) * (1 + chapter * 0.15)) }, () => spawn({}, true));
+    parts = Array.from({ length: Math.round(count * (cfg.kind === 'galaxy' ? 1 : area) * (1 + chapter * 0.15) * (level < 2 ? 0.45 : 1)) }, () => spawn({}, true));
     glints = Array.from({ length: 7 }, () => ({ x: rnd(0, W), y: rnd(0, H), t: rnd(0, 4), d: rnd(0.4, 1) }));
     bursts = []; shoot = null; time = 0; last = performance.now();
     addEventListener('deviceorientation', onTilt); addEventListener('pointermove', onMove); addEventListener('resize', resize);
@@ -200,7 +204,7 @@ const Scene = (() => {
 
     // Cards float and lean in 3D (and toward the tilt). Uses the individual translate/rotate properties so the
     // hit / cast animations (which use transform) still play on top.
-    if (root) root.querySelectorAll('.hcard').forEach((n, i) => {
+    if (root && level === 2) root.querySelectorAll('.hcard').forEach((n, i) => {
       if (n.classList.contains('dead')) { n.style.translate = ''; n.style.rotate = ''; return; }
       const ph = i * 1.7, rx = Math.sin(time * 0.9 + ph) * 5 - tilt.y * 7, ry = Math.cos(time * 0.7 + ph) * 6 + tilt.x * 9;
       const ang = Math.hypot(rx, ry);

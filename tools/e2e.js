@@ -223,6 +223,33 @@ const tgScript = (user, startParam) => `
   await p1.screenshot({ path: OUT + '/w9-map-owner.png' });
   console.log('✓ captain picked a battle cry, daily goal claimed, territory held and shown on the map');
 
+  // ---- friends, world boss, league, partner quests, featured + frames, wallet ----
+  await p1.evaluate(() => show('friends')); await p1.waitForSelector('.ref-tiers');
+  await p1.screenshot({ path: OUT + '/x1-friends.png', fullPage: true });
+  serverProfile(777).cleared = Math.max(serverProfile(777).cleared, 12);
+  await p1.evaluate(async () => { await syncProfile(); S.auto = true; S.speed = 3; save(); show('raid'); }); await p1.waitForSelector('#rd-go');
+  await p1.screenshot({ path: OUT + '/x2-raid.png', fullPage: true });
+  await p1.click('#rd-go'); await p1.waitForSelector('.raid-hud'); await p1.waitForTimeout(2500);
+  await p1.screenshot({ path: OUT + '/x3-raid-fight.png' });
+  await p1.waitForSelector('#rd-ok', { timeout: 40000 });
+  await p1.screenshot({ path: OUT + '/x4-raid-result.png' });
+  assert.ok(srv.db.raid.total['777'] > 0, 'boss damage recorded'); await p1.click('#rd-ok');
+  console.log('✓ world boss fight verified by the server:', srv.db.raid.total['777'], 'damage');
+  await p1.evaluate(() => show('arena')); await p1.waitForSelector('.league-panel');
+  await p1.click('.league-panel'); await p1.waitForSelector('.ref-tiers'); await p1.screenshot({ path: OUT + '/x5-league.png' }); await p1.click('#m-close');
+  srv.db.partners.push({ id: 9, title: 'Join the DOGS channel', url: 'https://t.me/dogs_community', chat: null, gems: 15, coins: 0, until: Date.now() + 864e5, at: Date.now() });
+  await p1.evaluate(() => show('quests')); await p1.waitForSelector('.pq');
+  await p1.screenshot({ path: OUT + '/x6-partner.png' });
+  serverProfile(777).gems += 300;
+  await p1.evaluate(async () => { await syncProfile(); show('chest'); }); await p1.waitForSelector('.featured');
+  await p1.click('[data-frame=neon]'); await p1.waitForTimeout(500);
+  assert.equal(serverProfile(777).cos.on, 'neon', 'frame bought with gems');
+  await p1.evaluate(() => document.querySelector('.frames-shop').scrollIntoView()); await p1.screenshot({ path: OUT + '/x7-frames.png' });
+  await p1.evaluate(() => { show('heroes'); }); await p1.waitForSelector('.card.skin-neon');
+  await p1.evaluate(() => walletModal()); await p1.waitForSelector('#w-on');
+  await p1.screenshot({ path: OUT + '/x8-wallet.png' }); await p1.click('#m-close');
+  console.log('✓ friends, league panel, partner quest, featured hero, card frame, wallet screen');
+
   // ---- Telegram BackButton still drives navigation ----
   await p2.click('[data-tab=heroes]'); await p2.waitForTimeout(150);
   await p2.evaluate(() => window.__bbcb()); await p2.waitForTimeout(150);

@@ -15,10 +15,10 @@ const fake = http.createServer((req, res) => {
   req.on('end', () => {
     if (req.url.includes('/file/bot')) { res.writeHead(200, { 'Content-Type': 'application/octet-stream' }); return res.end('IMG:' + req.url.split('/').pop()); }
     const method = req.url.split('/').pop();
-    const data = body ? JSON.parse(body) : {};
+    const data = body && body[0] === '{' ? JSON.parse(body) : body ? { multipart: body.length, head: body.slice(0, 400) } : {};
     calls.push({ method, data });
     const out = { getMe: { username: 'TonLegendsTestBot' }, createInvoiceLink: 'https://t.me/$invoice-test', getUpdates: queue.splice(0),
-      getFile: { file_path: 'photos/' + (data.file_id || 'x') + '.jpg' } }[method] ?? true;
+      getFile: { file_path: 'photos/' + (data.file_id || 'x') + '.jpg' }, getChatMember: { status: data.user_id === 222 ? 'left' : data.user_id ? 'member' : 'administrator' } }[method] ?? true;
     setTimeout(() => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, result: out })); }, method === 'getUpdates' && !out.length ? 200 : 0);
   });
 });
@@ -130,12 +130,25 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   await srv.flushDb();
   assert.ok(JSON.parse(fs.readFileSync(dataFile, 'utf8')).payments.ch1, 'persisted to disk');
-  // referral payout once Bob has cleared 5 stages
-  srv.db.users['222'].profile.cleared = 4;
-  await post('/api/act', { initData: initData(bob), action: { type: 'stageStart', stage: 4 } });
+  // referral payout once Bob reaches world 2 (stage 10); Alice also banks 10% of Bob's stage coins
+  const bobCleared = srv.db.users['222'].profile.cleared;
+  srv.db.users['222'].profile.cleared = 9;
+  await post('/api/act', { initData: initData(bob), action: { type: 'stageStart', stage: 9 } });
   srv.db.users['222'].profile.pending.levels = { pinkbull: 100, egor: 100, gramcat: 100, memegram: 100, babyshark: 100 };
   r = await post('/api/act', { initData: initData(bob), action: { type: 'stageEnd', inputs: [[0, -1]] } }); assert.equal(r.body.result.result, 'win');
-  r = await post('/api/claim', { initData: initData(alice) }); assert.equal(r.body.coins, 500, 'inviter paid after 5 stages');
+  const bobWon = r.body.result.coins;
+  r = await post('/api/claim', { initData: initData(alice) }); assert.equal(r.body.coins, 500, 'inviter paid at world 2');
+  r = await post('/api/ref/me', { initData: initData(alice) });
+  assert.equal(r.body.ref.active, 1); assert.equal(r.body.ref.invited, 1); assert.equal(r.body.ref.bank, Math.round(bobWon * 0.1), 'friend coins banked');
+  assert.equal(r.body.ref.friends[0].name, 'Bob <script>'); assert.ok(r.body.ref.tiers[0].done);
+  r = await post('/api/ref/claim', { initData: initData(alice), tier: 3 }); assert.equal(r.body.error, 'not_ready');
+  const ag0 = srv.db.users['111'].profile.gems;
+  r = await post('/api/ref/claim', { initData: initData(alice), tier: 1 }); assert.equal(r.body.gems, 10); assert.equal(r.body.profile.gems, ag0 + 10);
+  r = await post('/api/ref/claim', { initData: initData(alice), tier: 1 }); assert.equal(r.body.error, 'claimed');
+  const ac0 = srv.db.users['111'].profile.coins;
+  r = await post('/api/ref/claim', { initData: initData(alice), bank: true }); assert.equal(r.body.profile.coins, ac0 + Math.round(bobWon * 0.1));
+  srv.db.users['222'].profile.cleared = Math.max(bobCleared, 10);
+  console.log('   referral: paid at world 2, tier gems, 10% friend-coins bank');
   r = await post('/api/act', { initData: initData(alice), action: { type: 'stageStart', stage: 0 } });
   r = await post('/api/act', { initData: initData(alice), action: { type: 'stageEnd', inputs: [[0, -1]] } });
   assert.equal(r.body.result.first, false); assert.ok(r.body.result.coins < 100, 'replay pays half');
@@ -265,6 +278,18 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   console.log('   quick match:', ed.data.result, 'for Dan; Carol left early and was notified by the bot:',
     calls.some(c => c.method === 'sendMessage' && c.data.chat_id === 555));
   assert.equal(Object.keys(srv.db.escrow).length, 0, 'no stakes left in escrow');
+  // league: the quick match moved both ratings (equal and opposite), and is listed in the league
+  if (ed.data.result !== 'draw') {
+    assert.ok(ed.data.league && ed.data.league.delta !== 0, JSON.stringify(ed.data));
+    r = await post('/api/league/me', { initData: initData(dan) }); assert.equal(r.body.league.r, 1000 + ed.data.league.delta); assert.equal(r.body.league.w + r.body.league.l, 1);
+    r = await post('/api/league/me', { initData: initData(carol) }); assert.equal(r.body.league.r, 1000 - ed.data.league.delta); assert.equal(r.body.league.top.length, 2);
+  }
+  // season over: best tier pays next season, ratings pulled halfway back
+  srv.db.users['666'].league.r = 1700; srv.db.users['666'].league.best = 'legend'; srv.db.users['666'].league.s -= 1;
+  r = await post('/api/league/me', { initData: initData(dan) }); assert.equal(r.body.league.r, 1350); assert.equal(r.body.league.prev.best, 'legend');
+  r = await post('/api/league/claim', { initData: initData(dan) }); assert.equal(r.body.gems, 250); assert.ok(r.body.profile.cos.own.includes('legend'));
+  r = await post('/api/league/claim', { initData: initData(dan) }); assert.equal(r.body.error, 'not_ready');
+  console.log('   league: Elo from quick matches, season reset, Legend reward + frame');
 
   // ---------- AI rival: no stake, daily reward ----------
   srv.db.users['555'].profile.cleared = 10;
@@ -506,6 +531,70 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert.ok(st.some(m => m.chat_id === 111 && /Gram Legends — stats/.test(m.text) && /stuck at: .*stage 12/.test(m.text)), JSON.stringify(st));
   assert.ok(st.some(m => m.chat_id === 222 && /Only admins/.test(m.text)));
   console.log('   analytics: daily counters, retention, funnel, quit stages; /stats only for admins');
+
+  // ---------- partner quests (admin /quest), card frames, backups, wallet + NFT requests ----------
+  const m0 = calls.length;
+  queue.push({ update_id: 9201, message: { chat: { id: 111 }, from: alice, text: '/quest add @notcoin_ch 20 7 Join the Notcoin channel' } });
+  queue.push({ update_id: 9202, message: { chat: { id: 111 }, from: alice, text: '/quest add https://t.me/somegamebot 15 3 Play Some Bot' } });
+  queue.push({ update_id: 9203, message: { chat: { id: 222 }, from: bob, text: '/quest list' } });
+  await sleep(1300);
+  assert.ok(calls.slice(m0).some(c => c.method === 'sendMessage' && /Quest #1 added/.test(c.data.text)), 'verified quest added');
+  assert.ok(calls.slice(m0).some(c => c.method === 'sendMessage' && c.data.chat_id === 222 && /Only admins/.test(c.data.text)));
+  r = await post('/api/partners/list', { initData: initData(alice) }); assert.equal(r.body.quests.length, 2); assert.equal(r.body.quests[0].verify, true);
+  const pg0 = srv.db.users['111'].profile.gems;
+  r = await post('/api/partners/claim', { initData: initData(alice), id: 1 }); assert.equal(r.body.gems, 20, 'member of the channel'); assert.equal(r.body.profile.gems, pg0 + 20);
+  r = await post('/api/partners/claim', { initData: initData(alice), id: 1 }); assert.equal(r.body.error, 'claimed');
+  r = await post('/api/partners/claim', { initData: initData(bob), id: 1 }); assert.equal(r.body.error, 'not_member');
+  r = await post('/api/partners/claim', { initData: initData(alice), id: 2 }); assert.equal(r.body.error, 'not_ready', 'open the link first');
+  await post('/api/partners/open', { initData: initData(alice), id: 2 }); srv.db.users['111'].pq[2].opened -= 10000;
+  r = await post('/api/partners/claim', { initData: initData(alice), id: 2 }); assert.equal(r.body.gems, 15);
+  // frames: gems frame bought in game, Stars frame through an invoice + payment
+  srv.db.users['111'].profile.gems += 300;
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'cosmetic', id: 'neon' } }); assert.equal(r.body.profile.cos.on, 'neon');
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'cosmetic', id: 'gold' } }); assert.equal(r.body.error, 'locked', 'Stars frames are bought with Stars');
+  r = await post('/api/invoice', { initData: initData(alice), pack: 'cos_gold' }); assert.ok(r.body.link);
+  queue.push({ update_id: 9204, message: { chat: { id: 111 }, from: alice, successful_payment: { telegram_payment_charge_id: 'chCos', total_amount: 150, invoice_payload: '111:cos_gold' } } });
+  await sleep(900);
+  assert.ok(srv.db.users['111'].profile.cos.own.includes('gold'));
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'cosmetic', id: 'gold' } }); assert.equal(r.body.profile.cos.on, 'gold');
+  r = await post('/api/invoice', { initData: initData(alice), pack: 'cos_gold' }); assert.equal(r.body.error, 'claimed');
+  // backup on demand: a gzipped database sent as a document
+  const bk0 = calls.length;
+  queue.push({ update_id: 9205, message: { chat: { id: 111 }, from: alice, text: '/backup' } });
+  await sleep(1300);
+  const doc = calls.slice(bk0).find(c => c.method === 'sendDocument');
+  assert.ok(doc && doc.data.multipart > 100 && /gram-legends-.*\.json\.gz/.test(doc.data.head), 'backup document sent');
+  // wallet + NFT request for an owned numbered alliance card
+  r = await post('/api/wallet', { initData: initData(alice), address: 'not-an-address' }); assert.equal(r.body.error, 'bad_address');
+  r = await post('/api/nft/request', { initData: initData(alice), id: 'f1' }); assert.equal(r.body.error, 'no_wallet');
+  r = await post('/api/wallet', { initData: initData(alice), address: '0:' + 'ab'.repeat(32) }); assert.equal(r.body.wallet, '0:' + 'ab'.repeat(32));
+  r = await post('/api/nft/request', { initData: initData(alice), id: 'f1' }); assert.equal(r.body.nft[0].status, 'requested'); assert.equal(r.body.nft[0].serial, 1);
+  r = await post('/api/nft/request', { initData: initData(alice), id: 'f1' }); assert.equal(r.body.error, 'claimed');
+  r = await fetch(base + '/tonconnect-manifest.json').then(x => x.json()); assert.equal(r.name, 'Gram Legends'); assert.equal(r.url, 'https://game.example');
+  console.log('   partner quests (verified + open-to-claim), frames (gems + Stars), /backup document, wallet + NFT request');
+
+  // ---------- world boss ----------
+  r = await post('/api/raid/me', { initData: initData(alice) });
+  assert.equal(r.body.raid.level, 1); assert.equal(r.body.raid.tries, 3); assert.ok(r.body.raid.max >= 400000);
+  r = await post('/api/raid/end', { initData: initData(alice), inputs: [] }); assert.equal(r.body.error, 'no_battle');
+  r = await post('/api/raid/start', { initData: initData(alice) }); assert.ok(r.body.seed >= 0); assert.equal(r.body.raid.level, 1);
+  const pts0 = srv.db.war.points[srv.db.users['111'].profile.faction] || 0;
+  r = await post('/api/raid/end', { initData: initData(alice), inputs: [[0, -1]] });
+  assert.ok(r.body.dmg > 0, JSON.stringify(r.body)); assert.ok(r.body.coins >= 100); assert.equal(r.body.raid.tries, 2);
+  assert.equal(r.body.raid.mine.week, r.body.dmg); assert.equal(r.body.raid.hp, r.body.raid.max - r.body.dmg);
+  assert.ok((srv.db.war.points[srv.db.users['111'].profile.faction] || 0) > pts0, 'boss damage earns war points');
+  // the final blow: boss nearly down → killed, gems for everyone who hit it, level 2 appears
+  srv.db.raid.hp = 1; const giftG = srv.db.users['111'].giftGems || 0;
+  r = await post('/api/raid/start', { initData: initData(alice) });
+  r = await post('/api/raid/end', { initData: initData(alice), inputs: [[0, -1]] });
+  assert.equal(r.body.killed.level, 1); assert.equal(r.body.raid.level, 2); assert.equal(r.body.raid.kills[0].name, 'Alice');
+  assert.equal((srv.db.users['111'].giftGems || 0) - giftG, 5 + 25 + 20, 'kill + top 3 + final blow');
+  r = await post('/api/raid/start', { initData: initData(alice) }); await post('/api/raid/end', { initData: initData(alice), inputs: [] });
+  r = await post('/api/raid/start', { initData: initData(alice) }); assert.equal(r.body.error, 'no_tries');
+  const gB = srv.db.users['111'].profile.gems;
+  r = await post('/api/raid/start', { initData: initData(alice), buy: true }); assert.equal(r.body.profile.gems, gB - 10, 'extra try for gems');
+  await post('/api/raid/end', { initData: initData(alice), inputs: [] });
+  console.log('   world boss: verified damage, shared HP, kill rewards, next level, daily tries');
 
   // ---------- alliance cards: leader, war points for every community on the card, official alliances ----------
   const ap = () => srv.db.users['111'].profile;

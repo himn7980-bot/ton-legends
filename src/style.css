@@ -638,3 +638,44 @@ img.mini.big { width: 84px; height: 84px; border-width: 3px; border-color: var(-
 .hcard.boss .orbit .ring { animation-duration: 3.4s; }
 .hcard.dead .orbit, .hcard.dead .sheen { display: none; }
 @media (prefers-reduced-motion: reduce) { .hcard .sheen::after, .hcard .orbit .ring { animation: none; } }
+#battle.fx-low .hcard .sheen, #battle.fx-off .hcard .sheen, #battle.fx-off .hcard .orbit { display: none; }
+#battle.fx-off #b-scene { display: none; }
+/* friends / world boss / league / partner quests / featured / frames */
+.ref-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; text-align: center; margin-bottom: 8px; }
+.ref-nums b { display: block; font-size: 20px; } .ref-nums small { color: var(--muted); font-size: 11px; }
+.ref-tiers { display: flex; flex-direction: column; gap: 6px; }
+.ref-tier { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--panel); border: 1px solid rgba(255,255,255,.08); }
+.ref-tier small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.ref-tier.ready { border-color: var(--gold); box-shadow: 0 0 12px -4px var(--gold); } .ref-tier.claimed { opacity: .55; }
+.ref-tier .btn { width: auto; padding: 8px 14px; }
+.lb-row { padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,.06); gap: 8px; } .lb-row:last-child { border: 0; } .lb-row.me { color: var(--gold); }
+.mini-av { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; object-position: top; vertical-align: middle; }
+.raid-banner { display: flex; align-items: center; gap: 10px; width: 100%; margin: 8px 0; padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(255,60,60,.5);
+  background: linear-gradient(90deg, rgba(150,10,30,.55), rgba(40,5,15,.6)); color: #fff; font: inherit; font-weight: 800; text-align: start; }
+.raid-banner span { flex: 1; } .raid-banner b { color: #ffb3b3; font-size: 13px; }
+.raid-hero { position: relative; display: grid; grid-template-columns: 120px 1fr; gap: 12px; align-items: center; padding: 12px; border-radius: 16px; margin-bottom: 10px;
+  background: radial-gradient(circle at 20% 30%, #5a0d1e, #160510 70%); border: 1px solid rgba(255,60,60,.45); box-shadow: 0 0 30px -10px #ff3b3b; }
+.raid-hero img { width: 120px; aspect-ratio: 3/4; object-fit: cover; object-position: top; border-radius: 12px; border: 2px solid #ff3b3b; box-shadow: 0 0 20px -4px #ff3b3b; }
+.raid-hp { grid-column: 1 / -1; position: relative; height: 22px; border-radius: 11px; background: rgba(0,0,0,.5); overflow: hidden; }
+.raid-hp i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #ff2a2a, #ff7a3a); }
+.raid-hp span { position: relative; display: block; text-align: center; font-size: 12px; font-weight: 800; line-height: 22px; }
+.raid-hud { display: flex; justify-content: center; gap: 22px; font-size: 16px; padding: 4px 0; text-shadow: 0 2px 6px #000; }
+.raid-hud b { font-size: 20px; color: #ffd85a; }
+.league-panel { cursor: pointer; border-color: rgba(255,200,60,.35); }
+.pq-btns { display: flex; gap: 6px; } .pq-btns .btn { width: auto; padding: 8px 12px; } .pq.done { opacity: .55; }
+.featured { display: flex; gap: 12px; align-items: center; border-color: var(--rc); box-shadow: 0 0 18px -6px var(--rc); }
+.featured img { width: 74px; aspect-ratio: 3/4; object-fit: cover; object-position: top; border-radius: 10px; border: 2px solid var(--rc); }
+.frames-shop { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.frame-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 6px; border-radius: 12px; background: var(--panel); border: 1px solid rgba(255,255,255,.1); color: var(--text); font: inherit; font-size: 12px; }
+.frame-item.on { border-color: var(--green); } .frame-item:disabled { opacity: .7; }
+.frame-item small { color: var(--muted); } .frame-item .fi-card { width: 64px; border-radius: 10px; padding: 2px; border: 2px solid #555; }
+.frame-item .fi-card img { width: 100%; aspect-ratio: 3/4; object-fit: cover; object-position: top; border-radius: 7px; display: block; }
+/* card frames (cosmetic) on your own cards */
+.skin-neon .fi-card, .card.skin-neon, .hcard.skin-neon { border-color: #c04dff !important; box-shadow: 0 0 0 1px #ff5ad1, 0 0 16px -2px #c04dff; }
+.skin-frost .fi-card, .card.skin-frost, .hcard.skin-frost { border-color: #9be7ff !important; box-shadow: 0 0 0 1px #e8fbff, 0 0 16px -2px #59cfff; }
+.skin-gold .fi-card, .card.skin-gold, .hcard.skin-gold { border-color: #ffd24a !important; box-shadow: 0 0 0 1px #fff3b0, 0 0 18px -2px #ffb300; }
+.skin-galaxy .fi-card, .card.skin-galaxy, .hcard.skin-galaxy { border-image: linear-gradient(135deg, #8a3cff, #ff4fd8, #2b8cff) 1; box-shadow: 0 0 18px -2px #8a3cff; }
+.skin-fire .fi-card, .card.skin-fire, .hcard.skin-fire { border-color: #ff6a1f !important; box-shadow: 0 0 0 1px #ffb347, 0 0 20px -2px #ff3d00; animation: fireglow 1.6s ease-in-out infinite alternate; }
+.skin-friend .fi-card, .card.skin-friend, .hcard.skin-friend { border-color: #3fd28a !important; box-shadow: 0 0 0 1px #a8ffd3, 0 0 14px -2px #3fd28a; }
+.skin-legend .fi-card, .card.skin-legend, .hcard.skin-legend { border-color: #ffd24a !important; box-shadow: 0 0 0 2px #7a3cff, 0 0 22px -2px #ffd24a; }
+@keyframes fireglow { to { box-shadow: 0 0 0 1px #ffd27a, 0 0 28px 0 #ff3d00; } }

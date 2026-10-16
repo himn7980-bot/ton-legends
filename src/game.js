@@ -189,7 +189,7 @@ function goBack() {
   if (BT) return BT.ended ? undefined : confirmLeave();
   if (S.tab !== 'map') show(PARENT_TAB[S.tab] || 'map');
 }
-const PARENT_TAB = { clan: 'rank', lab: 'heroes', pass: 'quests' };
+const PARENT_TAB = { clan: 'rank', lab: 'heroes', pass: 'quests', friends: 'rank', raid: 'map' };
 function syncNav() {
   const can = canGoBack(), w = Online.tg();
   const back = $('#back'); if (back) back.hidden = S.tab === 'map';
@@ -215,7 +215,7 @@ window.addEventListener('popstate', () => {
 function show(tab) {
   S.tab = tab; save();
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === (PARENT_TAB[tab] || tab)));
-  ({ map: renderMap, arena: renderArena, lab: renderLab, heroes: renderHeroes, chest: renderChest, quests: renderQuests, rank: renderRank, clan: renderClan, war: renderWar, pass: renderPass })[tab]();
+  ({ map: renderMap, arena: renderArena, lab: renderLab, heroes: renderHeroes, chest: renderChest, quests: renderQuests, rank: renderRank, clan: renderClan, war: renderWar, pass: renderPass, friends: () => renderFriends(), raid: () => renderRaid() })[tab]();
   updateBadge();
   window.scrollTo(0, 0);
   syncNav();
@@ -258,6 +258,7 @@ function renderMap() {
     ${ECON.rookieActive(S) ? rookieBanner() : ''}
     ${warBanner()}
     ${allyBanner()}
+    ${Online.state.profile && S.cleared >= 10 ? `<button class="raid-banner" id="to-raid">👹 <span>${T().raidBanner}</span><b>${T().warOpen}</b></button>` : ''}
     ${tickerHtml()}
     ${nextUnlock() ? `<div class="next-unlock">🔓 ${t.nextUnlock(t.feat[nextUnlock()], n(unlockWorld(nextUnlock())))}</div>` : ''}
     <div class="panel">
@@ -275,6 +276,7 @@ function renderMap() {
   document.querySelectorAll('.arrow').forEach(b => b.onclick = () => { S.world = +b.dataset.w; S.sel = -1; save(); renderMap(); });
   $('#edit-team').onclick = () => show('heroes');
   $('#to-war').onclick = () => show('war');
+  if ($('#to-raid')) $('#to-raid').onclick = () => show('raid');
   $('#to-cal').onclick = () => show('quests');
   if ($('#to-rookie')) $('#to-rookie').onclick = () => show('quests');
   if ($('#ticker')) $('#ticker').onclick = marketModal;
@@ -339,7 +341,7 @@ function cardHtml(h) {
   const t = T(), lv = S.owned[h.id], rc = RARITY[h.rarity].color;
   const canUp = lv && lv < MAX_LEVEL && S.coins >= ECON.upgradePrice(S, h.id, lv);
   const deck = S.team.indexOf(h.id);
-  return `<button class="card ${lv ? '' : 'locked'} ${deck >= 0 ? 'in-deck' : ''} ${S.holo[h.id] ? 'holo' : ''} ${frameOf(h.id)} ${ECON.starsOf(lv) === 5 ? 'awakened' : ''}" data-id="${h.id}" style="--rc:${rc}">
+  return `<button class="card ${lv ? skinClass() : 'locked'} ${deck >= 0 ? 'in-deck' : ''} ${S.holo[h.id] ? 'holo' : ''} ${frameOf(h.id)} ${ECON.starsOf(lv) === 5 ? 'awakened' : ''}" data-id="${h.id}" style="--rc:${rc}">
     <img src="${img(h.id)}" alt="${h.name}" loading="lazy">
     ${lv ? `<span class="lv">${t.level(n(lv))}</span>` : '<span class="lock">🔒</span>'}${starsHtml(lv)}
     <span class="rl">${ROLES[h.role].icon}</span>
@@ -365,6 +367,7 @@ function heroModal(id) {
       <small>${ECON.starsOf(lv) === 5 ? t.awakened : t.nextStar(n(ECON.STAR_LEVELS[ECON.starsOf(lv)]))}</small></div>` : ''}
     ${moodBadge(id)}
     ${h.fusion ? allianceHtml(h, lv) : ''}
+    ${h.fusion && lv && S.serials[id] && Online.state.profile ? `<button class="btn ghost wide" id="to-nft" style="margin:6px 0">🖼 ${t.nftBtn(n(S.serials[id]))}</button>` : ''}
     ${mine > 1 ? `<div class="fac-badge">${id === S.faction ? `${t.yourCommunity} · ${t.factionPerkShort}` : `🚩 ${t.army(factionName(S.faction))} · +${n(Math.round((mine - 1) * 100))}%`}</div>` : ''}
     <div class="stats">
       <div>${t.hp}<b>${n(s.hp)}</b>${next ? `<span style="color:var(--green)">+${n(next.hp - s.hp)}</span>` : ''}</div>
@@ -384,6 +387,7 @@ function heroModal(id) {
     if (tm) tm.onclick = async () => { const team = inTeam ? S.team.filter(x => x !== id) : [...S.team, id]; if (await tryAct({ type: 'team', team })) { closeModal(); refresh(); } };
     if (tc) tc.onclick = () => { closeModal(); show('chest'); };
     const tl = box.querySelector('#tolab'); if (tl) tl.onclick = () => { closeModal(); show('lab'); };
+    const nft = box.querySelector('#to-nft'); if (nft) nft.onclick = () => requestNft(id);
     box.querySelectorAll('[data-swap]').forEach(b => b.onclick = async () => {
       const team = [...S.team]; team[+b.dataset.swap] = id;
       if (await tryAct({ type: 'team', team })) { haptic('medium'); closeModal(); refresh(); }
@@ -434,6 +438,7 @@ const chestName = c => T()[c.key + 'Chest'];
 function renderChest() {
   const t = T(), rate = ECON.gemRate(S), warp = ECON.afkRate(S) * ECON.WARP_HOURS;
   $('#screen').innerHTML = `<div class="h2">${t.chestTitle}</div>
+    ${featuredHtml()}
     <p class="muted">${t.chestNote}</p>
     ${CHESTS.map(c => `<div class="panel chest" style="--c:${c.c}"><div class="ico">${c.ico}</div><div style="flex:1">
       <div class="t">${chestName(c)}</div>
@@ -448,8 +453,10 @@ function renderChest() {
       <p class="muted">${t.shopNote}</p>
       <div class="shop">${Online.state.packs.map(p => `<button class="pack" data-pack="${esc(p.id)}"><div class="pi">${p.gems >= 500 ? '💎💎💎' : p.gems >= 150 ? '💎💎' : '💎'}</div>
         <div class="pc">${n(p.gems)}</div><div class="ps">⭐ ${n(p.stars)}</div></button>`).join('')}</div>` : ''}
+    ${framesHtml()}
     <p class="muted" style="margin-top:18px">${t.gemTip}</p>
     <p class="muted">${t.coinTip}</p>`;
+  bindFrames();
   document.querySelectorAll('[data-k]').forEach(b => b.onclick = () => openChest(CHESTS.find(c => c.key === b.dataset.k)));
   document.querySelectorAll('[data-pack]').forEach(b => b.onclick = async () => {
     b.disabled = true;
@@ -637,7 +644,7 @@ const tallNames = units => (units.some(u => u.name.length > 18) ? 'tall-names' :
 function unitCard(u) {
   const mine = isMine(u);
   const rc = !mine ? (u.boss ? '#ff3b3b' : '#e0475a') : RARITY[HERO_BY_ID[u.id].rarity].color;
-  return `<div class="hcard ${mine ? 'hero' : 'enemy'} ${u.boss ? 'boss' : ''} ${mine ? frameOf(u.id) : ''}" data-uid="${u.uid}" style="--rc:${rc}">
+  return `<div class="hcard ${mine ? 'hero ' + skinClass() : 'enemy'} ${u.boss ? 'boss' : ''} ${mine ? frameOf(u.id) : ''}" data-uid="${u.uid}" style="--rc:${rc}">
     ${mine ? '<span class="ready">⚡</span>' : ''}${u.boss ? '<span class="crown">👑</span>' : ''}${u.weak ? `<span class="weak-tag">🎯${STATUS_ICON[u.weak]}</span>` : ''}${u.row === 'front' ? '<span class="row-tag">🛡️</span>' : ''}
     <span class="orbit"><span class="ring"><i></i><i></i><i></i><i></i></span></span><span class="sheen" style="--sd:${(u.uid * 0.77) % 5}s"></span>
     <img src="${img(u.id)}" alt=""><div class="status"></div>
@@ -665,7 +672,8 @@ function buildBattle({ title, bg, scene, mine, theirs, oppLabel, myLabel, onTap,
     <div class="b-hint">${t.tapHint}</div>
     <div id="b-fx"></div>`;
   el.hidden = false;
-  Scene.start($('#b-scene'), scene ? scene.key : 'galaxy', scene ? scene.ch : 0);
+  el.classList.toggle('fx-low', (S.fx ?? 2) < 2); el.classList.toggle('fx-off', (S.fx ?? 2) === 0);
+  Scene.start($('#b-scene'), scene ? scene.key : 'galaxy', scene ? scene.ch : 0, S.fx ?? 2);
   BT.els = new Map();
   el.querySelectorAll('[data-uid]').forEach(nd => {
     BT.els.set(+nd.dataset.uid, { root: nd, hp: nd.querySelector('.bar.hp i'), sh: nd.querySelector('.sh'), en: nd.querySelector('.bar.en i'), st: nd.querySelector('.status'), last: {} });

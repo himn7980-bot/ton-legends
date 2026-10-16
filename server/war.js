@@ -18,7 +18,7 @@ const REWARDS = [{ gems: 30, coins: 5000 }, { gems: 15, coins: 3000 }, { gems: 8
 const REWARD_REST = { gems: 3, coins: 500 };
 const FACTIONS = E.BASE_HEROES.map(h => h.id);
 const WORLDS = E.WORLDS.length;
-const BASE_POINTS = { stageFirst: 2, ai: 1, pvp: 5 };
+const BASE_POINTS = { stageFirst: 2, ai: 1, pvp: 5, raid: 3 };
 const MAX_IMAGE = 700 * 1024;
 
 function fail(code) { const e = new Error(code); e.code = 400; throw e; }
