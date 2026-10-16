@@ -2,7 +2,7 @@
 
 The card battle game where meme communities go to war — right inside Telegram.
 
-🃏 Collect 16 legendary meme heroes — $NOT, $DOGS, Pink Bull, Volya, PAWS and more
+🃏 Collect 16 legendary meme heroes — Notcoin, telegram.dog, Pink Bull, Volya, PAWS, Utya, Pengu, Gramcat and more
 🚩 Pick your community and fight for it in the weekly Community War
 🤝 Unite heroes into numbered, limited-edition Alliance Cards
 👹 Team up with every player against the giant World Boss
