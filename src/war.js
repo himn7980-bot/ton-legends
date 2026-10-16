@@ -1,4 +1,4 @@
-// TON Legends — Community War screen, community picker and story/share cards.
+// Gram Legends — Community War screen, community picker and story/share cards.
 // Rules live in economy.js (perks) and server/war.js (weekly points and rewards); this file only shows them.
 let WAR = null; // last /api/war/me answer
 
@@ -188,7 +188,7 @@ async function drawShareCard(kind, id) {
   g.save(); g.shadowColor = col; g.shadowBlur = 60; g.fillStyle = col; g.fillRect(x - 8, y - 8, cw + 16, ch + 16); g.restore();
   if (im) { const sc = Math.max(cw / im.naturalWidth, ch / im.naturalHeight); g.save(); g.beginPath(); g.rect(x, y, cw, ch); g.clip(); g.drawImage(im, x + (cw - im.naturalWidth * sc) / 2, y - (im.naturalHeight * sc - ch) * 0.15, im.naturalWidth * sc, im.naturalHeight * sc); g.restore(); }
   g.textAlign = 'center'; g.direction = L().dir || 'ltr';
-  g.fillStyle = '#fff'; g.font = '900 64px Vazirmatn, sans-serif'; g.fillText('TON Legends', W / 2, 130);
+  g.fillStyle = '#fff'; g.font = '900 64px Vazirmatn, sans-serif'; g.fillText('Gram Legends', W / 2, 130);
   g.fillStyle = '#3fa2ff'; g.font = '700 30px Vazirmatn, sans-serif'; g.fillText('⚔️ Telegram card battles', W / 2, 180);
   const title = kind === 'war' || kind === 'derby' ? t.army(h.name) : h.name;
   g.fillStyle = col; g.font = `900 ${title.length > 22 ? 40 : 54}px Vazirmatn, sans-serif`; g.fillText(title, W / 2, 1050, W - 40);
@@ -205,7 +205,7 @@ async function shareCard(kind, id = S.faction) {
     const w = Online.tg(), link = Online.inviteLink();
     if (w && w.shareToStory && w.isVersionAtLeast && w.isVersionAtLeast('7.8') && link) {
       const up = await Online.uploadShare(await drawShareCard(kind, id));
-      w.shareToStory(`${location.origin}/${up.path}`, { text: `${text} ${link}`.slice(0, 200), widget_link: { url: link, name: 'TON Legends' } });
+      w.shareToStory(`${location.origin}/${up.path}`, { text: `${text} ${link}`.slice(0, 200), widget_link: { url: link, name: 'Gram Legends' } });
       shared = true;
     } else shared = Online.share(text);
   } catch (e) { shared = Online.share(text); }

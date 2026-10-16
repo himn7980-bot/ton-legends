@@ -1,4 +1,4 @@
-// TON Legends — "DNA" of the 16 heroes (what makes each one recognizable) and the art prompt for every fusion card.
+// Gram Legends — "DNA" of the 16 heroes (what makes each one recognizable) and the art prompt for every fusion card.
 // A fusion takes the body and face of one part, the outfit of another and the props/effects of the third, and the
 // original posters are sent along as reference images (@tag) so the model keeps each character's look.
 const E = require('../src/engine.js');

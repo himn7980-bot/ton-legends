@@ -1,4 +1,4 @@
-// TON Legends — market mood. Every 30 minutes the server reads the 24h price change of the heroes that have a
+// Gram Legends — market mood. Every 30 minutes the server reads the 24h price change of the heroes that have a
 // token (CoinGecko, free API, no key) and, for the others, compares their community's war points of yesterday
 // with the day before. The result ({ id: { change, src, sym } }) drives the moods in economy.js.
 //   MARKET_TOKENS="notcoin=notcoin:NOT,dog=dogs-2:DOGS"   hero=coingecko-id:SYMBOL (add more without code changes)

@@ -37,7 +37,7 @@ main{{padding:0 16px 40px}} .how{{background:var(--panel);border:1px solid var(-
 .nm{{font-size:12px;line-height:1.4}} .nm small{{display:block;color:#ff8ad9;font-weight:700}}
 {css_thumbs}
 </style></head><body>
-<header><h1>🧪 TON Legends — Fusion Catalog (1–680)</h1><input id="q" placeholder="Search: number or hero name (e.g. 37, volya, pink bull)"></header>
+<header><h1>🧪 Gram Legends — Fusion Catalog (1–680)</h1><input id="q" placeholder="Search: number or hero name (e.g. 37, volya, pink bull)"></header>
 <main>
 <div class="how"><b>راهنمای ساده:</b> هر کارت ترکیبی یک <b>شماره</b> دارد (۱ تا ۶۸۰). برای هر شماره، قهرمان‌هایی که باید در تصویر ترکیب شوند کنارش هستند.<br>
 <b>آپلود در ربات خودت:</b> در ربات بنویس <b>/art</b> ← ربات می‌گوید کارت بعدی کدام است (مثلاً «#37 Pink Bull × Volya») ← فقط تصویر را بفرست. ربات ذخیره می‌کند و شماره‌ی بعدی را می‌گوید.<br>

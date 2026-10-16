@@ -1,4 +1,4 @@
-// TON Legends — meta game: daily login, missions, achievements, idle chest, leaderboard, settings, boot
+// Gram Legends — meta game: daily login, missions, achievements, idle chest, leaderboard, settings, boot
 
 // ---------- rules come from economy.js (shared with the server) ----------
 const { DAILY_QUESTS, DAILY_REWARDS, AFK_CAP_H } = ECON;

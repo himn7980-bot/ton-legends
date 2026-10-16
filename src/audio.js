@@ -1,4 +1,4 @@
-// TON Legends — synthesized sound effects and music (WebAudio, no audio files)
+// Gram Legends — synthesized sound effects and music (WebAudio, no audio files)
 const Sound = (() => {
   let ctx = null, master = null, sfxGain = null, musicGain = null, musicTimer = null, musicMode = null, step = 0;
   const opts = { sfx: true, music: true };

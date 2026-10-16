@@ -1,4 +1,4 @@
-// TON Legends — fusion art generated with Runway (Gen-4 Image, text + up to 3 reference images).
+// Gram Legends — fusion art generated with Runway (Gen-4 Image, text + up to 3 reference images).
 // The original posters of the parts go along as @tagged references so the fusion keeps their look.
 //   RUNWAYML_API_SECRET  API key from dev.runwayml.com (the API has its own credits, separate from the web app)
 //   RUNWAY_MODEL         default gen4_image (gen4_image_turbo is faster/cheaper)

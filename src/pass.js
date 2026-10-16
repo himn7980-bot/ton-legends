@@ -1,4 +1,4 @@
-// TON Legends — season pass screen: 30 tiers, a free and a premium reward each. XP comes from playing
+// Gram Legends — season pass screen: 30 tiers, a free and a premium reward each. XP comes from playing
 // (rules in economy.js); premium is bought with Telegram Stars for the current season.
 function passBanner() {
   const t = T(), now = Date.now(), ps = ECON.passOf(S, now), tier = ECON.passTier(S, now);

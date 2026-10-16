@@ -1,4 +1,4 @@
-// TON Legends — UI layer
+// Gram Legends — UI layer
 const IMAGES = {/*IMAGES*/};
 // Card image. Fusion cards use the uploaded artwork (/art/N) when it exists; otherwise a card is drawn on the fly
 // from the parent heroes' posters (diagonal slices + frame + name), cached per fusion.

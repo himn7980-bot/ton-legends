@@ -66,7 +66,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const alice = { id: 111, first_name: 'Alice' }, bob = { id: 222, first_name: 'Bob', last_name: '<script>' };
 
   // static files
-  let r = await fetch(base + '/'); assert.equal(r.status, 200); assert.match(await r.text(), /TON Legends/);
+  let r = await fetch(base + '/'); assert.equal(r.status, 200); assert.match(await r.text(), /Gram Legends/);
   r = await fetch(base + '/images/pengu.jpg'); assert.equal(r.status, 200); assert.equal(r.headers.get('content-type'), 'image/jpeg');
   r = await fetch(base + '/..%2fserver%2fserver.js'); assert.notEqual(r.status, 200);
 
@@ -123,7 +123,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const aliceAfterPay = r.body.profile.coins;
   const starts = calls.filter(c => c.method === 'sendMessage' && c.data.chat_id === 333);
   assert.equal(starts[0].data.reply_markup.inline_keyboard[0][0].web_app.url, 'https://game.example');
-  assert.match(starts[0].data.text, /Welcome to TON Legends/);
+  assert.match(starts[0].data.text, /Welcome to Gram Legends/);
   queue.push({ update_id: 6, message: { chat: { id: 444 }, from: { id: 444, first_name: 'Reza', language_code: 'fa' }, text: '/start' } });
   await sleep(800);
   assert.match(calls.filter(c => c.method === 'sendMessage' && c.data.chat_id === 444)[0].data.text, /خوش آمدی/);
@@ -503,7 +503,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   queue.push({ update_id: 9002, message: { chat: { id: 222 }, from: bob, text: '/stats' } });
   await sleep(1200);
   const st = calls.filter(c => c.method === 'sendMessage').slice(before3).map(c => c.data);
-  assert.ok(st.some(m => m.chat_id === 111 && /TON Legends — stats/.test(m.text) && /stuck at: .*stage 12/.test(m.text)), JSON.stringify(st));
+  assert.ok(st.some(m => m.chat_id === 111 && /Gram Legends — stats/.test(m.text) && /stuck at: .*stage 12/.test(m.text)), JSON.stringify(st));
   assert.ok(st.some(m => m.chat_id === 222 && /Only admins/.test(m.text)));
   console.log('   analytics: daily counters, retention, funnel, quit stages; /stats only for admins');
 

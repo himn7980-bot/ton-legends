@@ -1,4 +1,4 @@
-// TON Legends — bot reminders. A sweep every 10 minutes queues at most one message of each kind per player;
+// Gram Legends — bot reminders. A sweep every 10 minutes queues at most one message of each kind per player;
 // the queue sends ~15 messages per second (well under Telegram's limit). Players can turn reminders off in
 // Settings, and anyone who blocked the bot is skipped until they open the game again.
 const ECON = require('../src/economy.js');

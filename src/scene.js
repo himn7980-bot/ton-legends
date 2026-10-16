@@ -1,4 +1,4 @@
-// TON Legends — living battle backgrounds. A canvas behind the cards draws a deep nebula, stars on three depth
+// Gram Legends — living battle backgrounds. A canvas behind the cards draws a deep nebula, stars on three depth
 // layers and the world's own particles (ocean bubbles and light rays, cave crystals, neon rain over a skyline,
 // temple embers, lab toxic bubbles, a turning galaxy in the arena). Tilting the phone (or moving a finger) shifts
 // the layers for depth, and the cards float and lean in 3D. Skills throw a burst of sparks. Stops by itself when

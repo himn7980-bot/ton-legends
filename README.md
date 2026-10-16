@@ -1,4 +1,4 @@
-# TON Legends ⚔️
+# Gram Legends ⚔️
 
 **English** is the default language; Persian (فارسی) can be chosen in Settings. Bot messages follow each user's Telegram language.
 

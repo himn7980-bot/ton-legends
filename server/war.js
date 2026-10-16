@@ -1,4 +1,4 @@
-// TON Legends — Community War: every player backs one of the 16 heroes' communities. Each week they race for
+// Gram Legends — Community War: every player backs one of the 16 heroes' communities. Each week they race for
 // points (new stage +2, AI win +1, arena win +5; ×2 while the community card is in your team, ×1.5 under the
 // "rally" battle cry, ×3 for arena wins over this week's derby rival). Around that race:
 //   territories  — each world belongs to the community with the most stage wins in it this week (+15% coins there)

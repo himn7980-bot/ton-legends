@@ -1,4 +1,4 @@
-// TON Legends — translations (English default, Persian optional)
+// Gram Legends — translations (English default, Persian optional)
 const I18N = {
   en: {
     dir: 'ltr', locale: 'en-US',
@@ -43,7 +43,7 @@ const I18N = {
       victory: 'Victory!', worldDone: w => `· “${w}” conquered!`, firstBonus: 'First clear bonus ×2',
       toMap: 'Map', replay: '🔁 Replay', next: 'Next stage →', defeat: 'Defeat!',
       defeatTip: '<b>Upgrade</b> your heroes, open <b>chests</b> for new ones, or replay earlier stages to earn coins.', retry: '🔁 Try again',
-      welcome: 'Welcome to TON Legends!',
+      welcome: 'Welcome to Gram Legends!',
       help1: '🃏 Build a deck of 5 hero cards.',
       help2: '⚔️ Cards fight automatically. When a card <b style="color:var(--gold)">glows ⚡</b>, tap it to use its special skill. Enemy cards use skills too!',
       help3: '🪙 Win coins, <b>upgrade</b> your heroes and open <b>chests</b> to collect new cards.',
@@ -58,7 +58,7 @@ const I18N = {
       great: 'Awesome!', giftTitle: 'You got a gift!', giftNote: 'From your invites or purchases.',
       player: 'Hero', stageOf: (a, b, p) => `Stage ${a} of ${b} · power ${p}`, wins: 'Wins', bossesBeaten: 'Bosses beaten',
       invite: '🤝 Invite friends', inviteNote: 'For every friend who joins with your link you get 500 coins, and they get 300 coins as a gift.', sendInvite: 'Send invite link',
-      inviteText: "Let's play TON Legends together! ⚔️ Get 300 bonus coins with this link:",
+      inviteText: "Let's play Gram Legends together! ⚔️ Get 300 bonus coins with this link:",
       leaderboard: '🏆 Leaderboard', loading: 'Loading…', boardOffline: 'The leaderboard is available when you open the game from the Telegram bot.',
       boardErr: 'Could not load the leaderboard.', boardEmpty: 'Nobody here yet — be the first!', you: 'You', players: n => `${n} players`,
       arena: 'Arena', arenaTitle: '⚔️ PvP Arena',
@@ -67,7 +67,7 @@ const I18N = {
       haveCode: 'Got an invite code?', codePh: 'CODE', join: 'Join', record: (w, l) => `Arena record: ${w} wins · ${l} losses`,
       arenaOffline: 'The arena works when you open the game from the Telegram bot.', arenaRules: '⚠️ Coins you stake are held until the duel ends. If you leave mid-duel, your cards keep fighting on auto.',
       searching: 'Searching for an opponent…', waitingFriend: 'Waiting for your friend to join…', inviteCode: 'Invite code', sendDuel: '📨 Send invite', cancel: 'Cancel',
-      duelText: c => `⚔️ I challenge you to a TON Legends duel for ${c} coins — winner takes all!`,
+      duelText: c => `⚔️ I challenge you to a Gram Legends duel for ${c} coins — winner takes all!`,
       challengedBy: h => `${h} challenges you!`, accept: '⚔️ Accept', decline: 'Decline', theirPower: p => `Their deck power: ${p}`,
       arenaWin: 'You won the duel!', arenaLose: 'You lost the duel', arenaDraw: 'Draw — stakes returned', toArena: '⚔️ Arena', ready: 'Get ready!',
       pvpLeaveNote: 'Your cards will keep fighting on auto and the result still counts.', arenaWins: 'Arena wins',
@@ -83,7 +83,7 @@ const I18N = {
       left: (a, b) => `${a} / ${b} left`, soldOut: 'Sold out', ownedTag: 'Owned', fused: 'Alliance formed!', serialOf: (s, m) => `Serial #${s} of ${m}`,
       fusionTitle: names => `Alliance of ${names}`, fusionDesc: 'Fires every member\'s skill at once:',
       holo: 'HOLO', holoNew: '🌈 HOLO card! An ultra-rare shimmering variant.', holoCount: (a, b) => `🌈 Holo ${a}/${b}`,
-      guide: '📖 Game guide', guideTitle: '📖 How TON Legends works', readGuide: '📖 Read the full guide',
+      guide: '📖 Game guide', guideTitle: '📖 How Gram Legends works', readGuide: '📖 Read the full guide',
       guideSections: [
         ['⚔️ Battles', 'Your 5 cards fight automatically. Each card fills its blue energy bar by attacking and taking hits; when it glows ⚡, tap it to fire its special skill. Turn on Auto to let cards fire skills by themselves.'],
         ['🛡️ Roles', 'Tanks absorb hits, Warriors and Assassins hit hard, Archers and Mages damage several enemies, Healers and Supports keep their allies alive. A balanced deck beats five attackers.'],
@@ -96,7 +96,7 @@ const I18N = {
       ],
       leaveTitle: 'Leave the battle?', leaveNote: "You'll lose this fight's progress.", leave: 'Leave', stay: 'Keep fighting',
       settings: '⚙️ Settings', sfx: '🔊 Sound effects', music: '🎵 Music', language: '🌐 Language', howTo: '❓ How to play', show: 'Show',
-      reset: '🗑️ Start over (erase all progress)', erase: 'Erase', sure: 'Sure? Tap again', version: 'TON Legends · v1.4', cloudOn: '· Telegram cloud save on ☁️', close: 'Close',
+      reset: '🗑️ Start over (erase all progress)', erase: 'Erase', sure: 'Sure? Tap again', version: 'Gram Legends · v1.4', cloudOn: '· Telegram cloud save on ☁️', close: 'Close',
     },
   },
   fa: {
@@ -142,7 +142,7 @@ const I18N = {
       victory: 'پیروزی!', worldDone: w => `· دنیای «${w}» تمام شد!`, firstBonus: 'جایزه‌ی اولین برد ×۲',
       toMap: 'نقشه', replay: '🔁 تکرار', next: 'مرحله بعد ⬅', defeat: 'شکست!',
       defeatTip: 'قهرمان‌هایت را <b>ارتقا</b> بده، از <b>صندوق</b> قهرمان جدید بگیر، یا مرحله‌های قبلی را تکرار کن تا سکه جمع شود.', retry: '🔁 تلاش دوباره',
-      welcome: 'به TON Legends خوش آمدی!',
+      welcome: 'به Gram Legends خوش آمدی!',
       help1: '🃏 یک دک ۵ کارتی از کارت‌های قهرمان بچین.',
       help2: '⚔️ کارت‌ها خودکار می‌جنگند. وقتی کارتی <b style="color:var(--gold)">می‌درخشد ⚡</b> روی آن بزن تا مهارت ویژه‌اش فعال شود. کارت‌های دشمن هم مهارت دارند!',
       help3: '🪙 با پیروزی سکه بگیر، قهرمان‌ها را <b>ارتقا</b> بده و از <b>صندوق</b> کارت جدید باز کن.',
@@ -157,7 +157,7 @@ const I18N = {
       great: 'عالی!', giftTitle: 'هدیه رسید!', giftNote: 'از دعوت دوستان یا خرید تو.',
       player: 'قهرمان', stageOf: (a, b, p) => `مرحله ${a} از ${b} · قدرت ${p}`, wins: 'پیروزی', bossesBeaten: 'رئیس شکست‌خورده',
       invite: '🤝 دعوت از دوستان', inviteNote: 'برای هر دوستی که با لینک تو وارد بازی شود، ۵۰۰ سکه می‌گیری و دوستت هم ۳۰۰ سکه هدیه می‌گیرد.', sendInvite: 'ارسال لینک دعوت',
-      inviteText: 'بیا با هم TON Legends بازی کنیم! ⚔️ با این لینک ۳۰۰ سکه هدیه بگیر:',
+      inviteText: 'بیا با هم Gram Legends بازی کنیم! ⚔️ با این لینک ۳۰۰ سکه هدیه بگیر:',
       leaderboard: '🏆 جدول برترین‌ها', loading: 'در حال بارگذاری…', boardOffline: 'جدول رتبه‌بندی وقتی فعال می‌شود که بازی را از داخل ربات تلگرام باز کنی.',
       boardErr: 'بارگذاری جدول ممکن نشد.', boardEmpty: 'هنوز کسی در جدول نیست. اولین نفر باش!', you: 'تو', players: n => `${n} بازیکن`,
       arena: 'آرنا', arenaTitle: '⚔️ آرنای دو نفره',
@@ -166,7 +166,7 @@ const I18N = {
       haveCode: 'کد دعوت داری؟', codePh: 'کد', join: 'ورود', record: (w, l) => `سابقه‌ی آرنا: ${w} برد · ${l} باخت`,
       arenaOffline: 'آرنا وقتی کار می‌کند که بازی را از داخل ربات تلگرام باز کنی.', arenaRules: '⚠️ سکه‌هایی که شرط می‌بندی تا پایان دوئل نگه داشته می‌شوند. اگر وسط دوئل خارج شوی، کارت‌هایت خودکار می‌جنگند.',
       searching: 'در حال پیدا کردن حریف…', waitingFriend: 'منتظر ورود دوستت…', inviteCode: 'کد دعوت', sendDuel: '📨 ارسال دعوت', cancel: 'لغو',
-      duelText: c => `⚔️ تو را به دوئل TON Legends سر ${c} سکه دعوت می‌کنم — برنده همه را می‌برد!`,
+      duelText: c => `⚔️ تو را به دوئل Gram Legends سر ${c} سکه دعوت می‌کنم — برنده همه را می‌برد!`,
       challengedBy: h => `${h} تو را به دوئل دعوت کرده!`, accept: '⚔️ قبول', decline: 'رد کردن', theirPower: p => `قدرت دک حریف: ${p}`,
       arenaWin: 'دوئل را بردی!', arenaLose: 'دوئل را باختی', arenaDraw: 'مساوی — سکه‌ها برگشت', toArena: '⚔️ آرنا', ready: 'آماده باش!',
       pvpLeaveNote: 'کارت‌هایت خودکار به جنگ ادامه می‌دهند و نتیجه حساب می‌شود.', arenaWins: 'برد آرنا',
@@ -182,7 +182,7 @@ const I18N = {
       left: (a, b) => `${a} از ${b} باقی مانده`, soldOut: 'تمام شد', ownedTag: 'داری', fused: 'اتحاد تشکیل شد!', serialOf: (s, m) => `شماره‌ی ${s} از ${m}`,
       fusionTitle: names => `اتحاد ${names}`, fusionDesc: 'مهارت همه‌ی اعضا را با هم اجرا می‌کند:',
       holo: 'هولو', holoNew: '🌈 کارت هولو! یک نسخه‌ی درخشان و فوق‌العاده کمیاب.', holoCount: (a, b) => `🌈 هولو ${a}/${b}`,
-      guide: '📖 راهنمای بازی', guideTitle: '📖 TON Legends چطور کار می‌کند', readGuide: '📖 خواندن راهنمای کامل',
+      guide: '📖 راهنمای بازی', guideTitle: '📖 Gram Legends چطور کار می‌کند', readGuide: '📖 خواندن راهنمای کامل',
       guideSections: [
         ['⚔️ نبرد', 'پنج کارت تو خودکار می‌جنگند. هر کارت با حمله کردن و ضربه خوردن نوار آبی انرژی‌اش را پر می‌کند؛ وقتی درخشید ⚡ رویش بزن تا مهارت ویژه‌اش اجرا شود. با روشن کردن «خودکار»، کارت‌ها خودشان مهارت می‌زنند.'],
         ['🛡️ نقش‌ها', 'تانک‌ها ضربه‌ها را جذب می‌کنند، جنگجو و قاتل محکم می‌زنند، کماندار و جادوگر به چند دشمن آسیب می‌زنند، درمانگر و پشتیبان بقیه را زنده نگه می‌دارند. دک متعادل از پنج مهاجم قوی‌تر است.'],
@@ -195,7 +195,7 @@ const I18N = {
       ],
       leaveTitle: 'از نبرد خارج می‌شوی؟', leaveNote: 'پیشرفت این نبرد از دست می‌رود.', leave: 'خروج', stay: 'ادامه‌ی نبرد',
       settings: '⚙️ تنظیمات', sfx: '🔊 صداها', music: '🎵 موسیقی', language: '🌐 زبان', howTo: '❓ راهنمای بازی', show: 'نمایش',
-      reset: '🗑️ شروع دوباره (پاک شدن همه‌ی پیشرفت)', erase: 'پاک کن', sure: 'مطمئنی؟ دوباره بزن', version: 'TON Legends · نسخه‌ی ۱.۴', cloudOn: '· ذخیره‌ی ابری تلگرام فعال ☁️', close: 'بستن',
+      reset: '🗑️ شروع دوباره (پاک شدن همه‌ی پیشرفت)', erase: 'پاک کن', sure: 'مطمئنی؟ دوباره بزن', version: 'Gram Legends · نسخه‌ی ۱.۴', cloudOn: '· ذخیره‌ی ابری تلگرام فعال ☁️', close: 'بستن',
     },
   },
 };

@@ -1,4 +1,4 @@
-// TON Legends — battle engine and game data (no DOM here, so it can be simulated in Node)
+// Gram Legends — battle engine and game data (no DOM here, so it can be simulated in Node)
 
 // Display text (names of roles/rarities, hero titles, skills, worlds) lives in i18n.js.
 const RARITY = {

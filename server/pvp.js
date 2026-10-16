@@ -1,4 +1,4 @@
-// TON Legends — online 1v1 arena with coin stakes.
+// Gram Legends — online 1v1 arena with coin stakes.
 // The server holds both stakes, runs the battle itself (so neither client can cheat), streams it to both
 // players over Server-Sent Events, accepts their skill taps, and pays the whole pot to the winner.
 const crypto = require('crypto');

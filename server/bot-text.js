@@ -1,4 +1,4 @@
-// TON Legends — bot reminder texts (idle chest full, streak, community war result) in the game's 14 languages.
+// Gram Legends — bot reminder texts (idle chest full, streak, community war result) in the game's 14 languages.
 const fmt = n => Number(n).toLocaleString('en-US');
 const medal = p => (p <= 3 ? ['🥇', '🥈', '🥉'][p - 1] : `#${p}`);
 const T = {

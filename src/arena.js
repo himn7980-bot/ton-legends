@@ -1,4 +1,4 @@
-// TON Legends — PvP arena: pick a stake, find an opponent or challenge a friend, then fight live.
+// Gram Legends — PvP arena: pick a stake, find an opponent or challenge a friend, then fight live.
 // The server holds both stakes, runs the fight and pays the pot; this file only shows it and sends taps.
 const STAKES = [100, 500, 1000, 5000, 10000];
 const PVP_STATUS = ['freeze', 'stun', 'slow', 'poison', 'vuln', 'weak', 'buff', 'dodge']; // same bit order as the server

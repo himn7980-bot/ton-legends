@@ -1,4 +1,4 @@
-// TON Legends — Telegram + backend integration (cloud save, leaderboard, Stars shop, referrals).
+// Gram Legends — Telegram + backend integration (cloud save, leaderboard, Stars shop, referrals).
 // Everything here degrades gracefully: outside Telegram or without the server, the game runs fully offline.
 const Online = (() => {
   const API = (window.TL_CONFIG && window.TL_CONFIG.api) || '';

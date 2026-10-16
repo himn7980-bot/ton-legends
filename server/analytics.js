@@ -1,4 +1,4 @@
-// TON Legends — game analytics for the owner (/stats in the bot, admins only).
+// Gram Legends — game analytics for the owner (/stats in the bot, admins only).
 // Daily counters are kept for 60 days; retention, the progress funnel and "where players quit" are computed from
 // the user records on demand (fine for tens of thousands of players).
 const DAY = 864e5;
@@ -52,7 +52,7 @@ module.exports = function createAnalytics({ db, persist }) {
     const n = x => Number(x || 0).toLocaleString('en-US');
     const winRate = d => (d && d.battles ? ` (${Math.round(d.wins / d.battles * 100)}% won)` : '');
     return [
-      '📊 TON Legends — stats',
+      '📊 Gram Legends — stats',
       '',
       `👥 Players: ${n(r.players)} (users ${n(r.users)})`,
       `📅 Today: ${n(r.today.active)} active · ${n(r.today.new)} new · ${n(r.today.battles)} battles${winRate(r.today)} · ⭐ ${n(r.today.stars)}`,

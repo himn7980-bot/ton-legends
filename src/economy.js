@@ -1,4 +1,4 @@
-// TON Legends — economy rules (coins, heroes, chests, quests, stages).
+// Gram Legends — economy rules (coins, heroes, chests, quests, stages).
 // Shared code: runs in the browser for offline play and on the server, which is the source of truth online.
 (function (root, factory) {
   if (typeof module !== 'undefined') module.exports = factory(require('./engine.js'));

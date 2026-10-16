@@ -1,4 +1,4 @@
-// TON Legends — clan screen: create / search / join, members and weekly points, the weekly clan chest.
+// Gram Legends — clan screen: create / search / join, members and weekly points, the weekly clan chest.
 // Everything lives on the server; this file only shows it.
 let CLAN = null, CLAN_META = { emblems: ['🛡️'], cost: 2000, max: 30 }, clanEmblem = null, clanQuery = '';
 

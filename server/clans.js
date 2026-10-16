@@ -1,4 +1,4 @@
-// TON Legends — clans: create/join/leave, weekly shared points, weekly clan chest, top clans.
+// Gram Legends — clans: create/join/leave, weekly shared points, weekly clan chest, top clans.
 // Points: new stage +2, AI win +1, arena win +5 (added via addPoints from the game server).
 const crypto = require('crypto');
 const ECON = require('../src/economy.js');
