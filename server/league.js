@@ -36,6 +36,7 @@ module.exports = function createLeague({ db, persist, profileOut }) {
       if (score !== 0.5) { if (won) L.w++; else L.l++; }
       const t = tierOf(L.r);
       if (TIERS.findIndex(x => x.id === t.id) > TIERS.findIndex(x => x.id === L.best)) L.best = t.id;
+      if (u.profile) u.profile.stats.leagueBest = Math.max(u.profile.stats.leagueBest || 0, TIERS.findIndex(x => x.id === t.id));
       out[u.id] = { r: L.r, delta: d, tier: t.id };
     }
     persist();
@@ -50,7 +51,7 @@ module.exports = function createLeague({ db, persist, profileOut }) {
       next: next ? { id: next.id, at: next.min } : null, tiers: TIERS,
       prev: L.prev && !L.prev.claimed ? { s: L.prev.s, best: L.prev.best, gems: TIERS.find(x => x.id === L.prev.best).gems } : null,
       rank: players.findIndex(x => x.id === u.id) + 1 || null,
-      top: players.slice(0, 20).map(x => ({ name: x.name || 'Player', r: x.league.r, tier: tierOf(x.league.r).id, me: x.id === u.id })),
+      top: players.slice(0, 20).map(x => ({ name: x.name || 'Player', av: ECON.avatarOf(x.profile), r: x.league.r, tier: tierOf(x.league.r).id, me: x.id === u.id })),
     };
   }
   const fail = c => { throw Object.assign(new Error(c), { code: 400 }); };

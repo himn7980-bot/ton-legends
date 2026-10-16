@@ -9,6 +9,57 @@ async function apiCall(path, body) {
 const tryApi = async (path, body) => { try { return await apiCall(path, body); } catch (e) { toast(errText(e)); return null; } };
 const onlineOnly = title => `<div class="h2">${title}</div><div class="panel center muted">${T().arenaOffline}</div>`;
 
+// ---------- profile: own game name + avatar (any card you own) ----------
+let MY_NAME = null;
+const avatarImg = (id, frame) => (id && HERO_BY_ID[id] ? `<img class="mini-av ${frame ? 'skin-' + frame : ''}" src="${img(id)}" alt="">` : '');
+async function profileModal() {
+  const t = T();
+  let me = { name: MY_NAME, nameCost: 0 };
+  if (Online.state.profile) { try { me = await Online.api('me'); MY_NAME = me.name; } catch (e) {} }
+  const cur = ECON.avatarOf(S), cards = HEROES.filter(h => S.owned[h.id]).sort((a, b) => !!b.fusion - !!a.fusion || S.owned[b.id] - S.owned[a.id]);
+  openModal(`<div class="h2">👤 ${t.profileTitle}</div>
+    ${Online.state.profile ? `<div class="t">${t.nameTitle}</div>
+      <div class="code-row"><input id="pf-name" maxlength="16" value="${esc(me.name || '')}" autocomplete="off"><button class="btn" id="pf-save">${me.nameCost ? `💎 ${n(me.nameCost)}` : t.saveName}</button></div>
+      <p class="muted small">${t.nameRules}</p>` : ''}
+    <div class="t" style="margin-top:10px">${t.avatarTitle}</div><p class="muted small">${t.avatarNote}</p>
+    <div class="av-grid">${cards.map(h => `<button class="av-pick ${h.id === cur ? 'on' : ''}" data-av="${h.id}"><img src="${img(h.id)}" alt="">${h.fusion ? '<span>🤝</span>' : ''}</button>`).join('')}</div>`, box => {
+    const sv = box.querySelector('#pf-save');
+    if (sv) sv.onclick = async () => {
+      sv.disabled = true;
+      const r = await tryApi('me/name', { name: box.querySelector('#pf-name').value });
+      sv.disabled = false;
+      if (r) { MY_NAME = r.name; toast('✓ ' + r.name); closeModal(); refresh(); }
+    };
+    box.querySelectorAll('[data-av]').forEach(b => b.onclick = async () => { if (await tryAct({ type: 'avatar', id: b.dataset.av })) { haptic('light'); closeModal(); refresh(); } });
+  });
+}
+
+// ---------- the game's channel: join first (welcome reward) ----------
+function channelGate() {
+  const t = T(), C = Online.state.channel;
+  return new Promise(done => openModal(`<div class="center"><div style="font-size:54px">📢</div>
+    <div class="big" style="font-size:22px">${t.chanTitle}</div><p class="muted">${t.chanNote}</p>
+    <p><span class="tag gold">🪙 ${n(C.coins)}</span> <span class="tag gem">💎 ${n(C.gems)}</span></p>
+    <button class="btn wide gold" id="ch-join">📢 ${t.chanJoin}</button>
+    <button class="btn wide" id="ch-check" style="margin-top:8px">✅ ${t.chanCheck}</button></div>`, box => {
+    box.querySelector('#ch-join').onclick = () => { const w = Online.tg(); if (w && w.openTelegramLink) w.openTelegramLink(C.url); else window.open(C.url, '_blank'); };
+    box.querySelector('#ch-check').onclick = async e => {
+      e.currentTarget.disabled = true;
+      try {
+        const r = await apiCall('channel/check');
+        if (r.joined) {
+          C.joined = true; closeModal(); haptic('heavy'); Sound.play('chest');
+          if (r.coins) giftModal('📢', t.chanThanks, r.coins, '', r.gems);
+          // New players: the game intro comes right after the welcome reward.
+          if (!S.seenHelp) { const iv = setInterval(() => { if ($('#modal').hidden) { clearInterval(iv); help(); } }, 400); }
+          done();
+        } else toast(t.chanNotYet);
+      } catch (err) { toast(errText(err)); }
+      const b = box.querySelector('#ch-check'); if (b) b.disabled = false;
+    };
+  }, { lock: true, onBack: () => {} }));
+}
+
 // ---------- friends (invites) ----------
 async function renderFriends() {
   const t = T();
@@ -59,7 +110,7 @@ async function renderRaid() {
     <div class="panel"><div class="ref-nums"><div><b>${n(R.mine.boss)}</b><small>${t.raidMineBoss}</small></div><div><b>${n(R.mine.week)}</b><small>${t.raidMineWeek}</small></div><div><b>${R.mine.rank ? '#' + n(R.mine.rank) : '—'}</b><small>${t.raidRank}</small></div></div>
       <p class="muted small" style="margin:8px 0 0">${t.raidRewards(n(R.rewards.kill), n(R.rewards.top), n(R.rewards.last))}</p></div>
     ${R.coms.length ? `<div class="h2">${t.raidComs}</div><div class="panel">${R.coms.slice(0, 8).map((c, i) => `<div class="row lb-row"><span>${i + 1}. <img class="mini-av" src="${img(c.id)}" alt=""> ${factionName(c.id)}</span><b>${n(c.dmg)}</b></div>`).join('')}</div>` : ''}
-    ${R.top.length ? `<div class="h2">${t.raidTop}</div><div class="panel">${R.top.map((p, i) => `<div class="row lb-row ${p.me ? 'me' : ''}"><span>${['🥇', '🥈', '🥉'][i] || i + 1 + '.'} ${esc(p.name)}</span><b>${n(p.dmg)}</b></div>`).join('')}</div>` : ''}
+    ${R.top.length ? `<div class="h2">${t.raidTop}</div><div class="panel">${R.top.map((p, i) => `<div class="row lb-row ${p.me ? 'me' : ''}"><span>${['🥇', '🥈', '🥉'][i] || i + 1 + '.'} ${avatarImg(p.av)}${esc(p.name)}</span><b>${n(p.dmg)}</b></div>`).join('')}</div>` : ''}
     ${R.kills.length ? `<div class="h2">${t.raidKills}</div><div class="panel">${R.kills.map(k => `<div class="row lb-row"><span>💀 ${HERO_BY_ID[k.boss].name} · ${t.raidLevel(n(k.level))}</span><span class="muted">⚔️ ${esc(k.name)} · 👥 ${n(k.players)}</span></div>`).join('')}</div>` : ''}`;
   $('#rd-go').onclick = e => { e.currentTarget.disabled = true; startRaid(R.tries <= 0).finally(() => { const b = $('#rd-go'); if (b) b.disabled = false; }); };
 }
@@ -129,7 +180,7 @@ async function leaguePanel(el) {
     <div class="ref-nums"><div><b>${n(L.r)}</b><small>${t.leagueRating}</small></div><div><b>${L.rank ? '#' + n(L.rank) : '—'}</b><small>${t.raidRank}</small></div><div><b>${n(L.w)}/${n(L.l)}</b><small>${t.leagueWL}</small></div></div>
     <div class="ref-tiers" style="margin-top:10px">${L.tiers.map(x => `<div class="ref-tier ${x.id === L.tier ? 'ready' : ''}"><div><b>${LEAGUE_ICO[x.id]} ${t.leagueTier[x.id]}</b><small>${n(x.min)}+ · 💎 ${n(x.gems)}${x.frame ? ' + ' + ECON.COSMETICS[x.frame].ico : ''}</small></div></div>`).join('')}</div>
     <p class="muted small">${t.leagueRules}</p>
-    ${L.top.length ? `<div class="h2" style="font-size:16px">${t.leagueTop}</div>${L.top.map((p, i) => `<div class="row lb-row ${p.me ? 'me' : ''}"><span>${i + 1}. ${LEAGUE_ICO[p.tier]} ${esc(p.name)}</span><b>${n(p.r)}</b></div>`).join('')}` : ''}`);
+    ${L.top.length ? `<div class="h2" style="font-size:16px">${t.leagueTop}</div>${L.top.map((p, i) => `<div class="row lb-row ${p.me ? 'me' : ''}"><span>${i + 1}. ${LEAGUE_ICO[p.tier]} ${avatarImg(p.av)}${esc(p.name)}</span><b>${n(p.r)}</b></div>`).join('')}` : ''}`);
 }
 
 // ---------- partner quests (section inside Quests) ----------

@@ -85,14 +85,21 @@
   const rookieActive = p => !!(p.rookie && p.rookie.claimed.length < ROOKIE.length);
   // Collection sets: own all four heroes of a set at level SET_LEVEL+ and every card in your team gets the bonus.
   const SET_LEVEL = 10;
+  // Every hero is in two sets. Each set has three tiers: all four heroes at level 10 / 30 / 60 → its bonus ×1 / ×1.5 / ×2.
   const SETS = [
     { id: 'ocean', ico: '🌊', heroes: ['utya', 'pengu', 'babyshark', 'dog'], perk: { hp: 0.05 } },
     { id: 'crystal', ico: '💎', heroes: ['egor', 'memegram', 'yoda', 'gramcat'], perk: { atk: 0.05 } },
     { id: 'neon', ico: '🌃', heroes: ['pinkbull', 'notcoin', 'volya', 'teddy'], perk: { coins: 0.10 } },
     { id: 'shadow', ico: '🌿', heroes: ['paws', 'noctis', 'virus', 'yaya'], perk: { energy: 25 } },
+    { id: 'beasts', ico: '🐾', heroes: ['pinkbull', 'paws', 'dog', 'teddy'], perk: { hp: 0.04 } },
+    { id: 'legends', ico: '👑', heroes: ['notcoin', 'volya', 'noctis', 'yoda'], perk: { atk: 0.04 } },
+    { id: 'frost', ico: '❄️', heroes: ['utya', 'pengu', 'gramcat', 'babyshark'], perk: { energy: 15 } },
+    { id: 'mystic', ico: '🔮', heroes: ['virus', 'memegram', 'yaya', 'egor'], perk: { coins: 0.08 } },
   ];
-  const setDone = (p, s) => s.heroes.every(id => (p.owned[id] || 0) >= SET_LEVEL);
-  const perksOf = p => SETS.filter(s => setDone(p, s)).reduce((a, s) => { for (const [k, v] of Object.entries(s.perk)) a[k] = (a[k] || 0) + v; return a; }, {});
+  const SET_TIERS = [10, 30, 60], SET_MULT = [0, 1, 1.5, 2];
+  const setTier = (p, s) => SET_TIERS.filter(l => s.heroes.every(id => (p.owned[id] || 0) >= l)).length;
+  const setDone = (p, s) => setTier(p, s) >= 1;
+  const perksOf = p => SETS.reduce((a, s) => { const m = SET_MULT[setTier(p, s)]; if (m) for (const [k, v] of Object.entries(s.perk)) a[k] = +((a[k] || 0) + v * m).toFixed(4); return a; }, {});
   // Stars are earned with levels (10/25/50/75/100); five stars = awakened.
   const STAR_LEVELS = [10, 25, 50, 75, 100];
   const starsOf = lv => STAR_LEVELS.filter(l => (lv || 0) >= l).length;
@@ -150,14 +157,29 @@
     { id: 'level', stat: p => Math.max(...Object.values(p.owned)), tiers: [5, 10, 20, 30, 50, 75, 100], r: [300, 1000, 4000, 10000, 25000, 50000, 100000] },
     { id: 'chest', stat: p => p.stats.chests, tiers: [5, 25, 100], r: [500, 2000, 6000] },
     { id: 'skill', stat: p => p.stats.skills, tiers: [50, 300, 1000], r: [300, 1500, 5000] },
+    { id: 'sets', stat: p => SETS.reduce((a, s) => a + setTier(p, s), 0), tiers: [1, 4, 8, 16, 24], r: [500, 2000, 6000, 20000, 60000] },
+    { id: 'stars', stat: p => E.BASE_HEROES.reduce((a, h) => a + starsOf(p.owned[h.id]), 0), tiers: [10, 30, 60, 80], r: [1000, 5000, 20000, 60000] },
+    { id: 'awaken', stat: p => E.BASE_HEROES.filter(h => (p.owned[h.id] || 0) >= E.MAX_LEVEL).length, tiers: [1, 4, 16], r: [20000, 60000, 200000] },
+    { id: 'holo', stat: p => Object.keys(p.holo || {}).length, tiers: [1, 4, 10, 16], r: [500, 1500, 4000, 10000] },
+    { id: 'alliance', stat: p => Object.keys(p.owned).filter(id => E.HERO_BY_ID[id] && E.HERO_BY_ID[id].fusion).length, tiers: [1, 5, 20, 60], r: [1000, 4000, 15000, 50000] },
+    { id: 'boss', stat: p => p.stats.bosses || 0, tiers: [5, 20, 50, 100], r: [1000, 4000, 12000, 30000] },
+    { id: 'upgrade', stat: p => p.stats.upgrades || 0, tiers: [20, 100, 500, 1500], r: [500, 2500, 10000, 30000] },
+    { id: 'login', stat: p => p.stats.logins || 0, tiers: [7, 30, 100, 365], r: [1000, 5000, 20000, 80000] },
+    { id: 'pvp', stat: p => p.stats.pvpWins || 0, tiers: [5, 25, 100, 300], r: [800, 3000, 10000, 30000] },
+    { id: 'ai', stat: p => p.stats.aiWins || 0, tiers: [5, 25, 100], r: [500, 2000, 8000] },
+    { id: 'league', stat: p => p.stats.leagueBest || 0, tiers: [1, 2, 3, 4], r: [1000, 4000, 12000, 40000] },
+    { id: 'raid', stat: p => p.stats.raidDmg || 0, tiers: [1e5, 1e6, 1e7, 1e8], r: [1000, 5000, 20000, 80000] },
+    { id: 'raidKill', stat: p => p.stats.raidKills || 0, tiers: [1, 5, 20], r: [1000, 5000, 20000] },
+    { id: 'friends', stat: p => p.stats.refs || 0, tiers: [1, 5, 20], r: [1000, 5000, 20000] },
+    { id: 'partner', stat: p => p.stats.partners || 0, tiers: [1, 5, 15], r: [300, 1500, 5000] },
   ];
   const DAILY_REWARDS = [200, 300, 400, 500, 700, 900, 'royal'];
   const AFK_CAP_H = 8;
   const HOLO_CHANCE = 0.03; // a chest card has a 3% chance to come out as a shimmering Holo variant (cosmetic)
-  const KEYS = ['cos', 'leaders', 'pass', 'rookie', 'fv', 'faction', 'factionAt', 'shareDay', 'coins', 'gems', 'owned', 'team', 'cleared', 'stats', 'daily', 'dq', 'ach', 'afkSince', 'pending', 'serials', 'holo', 'replays', 'aiDay'];
+  const KEYS = ['avatar', 'cos', 'leaders', 'pass', 'rookie', 'fv', 'faction', 'factionAt', 'shareDay', 'coins', 'gems', 'owned', 'team', 'cleared', 'stats', 'daily', 'dq', 'ach', 'afkSince', 'pending', 'serials', 'holo', 'replays', 'aiDay'];
 
   function newProfile(now) {
-    return { cos: { own: [], on: null }, leaders: {}, rookie: { start: day(now), claimed: [] }, fv: FUSION_VERSION, faction: null, factionAt: 0, shareDay: null, coins: 300, gems: START_GEMS, aiDay: null, owned: Object.fromEntries(E.STARTERS.map(id => [id, 1])), team: [...E.STARTERS], cleared: 0,
+    return { avatar: null, cos: { own: [], on: null }, leaders: {}, rookie: { start: day(now), claimed: [] }, fv: FUSION_VERSION, faction: null, factionAt: 0, shareDay: null, coins: 300, gems: START_GEMS, aiDay: null, owned: Object.fromEntries(E.STARTERS.map(id => [id, 1])), team: [...E.STARTERS], cleared: 0,
       stats: { wins: 0, losses: 0, chests: 0, upgrades: 0, skills: 0, bosses: 0, pvpWins: 0, pvpLosses: 0 },
       daily: { last: null, streak: 0 }, dq: { date: null, p: {}, c: {} }, ach: {}, afkSince: now, pending: null, serials: {}, holo: {}, replays: {} };
   }
@@ -288,6 +310,11 @@
         p.coins -= cost; p.owned[a.id]++; track(p, 'upgrades', 1, now);
         return { level: p.owned[a.id] };
       }
+      case 'avatar': { // profile picture: any card you own (alliance cards show their members together)
+        if (!Object.prototype.hasOwnProperty.call(E.HERO_BY_ID, a.id) || !p.owned[a.id]) fail('not_owned');
+        p.avatar = a.id;
+        return { avatar: a.id };
+      }
       case 'cosmetic': { // buy (gems) or equip a frame; null takes it off
         p.cos = p.cos || { own: [], on: null };
         if (a.id === null) { p.cos.on = null; return { on: null }; }
@@ -313,7 +340,7 @@
       }
       case 'daily': {
         if (!dailyCanClaim(p, now)) fail('claimed');
-        p.daily.streak = dailyNext(p, now); p.daily.last = day(now); addPassXp(p, PASS.XP.daily, now);
+        p.daily.streak = dailyNext(p, now); p.daily.last = day(now); addPassXp(p, PASS.XP.daily, now); p.stats.logins = (p.stats.logins || 0) + 1;
         const r = DAILY_REWARDS[p.daily.streak - 1];
         if (r === 'royal') { p.gems += DAY7_GEMS; return { day: p.daily.streak, gems: DAY7_GEMS, chest: openChest(p, 'royal', rng, now) }; }
         p.coins += r;
@@ -478,6 +505,8 @@
     return p;
   }
 
-  return { COSMETICS, giveCosmetic, FEATURED_CHANCE, featuredOf, leaderOf, MASCOT_PER_TIER, ALLY_DEFAULT, ALLY_SHARE, allianceBoosts, PASS, seasonOf, seasonEnds, passReward, passOf, passTier, addPassXp, ROOKIE, rookieStat, rookieOpenDays, rookieDayDone, rookieActive, SET_LEVEL, SETS, setDone, perksOf, STAR_LEVELS, starsOf, EVENTS, EVENT_FX, eventOf, COMMUNITY, MOODS, moodOf, marketBoosts, marketCoinBonus, FACTION_SWITCH_GEMS, FACTION_SWITCH_DAYS, FACTION_UPGRADE_DISCOUNT, FACTION_CHEST_WEIGHT, SHARE_GEMS, upgradePrice, UNLOCKS, unlocked, START_GEMS, DAY7_GEMS, WARP_COST, WARP_HOURS, gemRate, achGems, AI_DAILY, AI_LEVELS, aiLeft, aiReward, migrateIds, HOLO_CHANCE, CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
+  // Shown next to the player's name everywhere: the chosen card, else their community's hero, else the deck leader.
+  const avatarOf = p => (p ? (p.avatar && p.owned && p.owned[p.avatar] ? p.avatar : p.faction || (p.team && p.team[0]) || null) : null);
+  return { avatarOf, COSMETICS, giveCosmetic, FEATURED_CHANCE, featuredOf, leaderOf, MASCOT_PER_TIER, ALLY_DEFAULT, ALLY_SHARE, allianceBoosts, PASS, seasonOf, seasonEnds, passReward, passOf, passTier, addPassXp, ROOKIE, rookieStat, rookieOpenDays, rookieDayDone, rookieActive, SET_LEVEL, SETS, SET_TIERS, SET_MULT, setTier, setDone, perksOf, STAR_LEVELS, starsOf, EVENTS, EVENT_FX, eventOf, COMMUNITY, MOODS, moodOf, marketBoosts, marketCoinBonus, FACTION_SWITCH_GEMS, FACTION_SWITCH_DAYS, FACTION_UPGRADE_DISCOUNT, FACTION_CHEST_WEIGHT, SHARE_GEMS, upgradePrice, UNLOCKS, unlocked, START_GEMS, DAY7_GEMS, WARP_COST, WARP_HOURS, gemRate, achGems, AI_DAILY, AI_LEVELS, aiLeft, aiReward, migrateIds, HOLO_CHANCE, CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
     dqReward, dailyCanClaim, dailyNext, afkRate, afkAmount, achTier, coinBonus, replayFactor, stageCoins, teamPower, claimable, act, importLocal };
 });

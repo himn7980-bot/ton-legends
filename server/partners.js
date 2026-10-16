@@ -36,7 +36,7 @@ module.exports = function createPartners({ db, persist, tg, credit, profileOut, 
       } else if (!st.opened || Date.now() - st.opened < OPEN_WAIT_MS) fail('not_ready');
       st.done = Date.now();
       u.profile.gems = (u.profile.gems || 0) + q.gems; u.profile.coins += q.coins || 0;
-      q.claims = (q.claims || 0) + 1;
+      q.claims = (q.claims || 0) + 1; u.profile.stats.partners = (u.profile.stats.partners || 0) + 1;
       persist();
       return { gems: q.gems, coins: q.coins || 0, quests: view(u), profile: profileOut(u) };
     },

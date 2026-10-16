@@ -18,7 +18,7 @@ module.exports = function createReferral({ db, persist, credit, profileOut, invi
     if (Date.now() - (u.created || 0) < MIN_AGE_MS) return; // counted on a later visit
     const inviter = db.users[u.refBy];
     u.refPaid = true;
-    if (inviter) { inviter.refActive = (inviter.refActive || 0) + 1; credit(inviter, INVITER_COINS); }
+    if (inviter) { inviter.refActive = (inviter.refActive || 0) + 1; credit(inviter, INVITER_COINS); if (inviter.profile) inviter.profile.stats.refs = inviter.refActive; }
     persist();
   }
   // A friend won stage coins → the inviter banks SHARE of them (DAY_CAP per day).

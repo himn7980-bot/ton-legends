@@ -55,6 +55,12 @@ const PACKS = [
 // Older coin packs: only honoured if a payment for one arrives after the switch.
 const OLD_PACKS = [{ id: 'coins_s', coins: 3000, stars: 25 }, { id: 'coins_m', coins: 10000, stars: 75 }, { id: 'coins_l', coins: 30000, stars: 200 }];
 // The premium season pass is sold separately from the gem packs.
+const NAME_GEMS = 20;
+// The game's own channel (e.g. @gramlegends): new players join it first and get a welcome reward once.
+// The bot must be an admin of the channel to check membership; if it can't check, nobody is blocked.
+const GAME_CHANNEL = (process.env.GAME_CHANNEL || '').trim() || null, CHANNEL_COINS = 500, CHANNEL_GEMS = 20;
+const channelUrl = () => (GAME_CHANNEL ? (/^@/.test(GAME_CHANNEL) ? `https://t.me/${GAME_CHANNEL.slice(1)}` : GAME_CHANNEL) : null);
+const channelInfo = u => (GAME_CHANNEL && /^@\w{4,}$/.test(GAME_CHANNEL) ? { url: channelUrl(), joined: !!u.chanJoined, coins: CHANNEL_COINS, gems: CHANNEL_GEMS } : null);
 const PASS_PACK = { id: 'pass', stars: ECON.PASS.PRICE_STARS, pass: true };
 // Card frames sold for Telegram Stars (cosmetic only).
 const COS_PACKS = Object.entries(ECON.COSMETICS).filter(([, c]) => c.stars).map(([k, c]) => ({ id: 'cos_' + k, stars: c.stars, cos: k }));
@@ -64,7 +70,7 @@ const findPack = id => PACKS.find(p => p.id === id) || OLD_PACKS.find(p => p.id 
 const TEXT = {
   en: {
     start: '⚔️ Welcome to Gram Legends!\n\nCollect hero cards, build your team and battle boss cards across 20 worlds.\n\nTap the button below to start 👇',
-    play: '🎮 Play', open: '🎮 Open game', menu: '🎮 Play',
+    play: '🎮 Play', open: '🎮 Open game', menu: '🎮 Play', channel: 'Gram Legends channel',
     paid: c => `✅ Payment successful! ${c.toLocaleString('en-US')} coins were added. Open the game to collect them.`,
     paidGems: g => `✅ Payment successful! ${g} 💎 gems were added to your account.`,
     paidPass: '✅ Payment successful! Your premium Season Pass is unlocked — open the game to claim the rewards.',
@@ -150,7 +156,8 @@ for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => {
 function userRec(tgUser) {
   const id = String(tgUser.id);
   const u = db.users[id] || (db.users[id] = { id, pending: 0, gift: 0, refBy: null, refs: 0, created: Date.now(), profile: null });
-  u.name = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ').slice(0, 40) || tgUser.username || 'Player';
+  u.tgName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ').slice(0, 40) || tgUser.username || 'Player';
+  u.name = u.nick || u.tgName; // the player's own game name if they picked one
   u.username = tgUser.username || null;
   u.seen = Date.now();
   if (tgUser.language_code) u.tgLang = String(tgUser.language_code).slice(0, 2);
@@ -414,7 +421,7 @@ async function handleUpdate(up) {
     const url = WEBAPP_URL;
     const L = tx(m.from.language_code);
     try {
-      await tg('sendMessage', { chat_id: m.chat.id, text: L.start, reply_markup: { inline_keyboard: [[{ text: L.play, web_app: { url } }]] } });
+      await tg('sendMessage', { chat_id: m.chat.id, text: L.start, reply_markup: { inline_keyboard: [[{ text: L.play, web_app: { url } }], ...(channelUrl() ? [[{ text: '📢 ' + (L.channel || 'Channel'), url: channelUrl() }]] : [])] } });
     } catch (e) {
       // Usually a missing/invalid WEBAPP_URL (Telegram requires https). Reply anyway so the bot never looks dead.
       logErr('lastSendError', e);
@@ -503,12 +510,12 @@ const safePower = p => { try { return ECON.teamPower(p); } catch (e) { return 0;
 function leaderboard(meId) {
   if (!lbAll || Date.now() - lbAt >= (process.env.LB_CACHE_MS !== undefined ? +process.env.LB_CACHE_MS : 30e3)) {
     lbAll = Object.values(db.users).filter(u => u.profile && u.profile.cleared > 0)
-      .map(u => ({ id: u.id, name: u.name, stage: u.profile.cleared, pvp: u.profile.stats.pvpWins || 0, power: safePower(u.profile), seen: u.seen }))
+      .map(u => ({ id: u.id, name: u.name, av: ECON.avatarOf(u.profile), fr: u.profile.cos && u.profile.cos.on, stage: u.profile.cleared, pvp: u.profile.stats.pvpWins || 0, power: safePower(u.profile), seen: u.seen }))
       .sort((a, b) => b.stage - a.stage || b.pvp - a.pvp || b.power - a.power || a.seen - b.seen);
     lbIdx = new Map(lbAll.map((u, i) => [u.id, i])); lbAt = Date.now();
   }
   const all = lbAll;
-  const top = all.slice(0, 50).map((u, i) => ({ rank: i + 1, name: u.name, stage: u.stage, pvp: u.pvp }));
+  const top = all.slice(0, 50).map((u, i) => ({ rank: i + 1, name: u.name, av: u.av, fr: u.fr || null, stage: u.stage, pvp: u.pvp }));
   const idx = lbIdx.has(meId) ? lbIdx.get(meId) : -1;
   return { top, total: all.length, me: idx >= 0 ? { rank: idx + 1, stage: all[idx].stage } : null };
 }
@@ -555,12 +562,38 @@ const routes = {
     return { ok: true, suggest: inviter && inviter.profile ? inviter.profile.faction || null : null };
   },
   'POST /api/notify': (body, u) => { u.mute = !body.on; return { on: !u.mute }; },
+  // Game name: 3–16 letters/digits (any language), unique; the first change is free, later ones cost NAME_GEMS.
+  'POST /api/me/name': (body, u) => {
+    const fail = c => { throw Object.assign(new Error(c), { code: 400 }); };
+    if (!u.profile) fail('no_profile');
+    const name = String(body.name || '').normalize('NFC').replace(/\s+/g, ' ').trim();
+    if (!/^[\p{L}\p{N}_ .-]{3,16}$/u.test(name) || /^(admin|gram ?legends|support|moderator)$/i.test(name)) fail('bad_nick');
+    db.nicks = db.nicks || Object.create(null);
+    const key = name.toLowerCase(), owner = db.nicks[key];
+    if (owner && owner !== u.id) fail('name_taken');
+    const cost = u.nick ? NAME_GEMS : 0;
+    if ((u.profile.gems || 0) < cost) fail('no_gems');
+    if (u.nick && db.nicks[u.nick.toLowerCase()] === u.id) delete db.nicks[u.nick.toLowerCase()];
+    u.profile.gems -= cost; u.nick = name; u.name = name; db.nicks[key] = u.id;
+    return { name, profile: profileOut(u) };
+  },
+  'POST /api/channel/check': async (body, u) => {
+    if (!channelInfo(u) || u.chanJoined) return { joined: true };
+    const m = await tg('getChatMember', { chat_id: GAME_CHANNEL, user_id: Number(u.id) }).catch(e => ({ error: e.message }));
+    if (m && m.error) { logErr('channelError', new Error(m.error)); return { joined: true, unverified: true }; } // can't check → don't block anyone
+    if (!m || !['member', 'administrator', 'creator', 'restricted'].includes(m.status)) return { joined: false };
+    if (u.chanJoined) return { joined: true };
+    u.chanJoined = Date.now();
+    if (u.profile) { u.profile.coins += CHANNEL_COINS; u.profile.gems = (u.profile.gems || 0) + CHANNEL_GEMS; }
+    return { joined: true, coins: CHANNEL_COINS, gems: CHANNEL_GEMS, profile: u.profile ? profileOut(u) : null };
+  },
+  'POST /api/me': (body, u) => ({ name: u.name, nick: u.nick || null, tgName: u.tgName, nameCost: u.nick ? NAME_GEMS : 0 }),
   // The server keeps each Telegram player's coins and heroes. First visit imports the offline save (clamped).
   'POST /api/profile': (body, u) => {
     if (!u.profile) { u.profile = ECON.importLocal(body.local, Date.now()); u.profile.coins += u.pending; u.profile.gems += u.pendingGems || 0; u.pending = 0; u.pendingGems = 0; }
     if (u.pendingCos) { for (const c of u.pendingCos) ECON.giveCosmetic(u.profile, c); delete u.pendingCos; }
     if (u.pendingPass !== undefined) { if (u.pendingPass === ECON.seasonOf(Date.now())) ECON.passOf(u.profile, Date.now()).prem = true; delete u.pendingPass; }
-    return { profile: profileOut(u), notify: !u.mute };
+    return { profile: profileOut(u), notify: !u.mute, channel: channelInfo(u) };
   },
   'POST /api/act': (body, u) => {
     if (!u.profile) throw Object.assign(new Error('no_profile'), { code: 400 });

@@ -82,7 +82,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
   function matchInfo(m, t) {
     const opp = t === m.a ? m.b : m.a;
     return { side: t.side, ai: m.ai, stake: m.stake, pot: m.stake * 2, startIn: Math.max(0, m.startAt - now()),
-      you: { name: t.name, power: t.power }, opp: { name: opp.name, power: opp.power },
+      you: { name: t.name, power: t.power, av: ECON.avatarOf((db.users[t.uid] || {}).profile) }, opp: { name: opp.name, power: opp.power, av: opp.ai ? (opp.team || [])[0] : ECON.avatarOf((db.users[opp.uid] || {}).profile) },
       units: [...m.B.heroes, ...m.B.enemies].map(u => ({ uid: u.uid, side: u.side, id: u.id, name: u.name, maxHp: u.maxHp, row: u.row })) };
   }
 

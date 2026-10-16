@@ -53,7 +53,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     });
   });
   await new Promise(r => runwaySrv.listen(0, r));
-  Object.assign(process.env, { LB_CACHE_MS: '0', SAVE_MS: '1000', REF_MIN_AGE_MS: '1', RAID_MIN_MS: '0', RUNWAY_API: `http://127.0.0.1:${runwaySrv.address().port}`, RUNWAYML_API_SECRET: 'rw_test', RUNWAY_POLL_MS: '50' });
+  Object.assign(process.env, { LB_CACHE_MS: '0', SAVE_MS: '1000', GAME_CHANNEL: '@gl_news', REF_MIN_AGE_MS: '1', RAID_MIN_MS: '0', RUNWAY_API: `http://127.0.0.1:${runwaySrv.address().port}`, RUNWAYML_API_SECRET: 'rw_test', RUNWAY_POLL_MS: '50' });
   process.env.TL_EVENT = 'none'; // weekday events are tested explicitly below
   Object.assign(process.env, { ADMIN_IDS: '111', ART_DIR: path.join(path.dirname(dataFile), 'art'), BOT_TOKEN: TOKEN, WEBAPP_URL: 'https://game.example', PORT: '0', DATA_FILE: dataFile, TELEGRAM_API: `http://127.0.0.1:${fake.address().port}` });
   const srv = require('./server.js');
@@ -634,6 +634,31 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   await sleep(1200);
   assert.equal(srv.db.alliances.length, 0);
   console.log('   alliances: leader, shared war points, mascot milestones, official /ally boost');
+
+  // ---------- game name, avatar, tiered sets, new achievements ----------
+  r = await post('/api/me/name', { initData: initData(alice), name: 'x' }); assert.equal(r.body.error, 'bad_nick');
+  r = await post('/api/me/name', { initData: initData(alice), name: '<b>hi</b>' }); assert.equal(r.body.error, 'bad_nick');
+  const gN = srv.db.users['111'].profile.gems;
+  r = await post('/api/me/name', { initData: initData(alice), name: 'شیر طلایی' }); assert.equal(r.body.name, 'شیر طلایی'); assert.equal(r.body.profile.gems, gN, 'first name is free');
+  r = await post('/api/me/name', { initData: initData(bob), name: 'شیر طلایی' }); assert.equal(r.body.error, 'name_taken');
+  r = await post('/api/me', { initData: initData(alice) }); assert.equal(r.body.name, 'شیر طلایی'); assert.equal(r.body.nameCost, 20);
+  r = await post('/api/leaderboard', { initData: initData(alice) }); assert.ok(r.body.top.some(x => x.name === 'شیر طلایی'), 'leaderboard shows the game name');
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'avatar', id: 'dog' } });
+  assert.ok(r.status === 400 || srv.db.users['111'].profile.owned.dog, 'avatar must be owned');
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'avatar', id: 'f1' } }); assert.equal(r.body.profile.avatar, 'f1', 'alliance card as avatar');
+  r = await post('/api/leaderboard', { initData: initData(alice) }); assert.equal(r.body.top.find(x => x.name === 'شیر طلایی').av, 'f1');
+  { const p0 = ECON.newProfile(Date.now()); for (const id of ['utya', 'pengu', 'babyshark', 'dog']) p0.owned[id] = 30;
+    assert.equal(ECON.setTier(p0, ECON.SETS[0]), 2); assert.equal(ECON.perksOf(p0).hp, 0.075, 'tier 2 = ×1.5'); }
+  console.log('   profile: unique game name, card avatar in rankings; tiered sets');
+  // the game's channel: join first, reward once; non-members are asked again
+  r = await post('/api/profile', { initData: initData(alice) }); assert.deepEqual(r.body.channel, { url: 'https://t.me/gl_news', joined: false, coins: 500, gems: 20 });
+  const cC = srv.db.users['111'].profile.coins, gC = srv.db.users['111'].profile.gems;
+  r = await post('/api/channel/check', { initData: initData(alice) }); assert.equal(r.body.joined, true); assert.equal(r.body.coins, 500);
+  assert.equal(srv.db.users['111'].profile.coins, cC + 500); assert.equal(srv.db.users['111'].profile.gems, gC + 20);
+  r = await post('/api/channel/check', { initData: initData(alice) }); assert.equal(r.body.coins, undefined, 'reward only once');
+  r = await post('/api/channel/check', { initData: initData(bob) }); assert.equal(r.body.joined, false, 'not a member yet');
+  r = await post('/api/profile', { initData: initData(alice) }); assert.equal(r.body.channel.joined, true);
+  console.log('   game channel: join check, welcome reward once');
 
   // ---------- hardening: the exploits found in the pre-launch review stay closed ----------
   await fetch(base + '/%ff').then(x => assert.equal(x.status, 400));

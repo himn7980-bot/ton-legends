@@ -2,7 +2,7 @@
 
 // ---------- rules come from economy.js (shared with the server) ----------
 const { DAILY_QUESTS, DAILY_REWARDS, AFK_CAP_H } = ECON;
-const ACH_ICONS = { win: '⚔️', world: '🗺️', heroes: '🃏', level: '⬆️', chest: '🎁', skill: '⚡' };
+const ACH_ICONS = { win: '⚔️', world: '🗺️', heroes: '🃏', level: '⬆️', chest: '🎁', skill: '⚡', sets: '🗂️', stars: '⭐', awaken: '🌟', holo: '🌈', alliance: '🤝', boss: '👑', upgrade: '🔧', login: '📅', pvp: '🥊', ai: '🤖', league: '🏆', raid: '👹', raidKill: '💀', friends: '👥', partner: '📣' };
 const ACHIEVEMENTS = ECON.ACHIEVEMENTS.map(a => ({ ...a, icon: ACH_ICONS[a.id] }));
 const now = () => Date.now();
 const dqReward = q => ECON.dqReward(S, q);
@@ -118,9 +118,9 @@ function renderQuests() {
     <div class="h2">${t.todayQuests}</div>
     ${DAILY_QUESTS.map(q => questRow('dq-' + q.id, '🎯', t.dq[q.id], Math.min(q.goal, S.dq.p[q.id] || 0), q.goal, dqReward(q), !!S.dq.c[q.id])).join('')}
     <div class="h2">${t.achievements}</div>
-    ${ACHIEVEMENTS.map(a => {
+    ${ACHIEVEMENTS.map(a => ({ a, tier: achTier(a) })).map(x => ({ ...x, rank: x.tier >= x.a.tiers.length ? 2 : x.a.stat(S) >= x.a.tiers[x.tier] ? 0 : 1 })).sort((x, y) => x.rank - y.rank).map(({ a }) => {
       const tier = achTier(a), done = tier >= a.tiers.length, goal = a.tiers[Math.min(tier, a.tiers.length - 1)];
-      return questRow('ach-' + a.id, a.icon, t.ach[a.id](n(goal)) + (a.tiers.length > 1 ? ` <span class="muted">(${n(Math.min(tier + 1, a.tiers.length))}/${n(a.tiers.length)})</span>` : ''),
+      return questRow('ach-' + a.id, a.icon, t.ach[a.id](a.id === 'league' ? t.leagueTier[['bronze', 'silver', 'gold', 'diamond', 'legend'][goal]] : n(goal)) + (a.tiers.length > 1 ? ` <span class="muted">(${n(Math.min(tier + 1, a.tiers.length))}/${n(a.tiers.length)})</span>` : ''),
         Math.min(goal, a.stat(S)), goal, a.r[Math.min(tier, a.r.length - 1)], done, ECON.achGems(Math.min(tier, a.r.length - 1)));
     }).join('')}`;
   partnerQuests($('#pq-box'));
@@ -148,8 +148,8 @@ function questRow(key, icon, title, prog, goal, reward, claimed, gems) {
 function renderRank() {
   const t = T(), u = Online.user();
   $('#screen').innerHTML = `
-    <div class="panel profile"><div class="avatar">${u && u.first_name ? esc(u.first_name[0]) : '🦸'}</div><div style="flex:1">
-      <div class="t">${u ? esc(u.first_name + (u.last_name ? ' ' + u.last_name : '')) : t.player}</div>
+    <div class="panel profile" id="to-profile"><div class="avatar has-img ${skinClass()}">${ECON.avatarOf(S) ? `<img src="${img(ECON.avatarOf(S))}" alt="">` : (u && u.first_name ? esc(u.first_name[0]) : '🦸')}</div><div style="flex:1">
+      <div class="t">${esc(MY_NAME || (u ? u.first_name + (u.last_name ? ' ' + u.last_name : '') : t.player))} <span class="edit-ico">✏️</span></div>
       <div class="muted">${t.stageOf(n(S.cleared), n(TOTAL_STAGES), n(teamPower(S.team)))}</div></div></div>
     <div class="stats">
       <div>${t.wins}<b>${n(S.stats.wins)}</b></div><div>${t.arenaWins}<b>${n(S.stats.pvpWins || 0)}</b></div><div>${t.bossesBeaten}<b>${n(S.stats.bosses)}</b></div>
@@ -164,6 +164,7 @@ function renderRank() {
     <div id="board">${Online.state.server ? `<p class="muted center">${t.loading}</p>` : `<div class="panel center muted">${t.boardOffline}</div>`}</div>`;
   if ($('#invite')) $('#invite').onclick = () => Online.share(t.inviteText);
   if ($('#to-friends')) $('#to-friends').onclick = () => show('friends');
+  $('#to-profile').onclick = profileModal;
   if ($('#to-wallet')) $('#to-wallet').onclick = walletModal;
   if ($('#to-clan')) $('#to-clan').onclick = () => show('clan');
   $('#to-war2').onclick = () => show('war');
@@ -171,7 +172,7 @@ function renderRank() {
     const el = $('#board'); if (!el || S.tab !== 'rank') return;
     if (!d || !d.top) { el.innerHTML = `<div class="panel center muted">${t.boardErr}</div>`; return; }
     el.innerHTML = `<div class="panel board">${d.top.map(r => `<div class="brow ${d.me && r.rank === d.me.rank ? 'me' : ''}">
-        <span class="rk">${r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : n(r.rank)}</span><span class="bn">${esc(r.name)}</span>
+        <span class="rk">${r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : n(r.rank)}</span><span class="bn">${avatarImg(r.av, r.fr)}${esc(r.name)}</span>
         <span class="bs">${t.stage(n(r.stage))}${r.pvp ? ` · ⚔️${n(r.pvp)}` : ''}</span></div>`).join('') || `<p class="muted center">${t.boardEmpty}</p>`}
       ${d.me && d.me.rank > d.top.length ? `<div class="brow me"><span class="rk">${n(d.me.rank)}</span><span class="bn">${t.you}</span><span class="bs">${t.stage(n(d.me.stage))}</span></div>` : ''}
       <p class="muted center" style="margin:8px 0 0">${t.players(n(d.total || 0))}</p></div>`;
@@ -279,7 +280,9 @@ window.initTelegram = async () => {
     }
   }
   Online.markReady();
+  if (Online.state.profile) Online.api('me').then(r => { MY_NAME = r.name; if (S.tab === 'rank') refresh(); }).catch(() => {});
   if (!BT) refresh();
+  if (Online.state.channel && !Online.state.channel.joined) await channelGate();
   if (Online.state.profile) {
     loadWar().then(() => { if (!BT && S.tab === 'map') refresh(); });
     // Returning players who never chose a community get the picker once the server profile is in.

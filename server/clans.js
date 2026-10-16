@@ -45,7 +45,7 @@ module.exports = function createClans({ db, persist, profileOut = () => null }) 
     const tier = tierFor(c.last.points);
     return { ...summary(c), leader: c.leader, me: u.id, lastPoints: c.last.points,
       chest: tier ? { ...tier, claimed: c.last.claimed.includes(u.id) } : null, tiers: CHEST_TIERS, max: MAX_MEMBERS,
-      list: c.members.map(id => { const m = db.users[id] || {}; return { id, name: m.name || '?', stage: m.profile ? m.profile.cleared : 0, pts: c.contrib[id] || 0 }; })
+      list: c.members.map(id => { const m = db.users[id] || {}; return { id, name: m.name || '?', av: m.profile ? ECON.avatarOf(m.profile) : null, stage: m.profile ? m.profile.cleared : 0, pts: c.contrib[id] || 0 }; })
         .sort((a, b) => b.pts - a.pts || b.stage - a.stage) };
   }
   function leave(u) {

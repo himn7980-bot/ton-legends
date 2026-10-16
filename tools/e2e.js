@@ -249,6 +249,16 @@ const tgScript = (user, startParam) => `
   await p1.evaluate(() => walletModal()); await p1.waitForSelector('#w-on');
   await p1.screenshot({ path: OUT + '/x8-wallet.png' }); await p1.click('#m-close');
   console.log('✓ friends, league panel, partner quest, featured hero, card frame, wallet screen');
+  await p1.evaluate(() => show('rank')); await p1.waitForSelector('#to-profile'); await p1.click('#to-profile'); await p1.waitForSelector('#pf-name');
+  await p1.fill('#pf-name', 'SaraLegend'); await p1.click('#pf-save'); await p1.waitForTimeout(500);
+  assert.equal(srv.db.users['777'].nick, 'SaraLegend');
+  await p1.click('#to-profile'); await p1.waitForSelector('[data-av]'); await p1.click('[data-av]'); await p1.waitForTimeout(400);
+  assert.ok(serverProfile(777).avatar, 'avatar chosen'); await p1.waitForSelector('.avatar.has-img img');
+  await p1.screenshot({ path: OUT + '/x9-profile.png' });
+  // channel gate (rendered with a fake channel)
+  await p1.evaluate(() => { Online.state.channel = { url: 'https://t.me/gl', joined: false, coins: 500, gems: 20 }; channelGate(); }); await p1.waitForSelector('#ch-check');
+  await p1.screenshot({ path: OUT + '/x10-channel.png' }); await p1.evaluate(() => closeModal());
+  console.log('✓ game name + card avatar, channel join screen');
 
   // ---- Telegram BackButton still drives navigation ----
   await p2.click('[data-tab=heroes]'); await p2.waitForTimeout(150);

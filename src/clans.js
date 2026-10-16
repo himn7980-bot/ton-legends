@@ -33,7 +33,7 @@ function drawMyClan() {
       <p class="muted small" style="margin:10px 0 0">${t.clanPoints}</p></div>
     <button class="btn wide gold" id="cl-invite">${t.inviteClan}</button>
     <div class="h2">${t.members(n(c.members), n(c.max))}</div>
-    <div class="panel">${c.list.map(m => `<div class="crow"><span class="cn">${m.id === c.leader ? '👑 ' : ''}${esc(m.name)}${m.id === c.me ? ` <span class="muted">(${t.you})</span>` : ''}</span>
+    <div class="panel">${c.list.map(m => `<div class="crow"><span class="cn">${avatarImg(m.av)}${m.id === c.leader ? '👑 ' : ''}${esc(m.name)}${m.id === c.me ? ` <span class="muted">(${t.you})</span>` : ''}</span>
       <span class="cs">${t.stage(n(m.stage))} · ⭐ ${n(m.pts)}</span>
       ${iLead && m.id !== c.me ? `<button class="kick" data-kick="${esc(m.id)}">${t.kick}</button>` : ''}</div>`).join('')}</div>
     <button class="btn wide ghost" id="cl-leave">${t.leaveClan}</button>`;

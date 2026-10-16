@@ -27,7 +27,7 @@ module.exports = function createRaid({ db, persist, weekKey, credit, profileOut,
 
   function kill(R, killer) {
     const ranked = Object.entries(R.dmg).sort((a, b) => b[1] - a[1]);
-    ranked.forEach(([uid], i) => { const u = db.users[uid]; if (u) credit(u, 0, KILL_GEMS + (i < 3 ? TOP_GEMS : 0) + (uid === killer ? LAST_HIT_GEMS : 0)); });
+    ranked.forEach(([uid], i) => { const u = db.users[uid]; if (u && u.profile) u.profile.stats.raidKills = (u.profile.stats.raidKills || 0) + 1; if (u) credit(u, 0, KILL_GEMS + (i < 3 ? TOP_GEMS : 0) + (uid === killer ? LAST_HIT_GEMS : 0)); });
     R.kills.push({ level: R.level, boss: R.boss, by: killer, name: (db.users[killer] || {}).name || 'Player', at: Date.now(), players: ranked.length });
     spawn(R.level + 1, R.week);
   }
@@ -37,7 +37,7 @@ module.exports = function createRaid({ db, persist, weekKey, credit, profileOut,
       week: R.week, level: R.level, boss: R.boss, weak: R.weak, hp: R.hp, max: R.max, time: E.RAID_TIME,
       tries: triesLeft(u), free: FREE_TRIES, extraGems: EXTRA_GEMS, rewards: { kill: KILL_GEMS, top: TOP_GEMS, last: LAST_HIT_GEMS },
       mine: { boss: R.dmg[u.id] || 0, week: R.total[u.id] || 0, rank: top.findIndex(([id]) => id === u.id) + 1 || null },
-      top: top.slice(0, 10).map(([id, d]) => ({ name: (db.users[id] || {}).name || 'Player', dmg: d, me: id === u.id })),
+      top: top.slice(0, 10).map(([id, d]) => ({ name: (db.users[id] || {}).name || 'Player', av: ECON.avatarOf((db.users[id] || {}).profile), dmg: d, me: id === u.id })),
       coms: Object.entries(R.coms).sort((a, b) => b[1] - a[1]).map(([id, d]) => ({ id, dmg: d })),
       kills: R.kills.slice(-5).reverse(),
     };
@@ -69,7 +69,7 @@ module.exports = function createRaid({ db, persist, weekKey, credit, profileOut,
       // The fight counts against the boss that is up now (if it fell meanwhile, the damage goes to the next one).
       // Coins scale with the player's progress (about one stage reward per fight, up to 1.5× for big damage).
       const dmg = r.dmg, coins = Math.max(50, Math.round(E.stageReward(Math.min(E.TOTAL_STAGES - 1, u.profile.cleared)) * Math.max(0.5, Math.min(1.5, Math.sqrt(dmg) / 200))));
-      u.profile.coins += coins;
+      u.profile.coins += coins; u.profile.stats.raidDmg = (u.profile.stats.raidDmg || 0) + dmg;
       R.dmg[u.id] = (R.dmg[u.id] || 0) + dmg; R.total[u.id] = (R.total[u.id] || 0) + dmg;
       if (u.profile.faction) R.coms[u.profile.faction] = (R.coms[u.profile.faction] || 0) + dmg;
       R.hp = Math.max(0, R.hp - dmg);

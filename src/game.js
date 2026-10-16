@@ -307,10 +307,11 @@ function renderHeroes() {
     ${isOpen('duo') ? `<button class="btn wide lab-btn" id="to-lab">${t.openLab}</button>` : `<button class="btn wide ghost" disabled>${t.openLab} · 🔒 ${t.worldN(n(unlockWorld('duo')))}</button>`}
     <p class="muted small center" style="margin:6px 0 0">${t.teamRule}</p>
     <div class="h2">${t.setsTitle}</div>
-    <div class="sets">${ECON.SETS.map(st => { const done = ECON.setDone(S, st), fx = Object.keys(st.perk)[0];
-      return `<div class="set ${done ? 'done' : ''}"><div class="row"><b>${st.ico} ${t.setName[st.id]}</b><span class="${done ? 'tag gold' : 'muted small'}">${done ? '✓ ' + t.setDone : n(st.heroes.filter(id => (S.owned[id] || 0) >= ECON.SET_LEVEL).length) + '/4'}</span></div>
-        <div class="set-heroes">${st.heroes.map(id => `<div class="${(S.owned[id] || 0) >= ECON.SET_LEVEL ? 'ok' : ''}"><img src="${img(id)}" alt=""><small>${S.owned[id] ? t.level(n(S.owned[id])) : '🔒'}</small></div>`).join('')}</div>
-        <div class="small ${done ? '' : 'muted'}">${t.setFx[fx]}</div></div>`; }).join('')}</div>
+    <div class="sets">${ECON.SETS.map(st => { const tier = ECON.setTier(S, st), done = tier >= 1, fx = Object.keys(st.perk)[0], next = ECON.SET_TIERS[tier];
+      return `<div class="set ${done ? 'done' : ''} tier${tier}"><div class="row"><b>${st.ico} ${t.setName[st.id]}</b><span class="set-stars">${ECON.SET_TIERS.map((l, i) => `<i class="${i < tier ? 'on' : ''}">★</i>`).join('')}</span></div>
+        <div class="set-heroes">${st.heroes.map(id => `<div class="${next && (S.owned[id] || 0) >= next ? 'ok' : !next ? 'ok' : ''}"><img src="${img(id)}" alt=""><small>${S.owned[id] ? t.level(n(S.owned[id])) : '🔒'}</small></div>`).join('')}</div>
+        <div class="muted small">${next ? t.setNext(n(next), n(st.heroes.filter(id => (S.owned[id] || 0) >= next).length)) : '✓ ' + t.setDone}${tier ? ` · ×${ECON.SET_MULT[tier]}` : ''}</div>
+        <div class="small ${done ? '' : 'muted'}">${t.setFxN[fx](n(Math.round(st.perk[fx] * (fx === 'energy' ? 1 : 100) * (ECON.SET_MULT[tier] || 1))))}</div></div>`; }).join('')}</div>
     <p class="muted small">${t.setNote(n(ECON.SET_LEVEL))}</p>
     <div class="h2">${t.collection} <span class="muted">(${n(owned)}/${n(BASE_HEROES.length)}) · ${t.holoCount(n(holos), n(BASE_HEROES.length))}</span></div>
     <div class="grid">${order.map(cardHtml).join('')}</div>`;
