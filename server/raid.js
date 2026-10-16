@@ -8,7 +8,7 @@ const ECON = require('../src/economy.js');
 
 const BOSSES = ['teddy', 'notcoin', 'pinkbull', 'noctis', 'yoda', 'babyshark', 'volya', 'virus'];
 const WEAK = ['stun', 'freeze', 'poison', 'vuln', 'slow'];
-const FREE_TRIES = 3, EXTRA_GEMS = 10, KILL_GEMS = 5, TOP_GEMS = 25, LAST_HIT_GEMS = 20;
+const FREE_TRIES = 3, MAX_EXTRA = 3, EXTRA_GEMS = 10, KILL_GEMS = 5, TOP_GEMS = 25, LAST_HIT_GEMS = 20;
 
 module.exports = function createRaid({ db, persist, weekKey, credit, profileOut, ctxFor, onDamage = () => {} }) {
   db.raid = db.raid || null;
@@ -48,7 +48,7 @@ module.exports = function createRaid({ db, persist, weekKey, credit, profileOut,
       const p = u.profile; if (!p) fail('no_profile');
       if (!p.team.length) fail('bad_team');
       if (triesLeft(u) <= 0) {
-        if (!body.buy) fail('no_tries');
+        if (!body.buy || u.raidDay.extra >= MAX_EXTRA) fail('no_tries');
         if ((p.gems || 0) < EXTRA_GEMS) fail('no_gems');
         p.gems -= EXTRA_GEMS; u.raidDay.extra++;
       }
@@ -62,6 +62,8 @@ module.exports = function createRaid({ db, persist, weekKey, credit, profileOut,
       const pd = u.raidPending; if (!pd) fail('no_battle');
       u.raidPending = null;
       if (Date.now() - pd.at > 10 * 60e3) fail('expired');
+      // A fight plays for at least RAID_TIME / 3 seconds of real time (×3 speed); a scripted instant end is refused.
+      if (Date.now() - pd.at < (process.env.RAID_MIN_MS !== undefined ? +process.env.RAID_MIN_MS : E.RAID_TIME / 3 * 1000 - 3000)) { u.raidPending = pd; fail('too_soon'); }
       const r = E.replayRaid(pd.team, pd.levels, pd.seed, body.inputs, { boss: pd.boss, level: pd.level, weak: pd.weak }, pd.faction, pd.market, pd.perks);
       const R = roll();
       // The fight counts against the boss that is up now (if it fell meanwhile, the damage goes to the next one).

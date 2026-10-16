@@ -99,7 +99,12 @@ function stopDuelStream() { if (PV && PV.es) PV.es.close(); }
 function showWaiting() {
   if (!PV || BT) return;
   const t = T();
-  if (PV.ai) return openModal(`<div class="center"><div class="spinner"></div><div class="big" style="font-size:22px">${t.aiVs(t.aiLv[PV.ai])}</div></div>`, null, { lock: true, onBack: () => {} });
+  if (PV.ai) return openModal(`<div class="center"><div class="spinner"></div><div class="big" style="font-size:22px">${t.aiVs(t.aiLv[PV.ai])}</div>
+    <button class="btn wide ghost" id="ai-x" style="margin-top:14px;visibility:hidden">${t.close}</button></div>`, box => {
+      // If the match never starts (server restart, lost connection), let the player out after a few seconds.
+      setTimeout(() => { const b = box.querySelector('#ai-x'); if (b) b.style.visibility = 'visible'; }, 6000);
+      box.querySelector('#ai-x').onclick = () => { stopDuelStream(); PV = null; closeModal(); refresh(); };
+    }, { lock: true, onBack: () => {} });
   openModal(`<div class="center">
     <div class="spinner"></div>
     <div class="big" style="font-size:22px">${PV.code ? t.waitingFriend : t.searching}</div>

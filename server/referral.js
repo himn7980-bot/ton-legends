@@ -7,7 +7,7 @@ const TIERS = [
   { n: 1, gems: 10 }, { n: 3, gems: 30 }, { n: 5, gems: 50, frame: 'friend' },
   { n: 10, gems: 120 }, { n: 25, gems: 300 }, { n: 50, gems: 700 },
 ];
-const SHARE = 0.1, DAY_CAP = 3000, ACTIVE_AT = 10, INVITER_COINS = 500, NEWCOMER_COINS = 300;
+const MIN_AGE_MS = +process.env.REF_MIN_AGE_MS || 12 * 3600e3, SHARE = 0.1, DAY_CAP = 3000, ACTIVE_AT = 10, INVITER_COINS = 500, NEWCOMER_COINS = 300;
 
 module.exports = function createReferral({ db, persist, credit, profileOut, inviteLink = () => null }) {
   const today = () => ECON.day(Date.now());
@@ -15,6 +15,7 @@ module.exports = function createReferral({ db, persist, credit, profileOut, invi
   // Friend reached world 2 → pay the inviter once.
   function check(u) {
     if (!u.refBy || u.refPaid || !u.profile || u.profile.cleared < ACTIVE_AT) return;
+    if (Date.now() - (u.created || 0) < MIN_AGE_MS) return; // counted on a later visit
     const inviter = db.users[u.refBy];
     u.refPaid = true;
     if (inviter) { inviter.refActive = (inviter.refActive || 0) + 1; credit(inviter, INVITER_COINS); }

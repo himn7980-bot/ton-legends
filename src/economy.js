@@ -185,7 +185,7 @@
       // Older saves may field more fusion cards than allowed: keep the first ones that fit.
       const keep = [];
       for (const id of p.team) if (!E.teamError([...keep, id])) keep.push(id);
-      p.team = keep;
+      p.team = keep.filter(id => Object.prototype.hasOwnProperty.call(E.HERO_BY_ID, id) && p.owned && Object.prototype.hasOwnProperty.call(p.owned, id));
     }
     return { ...d, ...p, stats: { ...d.stats, ...(p.stats || {}) }, daily: { ...d.daily, ...(p.daily || {}) }, dq: { ...d.dq, ...(p.dq || {}) },
       ach: { ...(p.ach || {}) }, serials: { ...(p.serials || {}) }, holo: { ...(p.holo || {}) }, replays: { ...(p.replays || {}) } };
@@ -262,7 +262,15 @@
 
   // Apply one player action. Mutates p and returns a result; throws on invalid actions.
   // ctx: { now, rng } — the server passes its own clock and RNG.
+  // Ids/keys from requests are looked up in plain objects: names like "__proto__" or "constructor" are never valid.
+  const PROTO_KEYS = new Set(Object.getOwnPropertyNames(Object.prototype).concat(['__proto__', 'prototype']));
+  const badKey = v => typeof v === 'string' && PROTO_KEYS.has(v);
   function act(p, a, ctx) {
+    if (!a || typeof a !== 'object' || typeof a.type !== 'string') fail('bad_action');
+    for (const k of ['id', 'key', 'hero', 'leader', 'type']) if (badKey(a[k])) fail('bad_action');
+    if (Array.isArray(a.team) && a.team.some(x => typeof x !== 'string' || badKey(x) || !Object.prototype.hasOwnProperty.call(E.HERO_BY_ID, x) || !Object.prototype.hasOwnProperty.call(p.owned, x))) fail('bad_team');
+    if (!Number.isFinite(p.coins)) p.coins = 0;
+    if (!Number.isFinite(p.gems)) p.gems = 0;
     const { now, rng } = ctx;
     switch (a && a.type) {
       case 'team': {
@@ -466,7 +474,7 @@
     p.team = (Array.isArray(local.team) ? local.team : []).filter((id, i, a) => owned[id] && a.indexOf(id) === i).slice(0, 5);
     if (!p.team.length) p.team = [...E.STARTERS];
     p.coins = Math.max(0, Math.min(5000, Math.floor(Number(local.coins) || 0)));
-    p.cleared = Math.max(0, Math.min(E.TOTAL_STAGES, Math.floor(Number(local.cleared) || 0)));
+    p.cleared = 0; // progress is never taken from an offline save (it can be edited); stages are replayed on the server
     return p;
   }
 

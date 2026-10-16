@@ -130,12 +130,13 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
       if (!winner) { result = 'draw'; if (p) p.coins += m.stake; }
       else if (t === winner) {
         result = 'win';
-        if (p) { ECON.addPassXp(p, ECON.PASS.XP.pvp, now()); p.coins += pot; p.gems = (p.gems || 0) + winGems(); p.stats.pvpWins = (p.stats.pvpWins || 0) + 1; ECON.track(p, 'wins', 1, now()); }
-        onPoints(t.uid, 5, { kind: 'pvp', vs: (t === m.a ? m.b : m.a).uid });
+        const rated = m.a.mode === 'queue' && m.b.mode === 'queue'; // private rooms are friendly: stakes only, no gems/points/XP
+        if (p) { p.coins += pot; p.stats.pvpWins = (p.stats.pvpWins || 0) + 1; if (rated) { ECON.addPassXp(p, ECON.PASS.XP.pvp, now()); p.gems = (p.gems || 0) + winGems(); ECON.track(p, 'wins', 1, now()); } }
+        if (rated) onPoints(t.uid, 5, { kind: 'pvp', vs: (t === m.a ? m.b : m.a).uid });
       }
       else { result = 'lose'; if (p) p.stats.pvpLosses = (p.stats.pvpLosses || 0) + 1; }
       t.status = 'done';
-      t.end = { result, stake: m.stake, pot, gemsWon: result === 'win' ? winGems() : 0, coins: p ? p.coins : 0, gems: p ? p.gems : 0, opp: (t === m.a ? m.b : m.a).name, league: ranked[t.uid] || null };
+      t.end = { result, stake: m.stake, pot, gemsWon: result === 'win' && m.a.mode === 'queue' && m.b.mode === 'queue' ? winGems() : 0, coins: p ? p.coins : 0, gems: p ? p.gems : 0, opp: (t === m.a ? m.b : m.a).name, league: ranked[t.uid] || null };
       send(t, 'end', t.end);
       if (!t.client) notify(t.uid, t.end);
     }
@@ -161,9 +162,10 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
     if (p && result === 'win') {
       p.stats.aiWins = (p.stats.aiWins || 0) + 1;
       ECON.track(p, 'wins', 1, now());
-      onPoints(t.uid, 1, { kind: 'ai' });
-      ECON.addPassXp(p, ECON.PASS.XP.ai, now());
+      // Pass XP and war/clan points only for the daily rewarded wins (no endless farming of the easy AI).
       if (ECON.aiLeft(p, now()) > 0) {
+        onPoints(t.uid, 1, { kind: 'ai' });
+        ECON.addPassXp(p, ECON.PASS.XP.ai, now());
         reward = ECON.aiReward(p, m.ai, now());
         p.coins += reward.coins; p.gems = (p.gems || 0) + reward.gems;
         const d = ECON.day(now());
@@ -251,7 +253,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
     },
     'POST /api/pvp/ai': (body, u) => {
       if (u.profile && !ECON.unlocked(u.profile, 'ai')) fail('locked_feature');
-      const level = ECON.AI_LEVELS[body.level] ? body.level : 'normal';
+      const level = Object.prototype.hasOwnProperty.call(ECON.AI_LEVELS, body.level) ? body.level : 'normal';
       const p = u.profile;
       if (!p) fail('no_profile');
       if (!p.team.length) fail('bad_team');

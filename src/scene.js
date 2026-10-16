@@ -15,7 +15,7 @@ const Scene = (() => {
   const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const rnd = (a, b) => a + Math.random() * (b - a);
   let cv = null, ctx = null, cfg = null, root = null, W = 0, H = 0, raf = 0, last = 0, time = 0, chapter = 0;
-  let stars = [], parts = [], glints = [], bursts = [], shoot = null, sky = null, hex = null;
+  let cards = [], vign = null, stars = [], parts = [], glints = [], bursts = [], shoot = null, sky = null, hex = null;
   const tilt = { x: 0, y: 0 }, aim = { x: 0, y: 0 }, sprites = {};
 
   // Soft glow dots are pre-rendered once per colour and stamped with drawImage (much cheaper than shadowBlur).
@@ -69,6 +69,10 @@ const Scene = (() => {
     W = r.width; H = r.height; cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     sky = cfg.skyline ? makeSkyline() : null; hex = cfg.hex ? makeHex() : null;
+    // Vignette drawn once per size (not every frame).
+    vign = document.createElement('canvas'); vign.width = Math.ceil(W); vign.height = Math.ceil(H);
+    const vg2 = vign.getContext('2d'), vg = vg2.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,8,.55)'); vg2.fillStyle = vg; vg2.fillRect(0, 0, W, H);
   }
   function onTilt(e) { if (e.gamma == null) return; aim.x = Math.max(-1, Math.min(1, e.gamma / 30)); aim.y = Math.max(-1, Math.min(1, (e.beta - 45) / 30)); }
   function onMove(e) { if (!W) return; aim.x = (e.clientX / innerWidth - 0.5) * 1.6; aim.y = (e.clientY / innerHeight - 0.5) * 1.6; }
@@ -81,6 +85,7 @@ const Scene = (() => {
     if (!level) return;
     cv = canvas; root = canvas.parentElement; ctx = cv.getContext('2d'); cfg = CFG[key] || CFG.galaxy; chapter = ch || 0;
     resize();
+    cards = [...root.querySelectorAll('.hcard')];
     const area = W * H / (390 * 760);
     stars = Array.from({ length: Math.round(170 * area * (level < 2 ? 0.5 : 1)) }, () => ({ x: rnd(0, W), y: rnd(0, H), d: [0.25, 0.55, 1][Math.random() * 3 | 0], r: rnd(0.6, 1.9), ph: rnd(0, 6.28), sp: rnd(1, 3) }));
     const count = { bubbles: 46, crystals: 36, rain: 90, embers: 75, toxic: 42, galaxy: 340 }[cfg.kind];
@@ -199,12 +204,11 @@ const Scene = (() => {
     }
     // Vignette: darker edges push the middle forward.
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
-    const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
-    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,8,.55)'); ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+    if (vign) ctx.drawImage(vign, 0, 0, W, H);
 
     // Cards float and lean in 3D (and toward the tilt). Uses the individual translate/rotate properties so the
     // hit / cast animations (which use transform) still play on top.
-    if (root && level === 2) root.querySelectorAll('.hcard').forEach((n, i) => {
+    if (level === 2) cards.forEach((n, i) => {
       if (n.classList.contains('dead')) { n.style.translate = ''; n.style.rotate = ''; return; }
       const ph = i * 1.7, rx = Math.sin(time * 0.9 + ph) * 5 - tilt.y * 7, ry = Math.cos(time * 0.7 + ph) * 6 + tilt.x * 9;
       const ang = Math.hypot(rx, ry);

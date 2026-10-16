@@ -16,6 +16,12 @@ services:
         sync: false
       - key: ADMIN_IDS
         sync: false
+      # Heap size: ~400 on Starter (512 MB), ~1536 on Standard (2 GB)
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=400
+      # Save the database at most every N ms (whole-file JSON writes)
+      - key: SAVE_MS
+        value: "3000"
       # Market mood: hero=coingecko-id:SYMBOL for heroes whose token price drives their card (others use community activity)
       - key: MARKET_TOKENS
         value: notcoin=notcoin:NOT,dog=dogs-2:DOGS

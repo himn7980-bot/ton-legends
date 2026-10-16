@@ -25,7 +25,7 @@ async function renderFriends() {
     <div class="h2">${t.refTiersTitle}</div>
     <div class="ref-tiers">${R.tiers.map(x => `<div class="ref-tier ${x.claimed ? 'claimed' : x.done ? 'ready' : ''}">
       <div><b>${t.refTierN(n(x.n))}</b><small>💎 ${n(x.gems)}${x.frame ? ` + ${ECON.COSMETICS[x.frame].ico} ${t.frameName[x.frame]}` : ''}</small></div>
-      ${x.claimed ? '<span class="tag">✓</span>' : `<button class="btn ${x.done ? 'gold' : 'ghost'}" data-tier="${x.n}" ${x.done ? '' : 'disabled'}>${x.done ? t.claim : `${n(Math.min(R.active, x.n))}/${n(x.n)}`}</button>`}</div>`).join('')}</div>
+      ${x.claimed ? '<span class="tag">✓</span>' : `<button class="btn ${x.done ? 'gold' : 'ghost'}" data-tier="${x.n}" ${x.done ? '' : 'disabled'}>${x.done ? t.claimNow : `${n(Math.min(R.active, x.n))}/${n(x.n)}`}</button>`}</div>`).join('')}</div>
     <div class="h2">${t.refFriends} <span class="muted">(${n(R.invited)})</span></div>
     ${R.friends.length ? `<div class="panel">${R.friends.map(f => `<div class="row lb-row"><span>${f.active ? '✅' : '⏳'} ${esc(f.name)}</span><span class="muted">${t.stage(n(f.stage))}</span></div>`).join('')}</div>`
       : `<p class="muted center">${t.refNone}</p>`}`;
@@ -61,10 +61,15 @@ async function renderRaid() {
     ${R.coms.length ? `<div class="h2">${t.raidComs}</div><div class="panel">${R.coms.slice(0, 8).map((c, i) => `<div class="row lb-row"><span>${i + 1}. <img class="mini-av" src="${img(c.id)}" alt=""> ${factionName(c.id)}</span><b>${n(c.dmg)}</b></div>`).join('')}</div>` : ''}
     ${R.top.length ? `<div class="h2">${t.raidTop}</div><div class="panel">${R.top.map((p, i) => `<div class="row lb-row ${p.me ? 'me' : ''}"><span>${['🥇', '🥈', '🥉'][i] || i + 1 + '.'} ${esc(p.name)}</span><b>${n(p.dmg)}</b></div>`).join('')}</div>` : ''}
     ${R.kills.length ? `<div class="h2">${t.raidKills}</div><div class="panel">${R.kills.map(k => `<div class="row lb-row"><span>💀 ${HERO_BY_ID[k.boss].name} · ${t.raidLevel(n(k.level))}</span><span class="muted">⚔️ ${esc(k.name)} · 👥 ${n(k.players)}</span></div>`).join('')}</div>` : ''}`;
-  $('#rd-go').onclick = () => startRaid(R.tries <= 0);
+  $('#rd-go').onclick = e => { e.currentTarget.disabled = true; startRaid(R.tries <= 0).finally(() => { const b = $('#rd-go'); if (b) b.disabled = false; }); };
 }
+let RAID_STARTING = false;
 async function startRaid(buy) {
-  if (BT) return;
+  if (BT || RAID_STARTING) return;
+  RAID_STARTING = true;
+  try { await startRaidNow(buy); } finally { RAID_STARTING = false; }
+}
+async function startRaidNow(buy) {
   const t = T(), r = await tryApi('raid/start', { buy: !!buy });
   if (!r) return;
   const B = createRaid(S.team, S.owned, r.seed, r.raid, S.faction || null, r.market || null, r.perks || null);
@@ -135,7 +140,7 @@ async function partnerQuests(el) {
   if (!el.isConnected || !r.quests.length) return;
   el.innerHTML = `<div class="h2">🤝 ${t.partnersTitle}</div>${r.quests.map(q => `<div class="panel pq ${q.done ? 'done' : ''}">
     <div class="row"><div><div class="t">${esc(q.title)}</div><div class="muted small">💎 ${n(q.gems)}${q.coins ? ` · 🪙 ${n(q.coins)}` : ''}</div></div>
-    ${q.done ? '<span class="tag">✓</span>' : `<div class="pq-btns"><button class="btn ghost" data-pq-open="${q.id}">${t.pqOpen}</button><button class="btn gold" data-pq-claim="${q.id}">${t.claim}</button></div>`}</div></div>`).join('')}`;
+    ${q.done ? '<span class="tag">✓</span>' : `<div class="pq-btns"><button class="btn ghost" data-pq-open="${q.id}">${t.pqOpen}</button><button class="btn gold" data-pq-claim="${q.id}">${t.claimNow}</button></div>`}</div></div>`).join('')}`;
   el.querySelectorAll('[data-pq-open]').forEach(b => b.onclick = () => {
     const q = r.quests.find(x => x.id === +b.dataset.pqOpen);
     Online.api('partners/open', { id: q.id }).catch(() => {});
@@ -169,14 +174,22 @@ function bindFrames() {
     const id = b.dataset.frame, c = ECON.COSMETICS[id], own = (S.cos || { own: [] }).own.includes(id);
     if (!own && c.stars) {
       if (!Online.state.profile) return toast(T().arenaOffline);
-      try { const r = await Online.buy('cos_' + id); if (r.status === 'paid') { await syncProfile(); toast('✅ ' + T().frameName[id]); refresh(); } } catch (e) { toast(errText(e)); }
+      if (b.disabled) return; b.disabled = true;
+      try {
+        const { link } = await Online.api('invoice', { pack: 'cos_' + id });
+        const st = await new Promise(res => Online.tg().openInvoice(link, res));
+        // The server unlocks the frame when Telegram confirms the payment: reload until it shows up.
+        for (let i = 0; st === 'paid' && i < 8 && !(S.cos && S.cos.own.includes(id)); i++) { await new Promise(r => setTimeout(r, 1000)); await syncServerProfile(); }
+        if (S.cos && S.cos.own.includes(id)) toast('✅ ' + T().frameName[id]);
+      } catch (e) { toast(errText(e)); }
+      b.disabled = false; refresh();
       return;
     }
     if (await tryAct({ type: 'cosmetic', id })) { haptic('light'); refresh(); }
   });
   if ($('#fr-off')) $('#fr-off').onclick = async () => { if (await tryAct({ type: 'cosmetic', id: null })) refresh(); };
 }
-async function syncProfile() { try { const r = await Online.loadProfile(null); Object.assign(S, r); save(); showCoins(); } catch (e) {} }
+async function syncServerProfile() { try { const r = await Online.loadProfile(null); Object.assign(S, r); save(); showCoins(); } catch (e) {} }
 const skinClass = () => (S.cos && S.cos.on ? 'skin-' + S.cos.on : '');
 
 // ---------- TON wallet + NFT requests ----------
@@ -195,7 +208,7 @@ async function walletModal() {
     ${r.nft.length ? `<div class="h2" style="font-size:16px">🖼 ${t.nftTitle}</div>${r.nft.map(x => `<div class="row lb-row"><span>${HERO_BY_ID[x.id].name} #${n(x.serial)}</span><span class="tag">${t.nftStatus[x.status]}</span></div>`).join('')}` : ''}
     <p class="muted small">${t.nftNote}</p>`, box => {
     const on = box.querySelector('#w-on'), off = box.querySelector('#w-off');
-    if (off) off.onclick = async () => { await Online.api('wallet', { address: null }); if (TC_UI) TC_UI.disconnect().catch(() => {}); walletModal(); };
+    if (off) off.onclick = async () => { try { await Online.api('wallet', { address: null }); } catch (e) { return toast(errText(e)); } if (TC_UI) TC_UI.disconnect().catch(() => {}); walletModal(); };
     if (on) on.onclick = async () => {
       try {
         await loadTonConnect();

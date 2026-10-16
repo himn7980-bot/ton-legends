@@ -27,13 +27,13 @@ const tierFor = pts => CHEST_TIERS.find(t => pts >= t.min) || null;
 const cleanName = s => String(s || '').replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 20);
 
 module.exports = function createClans({ db, persist, profileOut = () => null }) {
-  db.clans = db.clans || {};
+  db.clans = Object.assign(Object.create(null), db.clans || {}); // no prototype: ids from requests can't reach Object.prototype
 
   // Roll the week over: this week's points become "last week" (which decides the chest), contributions reset.
   function roll(c) {
     const wk = weekKey();
     if (c.week !== wk) {
-      c.last = { week: c.week || null, points: c.week ? c.points || 0 : 0, claimed: [] };
+      c.last = { week: c.week || null, points: c.week ? c.points || 0 : 0, claimed: [], contrib: c.contrib || {} };
       c.week = wk; c.points = 0; c.contrib = {};
     }
     return c;
@@ -112,8 +112,10 @@ module.exports = function createClans({ db, persist, profileOut = () => null }) 
       if (!c) fail('no_clan');
       const tier = tierFor(c.last.points);
       if (!tier) fail('not_ready');
-      if (c.last.claimed.includes(u.id)) fail('claimed');
-      c.last.claimed.push(u.id);
+      if (c.last.claimed.includes(u.id) || u.clanChestWeek === c.last.week) fail('claimed');
+      // Only members who helped last week (and only one clan's chest per week, so no clan hopping).
+      if (c.last.contrib && !(c.last.contrib[u.id] > 0)) fail('not_ready');
+      c.last.claimed.push(u.id); u.clanChestWeek = c.last.week;
       u.profile.coins += tier.coins; u.profile.gems = (u.profile.gems || 0) + tier.gems;
       return { coins: tier.coins, gems: tier.gems, profile: profileOut(u), clan: view(c, u) };
     },

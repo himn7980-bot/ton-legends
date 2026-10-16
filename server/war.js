@@ -111,7 +111,7 @@ module.exports = function createWar({ db, persist, weekKey, shareDir, profileOut
       const opp = info.vs && db.users[info.vs] && db.users[info.vs].profile;
       if (kind === 'pvp' && opp && opp.faction && W.derby[f] === opp.faction) mult *= C.DERBY_MULT;
       got = Math.round(base * mult);
-      w.pts += got;
+      w.pts += got; w.f = f;
       W.points[f] = (W.points[f] || 0) + got;
       W.total[f] = (W.total[f] || 0) + got;
       // Alliance cards in the team: every allied community on them earns a share of the base points too.
@@ -144,7 +144,7 @@ module.exports = function createWar({ db, persist, weekKey, shareDir, profileOut
   function lastFor(u) {
     const last = W.last;
     if (!last || !u.profile) return null;
-    const f = u.profile.faction, place = f ? last.rank.indexOf(f) : -1;
+    const f = (u.warLast && u.warLast.week === last.week && u.warLast.f) || u.profile.faction, place = f ? last.rank.indexOf(f) : -1;
     const myPts = u.warLast && u.warLast.week === last.week ? u.warLast.pts : 0;
     const eligible = !!f && myPts >= MIN_POINTS;
     const derbyWon = !!f && (last.derbyWinners || []).includes(f);

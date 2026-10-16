@@ -111,16 +111,23 @@ for (const [code, [start, play, cmd, coins, paid, duel, win, lose, draw]] of Obj
 const tx = lang => TEXT[String(lang || '').toLowerCase().slice(0, 2)] || TEXT.en;
 
 if (!BOT_TOKEN) { console.error('BOT_TOKEN is required'); process.exit(1); }
+// Never let one bad request or timer take the whole game down.
+process.on('unhandledRejection', e => console.error('unhandledRejection', e && e.message));
+process.on('uncaughtException', e => console.error('uncaughtException', e && e.stack));
 
 // ---------- storage (single JSON file, atomic writes) ----------
 let db = { users: {}, payments: {} };
-try { db = { ...db, ...JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')) }; } catch (e) {}
+try { db = { ...db, ...JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')) }; }
+catch (e) { if (e.code !== 'ENOENT') { console.error('DB LOAD FAILED — refusing to start with an empty database', e.message); process.exit(1); } }
+// Maps looked up with ids from requests have no prototype, so "__proto__" / "constructor" are just missing keys.
+const bare = o => Object.assign(Object.create(null), o || {});
+db.users = bare(db.users); db.payments = bare(db.payments); if (db.clans) db.clans = bare(db.clans);
 // Writes are batched: at most one async write per second, and never two at once (atomic tmp + rename).
 let saveTimer = null, saving = false, dirty = false;
 function persist() {
   dirty = true;
   if (saveTimer || saving) return;
-  saveTimer = setTimeout(flushDb, 1000);
+  saveTimer = setTimeout(flushDb, +process.env.SAVE_MS || 3000);
 }
 async function flushDb() {
   saveTimer = null;
@@ -324,13 +331,14 @@ function verifyInitData(initData, maxAgeSec = 86400) {
   if (calc.length !== hash.length || !crypto.timingSafeEqual(Buffer.from(calc), Buffer.from(hash))) return null;
   const auth = +params.get('auth_date');
   if (!auth || Date.now() / 1000 - auth > maxAgeSec) return null;
-  try { return JSON.parse(params.get('user')); } catch (e) { return null; }
+  try { const user = JSON.parse(params.get('user')); if (user && typeof user === 'object') user._start = params.get('start_param') || ''; return user; } catch (e) { return null; }
 }
 
 // ---------- Telegram Bot API ----------
-async function tg(method, body) {
-  const r = await fetch(TG + method, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+async function tg(method, body, retried) {
+  const r = await fetch(TG + method, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}), signal: AbortSignal.timeout(method === 'getUpdates' ? 40e3 : 15e3) });
   const j = await r.json();
+  if (!j.ok && j.error_code === 429 && !retried) { await new Promise(res => setTimeout(res, Math.min(30, (j.parameters && j.parameters.retry_after) || 1) * 1000)); return tg(method, body, true); }
   if (!j.ok) throw new Error(`${method}: ${j.description || r.status}`);
   return j.result;
 }
@@ -375,7 +383,7 @@ async function handleUpdate(up) {
     else credit(u, pack.coins || 0, pack.gems || 0);
     db.payments[chargeId] = { uid, pack: packId, stars: p.total_amount, at: Date.now() };
     analytics.payment(p.total_amount);
-    persist();
+    persist(); await flushDb();
     const L = tx(m.from.language_code);
     await tg('sendMessage', { chat_id: m.chat.id, text: pack.cos ? L.paidFrame : pack.pass ? ((BOT_TEXT[String(m.from.language_code || '').slice(0, 2)] || {}).paidPass || L.paidPass) : pack.gems ? L.paidGems(pack.gems) : L.paid(pack.coins),
       reply_markup: { inline_keyboard: [[{ text: L.open, web_app: { url: WEBAPP_URL } }]] } });
@@ -387,6 +395,7 @@ async function handleUpdate(up) {
   if (typeof m.text === 'string' && /^\/nft\b/.test(m.text)) return wallet.handle(m);
   if (typeof m.text === 'string' && /^\/backup\b/.test(m.text)) {
     if (!ADMIN_IDS.has(String(m.from.id))) return tg('sendMessage', { chat_id: m.chat.id, text: `Your Telegram ID is ${m.from.id}. Only admins (ADMIN_IDS) can get backups.` });
+    if (m.chat.type && m.chat.type !== 'private') return tg('sendMessage', { chat_id: m.chat.id, text: 'Backups are only sent in a private chat with the bot.' });
     await flushDb();
     return backup.run([m.chat.id]).catch(e => tg('sendMessage', { chat_id: m.chat.id, text: '⚠️ Backup failed: ' + e.message }));
   }
@@ -419,6 +428,7 @@ const referral = createReferral({ db, persist, credit, profileOut, inviteLink: u
 function applyReferral(u, startParam) {
   if (!startParam || !startParam.startsWith('ref_') || u.refBy) return false;
   const inviterId = startParam.slice(4);
+  if (!/^\d{1,15}$/.test(inviterId)) return false;
   const inviter = db.users[inviterId];
   if (!inviter || inviterId === u.id) return false;
   if (u.created < Date.now() - 10 * 60e3 && u.profile && u.profile.cleared > 0) return false; // only fresh players count
@@ -439,7 +449,7 @@ async function pollLoop() {
       for (const up of ups) {
         offset = up.update_id + 1;
         diag.lastUpdateAt = new Date().toISOString(); diag.updatesHandled++;
-        try { await handleUpdate(up); } catch (e) { logErr('lastHandleError', e); }
+        handleUpdate(up).catch(e => logErr('lastHandleError', e));
       }
     } catch (e) {
       logErr('lastPollError', e);
@@ -463,32 +473,50 @@ function readBody(req, limit = 1e5) {
     req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch (e) { reject(e); } });
   });
 }
+const GZ = new Map();
 function serveStatic(req, res) {
-  let p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+  let p;
+  try { p = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch (e) { res.writeHead(400); return res.end(); }
   if (p === '/') p = '/index.html';
   const file = path.normalize(path.join(STATIC_DIR, p));
   if (!file.startsWith(STATIC_DIR)) { res.writeHead(403); return res.end(); }
-  fs.readFile(file, (err, buf) => {
-    if (err) { res.writeHead(404); return res.end('Not found'); }
-    const ext = path.extname(file);
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': ext === '.jpg' ? 'public, max-age=86400' : 'no-cache' });
-    res.end(buf);
+  fs.stat(file, (err, st) => {
+    if (err || !st.isFile()) { res.writeHead(404); return res.end('Not found'); }
+    const ext = path.extname(file), etag = `"${st.size.toString(36)}-${Math.floor(st.mtimeMs).toString(36)}"`;
+    const head = { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': ext === '.jpg' || ext === '.png' ? 'public, max-age=86400' : 'no-cache', ETag: etag, Vary: 'Accept-Encoding' };
+    if (req.headers['if-none-match'] === etag) { res.writeHead(304, head); return res.end(); }
+    // Text files are gzipped once and kept in memory (the game's JS/CSS is ~1 MB, ~250 KB gzipped).
+    const gz = /\.(html|js|css|json|svg)$/.test(ext) && /\bgzip\b/.test(req.headers['accept-encoding'] || '');
+    const cached = gz && GZ.get(file);
+    if (cached && cached.etag === etag) { res.writeHead(200, { ...head, 'Content-Encoding': 'gzip' }); return res.end(cached.buf); }
+    fs.readFile(file, (err2, buf) => {
+      if (err2) { res.writeHead(404); return res.end('Not found'); }
+      if (gz) { const z = require('zlib').gzipSync(buf, { level: 9 }); GZ.set(file, { etag, buf: z }); res.writeHead(200, { ...head, 'Content-Encoding': 'gzip' }); return res.end(z); }
+      res.writeHead(200, head); res.end(buf);
+    });
   });
 }
 
+// The ranking is rebuilt at most every LB_CACHE_MS (sorting every player on each Ranks visit is too slow at scale).
+let lbAll = null, lbIdx = null, lbAt = 0;
+const safePower = p => { try { return ECON.teamPower(p); } catch (e) { return 0; } };
 function leaderboard(meId) {
-  const all = Object.values(db.users).filter(u => u.profile && u.profile.cleared > 0)
-    .map(u => ({ id: u.id, name: u.name, stage: u.profile.cleared, pvp: u.profile.stats.pvpWins || 0, power: ECON.teamPower(u.profile), seen: u.seen }))
-    .sort((a, b) => b.stage - a.stage || b.pvp - a.pvp || b.power - a.power || a.seen - b.seen);
+  if (!lbAll || Date.now() - lbAt >= (process.env.LB_CACHE_MS !== undefined ? +process.env.LB_CACHE_MS : 30e3)) {
+    lbAll = Object.values(db.users).filter(u => u.profile && u.profile.cleared > 0)
+      .map(u => ({ id: u.id, name: u.name, stage: u.profile.cleared, pvp: u.profile.stats.pvpWins || 0, power: safePower(u.profile), seen: u.seen }))
+      .sort((a, b) => b.stage - a.stage || b.pvp - a.pvp || b.power - a.power || a.seen - b.seen);
+    lbIdx = new Map(lbAll.map((u, i) => [u.id, i])); lbAt = Date.now();
+  }
+  const all = lbAll;
   const top = all.slice(0, 50).map((u, i) => ({ rank: i + 1, name: u.name, stage: u.stage, pvp: u.pvp }));
-  const idx = all.findIndex(u => u.id === meId);
+  const idx = lbIdx.has(meId) ? lbIdx.get(meId) : -1;
   return { top, total: all.length, me: idx >= 0 ? { rank: idx + 1, stage: all[idx].stage } : null };
 }
 
 const analytics = createAnalytics({ db, persist });
 const clans = createClans({ db, persist, profileOut: u => (u.profile ? ECON.pickKeys(u.profile) : null) });
 const notifier = createNotifier({ db, persist, tg, webappUrl: () => WEBAPP_URL, logErr });
-const SHARE_DIR = path.join(path.dirname(DATA_FILE), 'share');
+const SHARE_DIR = process.env.SHARE_DIR || path.join(require('os').tmpdir(), 'gl-share');
 const war = createWar({ db, persist, weekKey: clans.weekKey, shareDir: SHARE_DIR, profileOut: u => (u.profile ? ECON.pickKeys(u.profile) : null), onWeekEnd: (last, captains) => notifier.weekEnded(last, captains) });
 const market = createMarket({ db, persist, api: (process.env.MARKET_API || 'https://api.coingecko.com/api/v3').replace(/\/$/, ''), logErr });
 // Clan and community-war points come from the same wins (and feed the community activity behind the market mood).
@@ -568,8 +596,11 @@ const routes = {
   },
 };
 
-const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, 'http://x');
+const server = http.createServer((req, res) => handleRequest(req, res).catch(e => { logErr('requestError', e); try { if (!res.headersSent) send(res, 500, { error: 'server' }); else res.end(); } catch (e2) {} }));
+server.keepAliveTimeout = 65000; server.headersTimeout = 66000;
+async function handleRequest(req, res) {
+  let url;
+  try { url = new URL(req.url, 'http://x'); } catch (e) { res.writeHead(400); return res.end(); }
   if (req.method === 'OPTIONS') return send(res, 204, {});
   const key = `${req.method} ${url.pathname}`;
   if (key === 'GET /api/pvp/stream') return arena.stream(req, res, url.searchParams.get('ticket'));
@@ -603,13 +634,14 @@ const server = http.createServer(async (req, res) => {
     const u = userRec(tgUser);
     analytics.seen(u);
     if (BOT_TEXT[body.lang]) u.lang = body.lang;
+    if (key === 'POST /api/hello') body.startParam = tgUser._start || null;
     const out = await handler(body, u);
     persist();
     send(res, 200, out);
   } catch (e) {
-    send(res, e.code || 500, { error: e.message });
+    send(res, Number.isInteger(e.code) ? e.code : 500, { error: Number.isInteger(e.code) ? e.message : 'server' });
   }
-});
+}
 
 async function setupBot() {
   try {

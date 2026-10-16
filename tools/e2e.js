@@ -37,7 +37,7 @@ const tgScript = (user, startParam) => `
   const cg = http.createServer((req, res) => { res.writeHead(200); res.end(JSON.stringify({ notcoin: { usd: 0.004, usd_24h_change: 12.3 }, 'dogs-2': { usd: 0.0005, usd_24h_change: -4.1 } })); });
   await new Promise(r => cg.listen(0, r)); process.env.MARKET_API = `http://127.0.0.1:${cg.address().port}`;
   process.env.TL_EVENT = 'none';
-  Object.assign(process.env, { BOT_TOKEN: TOKEN, WEBAPP_URL: 'https://x', DATA_FILE: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tle-')), 'db.json'), TELEGRAM_API: `http://127.0.0.1:${fake.address().port}` });
+  Object.assign(process.env, { LB_CACHE_MS: '0', SAVE_MS: '1000', REF_MIN_AGE_MS: '1', RAID_MIN_MS: '0', BOT_TOKEN: TOKEN, WEBAPP_URL: 'https://x', DATA_FILE: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tle-')), 'db.json'), TELEGRAM_API: `http://127.0.0.1:${fake.address().port}` });
   const srv = require('../server/server.js');
   srv.server.listen(0); await new Promise(r => srv.server.once('listening', r));
   await srv.setupBot(); srv.pollLoop(); await srv.market.refresh();
@@ -227,7 +227,7 @@ const tgScript = (user, startParam) => `
   await p1.evaluate(() => show('friends')); await p1.waitForSelector('.ref-tiers');
   await p1.screenshot({ path: OUT + '/x1-friends.png', fullPage: true });
   serverProfile(777).cleared = Math.max(serverProfile(777).cleared, 12);
-  await p1.evaluate(async () => { await syncProfile(); S.auto = true; S.speed = 3; save(); show('raid'); }); await p1.waitForSelector('#rd-go');
+  await p1.evaluate(async () => { await syncServerProfile(); S.auto = true; S.speed = 3; save(); show('raid'); }); await p1.waitForSelector('#rd-go');
   await p1.screenshot({ path: OUT + '/x2-raid.png', fullPage: true });
   await p1.click('#rd-go'); await p1.waitForSelector('.raid-hud'); await p1.waitForTimeout(2500);
   await p1.screenshot({ path: OUT + '/x3-raid-fight.png' });
@@ -241,7 +241,7 @@ const tgScript = (user, startParam) => `
   await p1.evaluate(() => show('quests')); await p1.waitForSelector('.pq');
   await p1.screenshot({ path: OUT + '/x6-partner.png' });
   serverProfile(777).gems += 300;
-  await p1.evaluate(async () => { await syncProfile(); show('chest'); }); await p1.waitForSelector('.featured');
+  await p1.evaluate(async () => { await syncServerProfile(); show('chest'); }); await p1.waitForSelector('.featured');
   await p1.click('[data-frame=neon]'); await p1.waitForTimeout(500);
   assert.equal(serverProfile(777).cos.on, 'neon', 'frame bought with gems');
   await p1.evaluate(() => document.querySelector('.frames-shop').scrollIntoView()); await p1.screenshot({ path: OUT + '/x7-frames.png' });

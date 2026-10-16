@@ -26,9 +26,12 @@ module.exports = function createPartners({ db, persist, tg, credit, profileOut, 
       if (!u.profile) fail('no_profile');
       const q = live().find(x => x.id === body.id); if (!q) fail('not_found');
       u.pq = u.pq || {}; const st = u.pq[q.id] = u.pq[q.id] || {};
-      if (st.done) fail('claimed');
+      if (st.done || st.checking) fail('claimed');
       if (q.chat) {
-        const m = await tg('getChatMember', { chat_id: q.chat, user_id: Number(u.id) }).catch(() => null);
+        st.checking = true; // set before the await, so parallel claims can't all pass
+        let m = null;
+        try { m = await tg('getChatMember', { chat_id: q.chat, user_id: Number(u.id) }).catch(() => null); } finally { delete st.checking; }
+        if (st.done) fail('claimed');
         if (!m || !['member', 'administrator', 'creator', 'restricted'].includes(m.status)) fail('not_member');
       } else if (!st.opened || Date.now() - st.opened < OPEN_WAIT_MS) fail('not_ready');
       st.done = Date.now();

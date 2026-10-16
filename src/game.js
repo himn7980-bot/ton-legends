@@ -107,6 +107,8 @@ function showCoins(prev, prevGems) {
   updateBadge();
 }
 const teamPower = team => ECON.teamPower(S, team);
+// Lighter battle effects by default on weaker phones (the player can change it in Settings).
+if (S.fx === undefined && ((navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 3)) S.fx = 1;
 // ---------- deck synergies (green = bonus, red = penalty, grey = could be added) ----------
 function synFx(x) {
   const t = T(), f = x.fx, pc = v => `${v > 0 ? '+' : '−'}${n(Math.round(Math.abs(v) * 100))}%`;
@@ -479,10 +481,13 @@ function renderChest() {
     if (r) { Sound.play('coin'); giftModal('⏩', t.warpTitle, r.coins); } else renderChest();
   };
 }
+let CHEST_BUSY = false;
 async function openChest(c) {
-  if (!chestCan(c)) return;
-  const r = await tryAct({ type: 'chest', key: c.key });
-  if (r) chestReveal(c, r);
+  if (!chestCan(c) || CHEST_BUSY) return;
+  CHEST_BUSY = true;
+  document.querySelectorAll('[data-k], #again').forEach(b => { b.disabled = true; });
+  try { const r = await tryAct({ type: 'chest', key: c.key }); if (r) chestReveal(c, r); else refresh(); }
+  finally { CHEST_BUSY = false; }
 }
 function chestReveal(c, r) {
   const t = T(), h = HERO_BY_ID[r.id], rarity = r.rarity, R = RARITY[rarity];
@@ -693,7 +698,7 @@ function buildBattle({ title, bg, scene, mine, theirs, oppLabel, myLabel, onTap,
 async function startBattle(idx) {
   if (BT) return;
   const r = await tryAct({ type: 'stageStart', stage: idx });
-  if (!r) return;
+  if (!r) { $('#battle').hidden = true; refresh(); syncNav(); return; }
   const t = T(), B = createBattle(S.team, S.owned, idx, r.seed, S.faction || null, r.market || null, r.perks || null);
   // Taps are queued and applied at the next fixed tick, and recorded as [tick, code] so the server can replay the fight.
   // The very first battle is guided: it pauses and shows what to tap (a glowing card, then the ultimate).
@@ -756,6 +761,9 @@ function leaveBattle() {
   if (!BT) return;
   cancelAnimationFrame(BT.raf);
   if (BT.es) BT.es.close();
+  // World boss: the fight is sent anyway (your cards finish it on auto), so the try isn't wasted.
+  if (BT.mode === 'raid') { const inputs = [...BT.inputs, [BT.B.tick, -1]]; apiCall('raid/end', { inputs }).then(r => { if (r) { RAID = r.raid; toast(`💥 ${n(r.dmg)} · 🪙 +${n(r.coins)}`); if (S.tab === 'raid') renderRaid(); } }).catch(() => {}); }
+  if (BT.mode === 'pvp') { if (typeof PV !== 'undefined') PV = null; Online.loadProfile(null).then(p => { Object.assign(S, p); save(); showCoins(); }).catch(() => {}); }
   BT = null;
   Sound.music('menu');
   $('#battle').hidden = true;

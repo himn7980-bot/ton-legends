@@ -263,7 +263,12 @@ window.initTelegram = async () => {
       if (c.profile) Object.assign(S, c.profile);
       save(); showCoins(prev);
       if (c.coins > 0 || c.gems > 0) giftModal('🎁', T().giftTitle, c.coins, T().giftNote, c.gems);
-    } catch (e) {}
+    } catch (e) {
+      // One retry; if the server still can't give us the profile, say so instead of silently playing offline
+      // (the server's copy would overwrite local progress later).
+      try { await new Promise(r => setTimeout(r, 1500)); Object.assign(S, await Online.loadProfile(ECON.pickKeys(S))); save(); showCoins(); }
+      catch (e2) { toast(T().err.network); }
+    }
   } else {
     // No server: fall back to the Telegram cloud copy of the offline save.
     const cloud = await Online.cloudLoad();

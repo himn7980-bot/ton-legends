@@ -23,8 +23,8 @@ const fake = http.createServer((req, res) => {
   });
 });
 
-function initData(user, ageSec = 0) {
-  const p = new URLSearchParams({ auth_date: String(Math.floor(Date.now() / 1000) - ageSec), query_id: 'AAA', user: JSON.stringify(user) });
+function initData(user, ageSec = 0, startParam) {
+  const p = new URLSearchParams({ auth_date: String(Math.floor(Date.now() / 1000) - ageSec), query_id: 'AAA', user: JSON.stringify(user), ...(startParam ? { start_param: startParam } : {}) });
   const check = [...p.entries()].sort(([a], [b]) => a < b ? -1 : 1).map(([k, v]) => `${k}=${v}`).join('\n');
   const secret = crypto.createHmac('sha256', 'WebAppData').update(TOKEN).digest();
   p.set('hash', crypto.createHmac('sha256', secret).update(check).digest('hex'));
@@ -53,7 +53,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     });
   });
   await new Promise(r => runwaySrv.listen(0, r));
-  Object.assign(process.env, { RUNWAY_API: `http://127.0.0.1:${runwaySrv.address().port}`, RUNWAYML_API_SECRET: 'rw_test', RUNWAY_POLL_MS: '50' });
+  Object.assign(process.env, { LB_CACHE_MS: '0', SAVE_MS: '1000', REF_MIN_AGE_MS: '1', RAID_MIN_MS: '0', RUNWAY_API: `http://127.0.0.1:${runwaySrv.address().port}`, RUNWAYML_API_SECRET: 'rw_test', RUNWAY_POLL_MS: '50' });
   process.env.TL_EVENT = 'none'; // weekday events are tested explicitly below
   Object.assign(process.env, { ADMIN_IDS: '111', ART_DIR: path.join(path.dirname(dataFile), 'art'), BOT_TOKEN: TOKEN, WEBAPP_URL: 'https://game.example', PORT: '0', DATA_FILE: dataFile, TELEGRAM_API: `http://127.0.0.1:${fake.address().port}` });
   const srv = require('./server.js');
@@ -79,18 +79,22 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   r = await post('/api/hello', { initData: initData(alice) }); assert.equal(r.status, 200);
 
   // referral: bob joins through alice's link
-  await post('/api/hello', { initData: initData(bob), startParam: 'ref_111' });
-  await post('/api/hello', { initData: initData(bob), startParam: 'ref_111' }); // second time: no double bonus
+  await post('/api/hello', { initData: initData(bob), startParam: 'ref___proto__' }); // unsigned body value: ignored
+  assert.equal(srv.db.users['222'].refBy, undefined, 'start param only from signed initData');
+  await post('/api/hello', { initData: initData(bob, 0, 'ref___proto__') }); assert.equal(srv.db.users['222'].refBy, undefined, 'bad inviter id');
+  await post('/api/hello', { initData: initData(bob, 0, 'ref_111') });
+  await post('/api/hello', { initData: initData(bob, 0, 'ref_111') }); // second time: no double bonus
   r = await post('/api/claim', { initData: initData(alice) }); assert.equal(r.body.coins, 0, 'inviter is paid only after the friend plays 5 stages');
   r = await post('/api/claim', { initData: initData(bob) }); assert.equal(r.body.coins, 300);
 
   // server profiles: first visit imports the offline save, clamped
   r = await post('/api/profile', { initData: initData(alice), local: { coins: 1e9, cleared: 12, owned: { volya: 30, egor: 7 } } });
-  assert.equal(r.body.profile.coins, 5000, 'clamped save'); assert.equal(r.body.profile.owned.volya, 5); assert.equal(r.body.profile.cleared, 12);
+  assert.equal(r.body.profile.coins, 5000, 'clamped save'); assert.equal(r.body.profile.owned.volya, 5); assert.equal(r.body.profile.cleared, 0, 'progress is never imported');
+  srv.db.users['111'].profile.cleared = 12;
   r = await post('/api/profile', { initData: initData(alice), local: { coins: 1 } });
   assert.equal(r.body.profile.coins, 5000, 'import happens only once');
   r = await post('/api/profile', { initData: initData(bob), local: { cleared: 999, coins: 3000 } });
-  assert.equal(r.body.profile.cleared, 200);
+  assert.equal(r.body.profile.cleared, 0); srv.db.users['222'].profile.cleared = 200;
   r = await post('/api/leaderboard', { initData: initData(alice) });
   assert.deepEqual(r.body.top.map(x => [x.name, x.stage]), [['Bob <script>', 200], ['Alice', 12]]);
   assert.deepEqual(r.body.me, { rank: 2, stage: 12 });
@@ -540,14 +544,15 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   await sleep(1300);
   assert.ok(calls.slice(m0).some(c => c.method === 'sendMessage' && /Quest #1 added/.test(c.data.text)), 'verified quest added');
   assert.ok(calls.slice(m0).some(c => c.method === 'sendMessage' && c.data.chat_id === 222 && /Only admins/.test(c.data.text)));
-  r = await post('/api/partners/list', { initData: initData(alice) }); assert.equal(r.body.quests.length, 2); assert.equal(r.body.quests[0].verify, true);
+  r = await post('/api/partners/list', { initData: initData(alice) }); assert.equal(r.body.quests.length, 2);
+  const qV = r.body.quests.find(q => q.verify).id, qO = r.body.quests.find(q => !q.verify).id;
   const pg0 = srv.db.users['111'].profile.gems;
-  r = await post('/api/partners/claim', { initData: initData(alice), id: 1 }); assert.equal(r.body.gems, 20, 'member of the channel'); assert.equal(r.body.profile.gems, pg0 + 20);
-  r = await post('/api/partners/claim', { initData: initData(alice), id: 1 }); assert.equal(r.body.error, 'claimed');
-  r = await post('/api/partners/claim', { initData: initData(bob), id: 1 }); assert.equal(r.body.error, 'not_member');
-  r = await post('/api/partners/claim', { initData: initData(alice), id: 2 }); assert.equal(r.body.error, 'not_ready', 'open the link first');
-  await post('/api/partners/open', { initData: initData(alice), id: 2 }); srv.db.users['111'].pq[2].opened -= 10000;
-  r = await post('/api/partners/claim', { initData: initData(alice), id: 2 }); assert.equal(r.body.gems, 15);
+  r = await post('/api/partners/claim', { initData: initData(alice), id: qV }); assert.equal(r.body.gems, 20, 'member of the channel'); assert.equal(r.body.profile.gems, pg0 + 20);
+  r = await post('/api/partners/claim', { initData: initData(alice), id: qV }); assert.equal(r.body.error, 'claimed');
+  r = await post('/api/partners/claim', { initData: initData(bob), id: qV }); assert.equal(r.body.error, 'not_member');
+  r = await post('/api/partners/claim', { initData: initData(alice), id: qO }); assert.equal(r.body.error, 'not_ready', 'open the link first');
+  await post('/api/partners/open', { initData: initData(alice), id: qO }); srv.db.users['111'].pq[qO].opened -= 10000;
+  r = await post('/api/partners/claim', { initData: initData(alice), id: qO }); assert.equal(r.body.gems, 15);
   // frames: gems frame bought in game, Stars frame through an invoice + payment
   srv.db.users['111'].profile.gems += 300;
   r = await post('/api/act', { initData: initData(alice), action: { type: 'cosmetic', id: 'neon' } }); assert.equal(r.body.profile.cos.on, 'neon');
@@ -629,6 +634,25 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   await sleep(1200);
   assert.equal(srv.db.alliances.length, 0);
   console.log('   alliances: leader, shared war points, mascot milestones, official /ally boost');
+
+  // ---------- hardening: the exploits found in the pre-launch review stay closed ----------
+  await fetch(base + '/%ff').then(x => assert.equal(x.status, 400));
+  await new Promise(res => { const rq = http.request({ host: '127.0.0.1', port: srv.server.address().port, path: 'http://[', method: 'GET' }, x => { x.resume(); x.on('end', res); }); rq.on('error', res); rq.end(); });
+  r = await fetch(base + '/api/health').then(x => x.json()); assert.equal(r.ok, true, 'server still up after malformed URLs');
+  const c0x = srv.db.users['111'].profile.coins;
+  for (const action of [{ type: 'chest', key: '__proto__' }, { type: 'chest', key: 'constructor' }, { type: 'upgrade', id: '__proto__' }, { type: 'team', team: ['constructor'] }, { type: 'cosmetic', id: 'toString' }]) {
+    r = await post('/api/act', { initData: initData(alice), action }); assert.equal(r.status, 400, JSON.stringify(action));
+  }
+  assert.equal(srv.db.users['111'].profile.coins, c0x, 'coins untouched (no NaN)'); assert.ok(Number.isFinite(srv.db.users['111'].profile.coins));
+  r = await post('/api/clan/join', { initData: initData(bob), id: '__proto__' }); assert.equal(r.body.error, 'no_clan');
+  assert.equal(({}).week, undefined, 'Object.prototype untouched'); assert.equal(({}).refs, undefined);
+  r = await post('/api/leaderboard', { initData: initData(alice) }); assert.equal(r.status, 200);
+  // parallel claims of one verified partner quest pay once
+  srv.db.partners.push({ id: 77, title: 'Race', url: 'https://t.me/race_ch', chat: '@race_ch', gems: 10, coins: 0, until: Date.now() + 864e5, at: Date.now() });
+  const gR = srv.db.users['111'].profile.gems;
+  await Promise.all(Array.from({ length: 8 }, () => post('/api/partners/claim', { initData: initData(alice), id: 77 })));
+  assert.equal(srv.db.users['111'].profile.gems, gR + 10, 'one payout for parallel claims');
+  console.log('   hardening: malformed URLs, prototype keys, clan ids, parallel quest claims');
 
   r = await fetch(base + '/api/status').then(x => x.json());
   assert.equal(r.webappUrlOk, true); assert.ok(r.updatesHandled >= 6); assert.equal(r.lastHandleError, null);

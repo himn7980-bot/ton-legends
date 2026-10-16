@@ -679,3 +679,6 @@ img.mini.big { width: 84px; height: 84px; border-width: 3px; border-color: var(-
 .skin-friend .fi-card, .card.skin-friend, .hcard.skin-friend { border-color: #3fd28a !important; box-shadow: 0 0 0 1px #a8ffd3, 0 0 14px -2px #3fd28a; }
 .skin-legend .fi-card, .card.skin-legend, .hcard.skin-legend { border-color: #ffd24a !important; box-shadow: 0 0 0 2px #7a3cff, 0 0 22px -2px #ffd24a; }
 @keyframes fireglow { to { box-shadow: 0 0 0 1px #ffd27a, 0 0 28px 0 #ff3d00; } }
+
+/* review fixes: modals never wider than the screen; synergy chips wrap */
+.modal-wrap { min-width: 0; max-width: 100%; } .btns .btn { min-width: 0; } .syn-strip { min-width: 0; max-width: 100%; box-sizing: border-box; } .syn { max-width: 100%; }
