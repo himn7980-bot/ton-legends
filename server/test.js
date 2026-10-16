@@ -17,8 +17,8 @@ const fake = http.createServer((req, res) => {
     const method = req.url.split('/').pop();
     const data = body && body[0] === '{' ? JSON.parse(body) : body ? { multipart: body.length, head: body.slice(0, 400) } : {};
     calls.push({ method, data });
-    const out = { getMe: { username: 'TonLegendsTestBot' }, createInvoiceLink: 'https://t.me/$invoice-test', getUpdates: queue.splice(0),
-      getFile: { file_path: 'photos/' + (data.file_id || 'x') + '.jpg' }, getChatMember: { status: data.user_id === 222 ? 'left' : data.user_id ? 'member' : 'administrator' } }[method] ?? true;
+    const out = { getMe: { id: 999, username: 'TonLegendsTestBot' }, createInvoiceLink: 'https://t.me/$invoice-test', getUpdates: queue.splice(0),
+      getFile: { file_path: 'photos/' + (data.file_id || 'x') + '.jpg' }, getChatMember: { status: data.user_id === 222 ? 'left' : data.user_id === 999 ? 'administrator' : data.user_id ? 'member' : 'administrator' } }[method] ?? true;
     setTimeout(() => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, result: out })); }, method === 'getUpdates' && !out.length ? 200 : 0);
   });
 });
@@ -666,6 +666,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   r = await post('/api/channel/check', { initData: initData(alice) }); assert.equal(r.body.coins, undefined, 'reward only once');
   r = await post('/api/channel/check', { initData: initData(bob) }); assert.equal(r.body.joined, false, 'not a member yet');
   r = await post('/api/profile', { initData: initData(alice) }); assert.equal(r.body.channel.joined, true);
+  const ch0 = calls.length;
+  queue.push({ update_id: 9301, message: { chat: { id: 111, type: 'private' }, from: alice, text: '/channel' } });
+  await sleep(900);
+  assert.ok(calls.slice(ch0).some(c => c.method === 'sendMessage' && /bot is an admin/.test(c.data.text)), '/channel reports the admin check');
   console.log('   game channel: join check, welcome reward once');
 
   // ---------- hardening: the exploits found in the pre-launch review stay closed ----------

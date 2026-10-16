@@ -60,8 +60,23 @@ const NAME_GEMS = 20;
 // The bot must be an admin of the channel to check membership; if it can't check, nobody is blocked.
 // Default: the official channel. GAME_CHANNEL=off turns the requirement off; another @name replaces it.
 const GAME_CHANNEL = (() => { const v = (process.env.GAME_CHANNEL || '@gramlegends_game').trim(); return !v || v === 'off' ? null : v; })(), CHANNEL_COINS = 500, CHANNEL_GEMS = 20;
+// Is the bot an admin of the channel? Re-checked every 5 minutes (and when a player opens the game) until it is,
+// so making the bot an admin later turns the join step on without a redeploy.
+let BOT_ID = null;
+async function checkChannel() {
+  if (!GAME_CHANNEL) return false;
+  diag.channel = GAME_CHANNEL; diag.channelAt = Date.now();
+  if (!BOT_ID) { const me = await tg('getMe').catch(() => null); BOT_ID = me && me.id; }
+  const mem = BOT_ID ? await tg('getChatMember', { chat_id: GAME_CHANNEL, user_id: BOT_ID }).catch(e => ({ error: e.message })) : { error: 'getMe failed' };
+  diag.channelOk = !!(mem && ['administrator', 'creator'].includes(mem.status));
+  diag.channelState = diag.channelOk ? 'ok' : (mem && (mem.error || mem.status)) || 'unknown';
+  if (!diag.channelOk) logErr('channelError', new Error(`bot is not an admin of ${GAME_CHANNEL}: ${diag.channelState}`));
+  return diag.channelOk;
+}
+const channelTimer = setInterval(() => { if (GAME_CHANNEL && diag.channelOk !== true) checkChannel().catch(() => {}); }, 5 * 60e3);
+if (channelTimer.unref) channelTimer.unref();
 const channelUrl = () => (GAME_CHANNEL ? (/^@/.test(GAME_CHANNEL) ? `https://t.me/${GAME_CHANNEL.slice(1)}` : GAME_CHANNEL) : null);
-const channelInfo = u => (GAME_CHANNEL && /^@\w{4,}$/.test(GAME_CHANNEL) && diag.channelOk !== false ? { url: channelUrl(), joined: !!u.chanJoined, coins: CHANNEL_COINS, gems: CHANNEL_GEMS } : null);
+const channelInfo = u => (GAME_CHANNEL && /^@\w{4,}$/.test(GAME_CHANNEL) && diag.channelOk === true ? { url: channelUrl(), joined: !!u.chanJoined, coins: CHANNEL_COINS, gems: CHANNEL_GEMS } : null);
 const PASS_PACK = { id: 'pass', stars: ECON.PASS.PRICE_STARS, pass: true };
 // Card frames sold for Telegram Stars (cosmetic only).
 const COS_PACKS = Object.entries(ECON.COSMETICS).filter(([, c]) => c.stars).map(([k, c]) => ({ id: 'cos_' + k, stars: c.stars, cos: k }));
@@ -400,6 +415,11 @@ async function handleUpdate(up) {
   if (typeof m.text === 'string' && /^\/gen\b/.test(m.text)) return handleGen(m);
   if (typeof m.text === 'string' && /^\/ally\b/.test(m.text)) return handleAlly(m);
   if (typeof m.text === 'string' && /^\/quest\b/.test(m.text)) return partners.handle(m);
+  if (typeof m.text === 'string' && /^\/channel\b/.test(m.text)) {
+    if (!ADMIN_IDS.has(String(m.from.id))) return tg('sendMessage', { chat_id: m.chat.id, text: `Your Telegram ID is ${m.from.id}. Only admins can check the channel.` });
+    const ok = await checkChannel();
+    return tg('sendMessage', { chat_id: m.chat.id, text: !GAME_CHANNEL ? 'No game channel set (GAME_CHANNEL=off).' : ok ? `✅ ${GAME_CHANNEL}: the bot is an admin. New players are asked to join and get 🪙 ${CHANNEL_COINS} + 💎 ${CHANNEL_GEMS}.` : `⚠️ ${GAME_CHANNEL}: the bot is NOT an admin (${diag.channelState}). Add @${BOT_USERNAME} as an administrator of the channel, then send /channel again.` });
+  }
   if (typeof m.text === 'string' && /^\/nft\b/.test(m.text)) return wallet.handle(m);
   if (typeof m.text === 'string' && /^\/backup\b/.test(m.text)) {
     if (!ADMIN_IDS.has(String(m.from.id))) return tg('sendMessage', { chat_id: m.chat.id, text: `Your Telegram ID is ${m.from.id}. Only admins (ADMIN_IDS) can get backups.` });
@@ -590,7 +610,8 @@ const routes = {
   },
   'POST /api/me': (body, u) => ({ name: u.name, nick: u.nick || null, tgName: u.tgName, nameCost: u.nick ? NAME_GEMS : 0 }),
   // The server keeps each Telegram player's coins and heroes. First visit imports the offline save (clamped).
-  'POST /api/profile': (body, u) => {
+  'POST /api/profile': async (body, u) => {
+    if (GAME_CHANNEL && diag.channelOk !== true && Date.now() - (diag.channelAt || 0) > 60e3) await checkChannel().catch(() => {});
     if (!u.profile) { u.profile = ECON.importLocal(body.local, Date.now()); u.profile.coins += u.pending; u.profile.gems += u.pendingGems || 0; u.pending = 0; u.pendingGems = 0; }
     if (u.pendingCos) { for (const c of u.pendingCos) ECON.giveCosmetic(u.profile, c); delete u.pendingCos; }
     if (u.pendingPass !== undefined) { if (u.pendingPass === ECON.seasonOf(Date.now())) ECON.passOf(u.profile, Date.now()).prem = true; delete u.pendingPass; }
@@ -688,14 +709,9 @@ async function setupBot() {
     const cur = await tg('getMyName', {}).catch(() => null);
     if (!cur || cur.name !== wantName) await tg('setMyName', { name: wantName }).catch(e => logErr('setupError', e));
     // The channel check needs the bot to be an admin of the game channel: report it (status page + admins).
-    if (GAME_CHANNEL) {
-      const mem = await tg('getChatMember', { chat_id: GAME_CHANNEL, user_id: me.id }).catch(e => ({ error: e.message }));
-      diag.channelOk = !!(mem && ['administrator', 'creator'].includes(mem.status));
-      diag.channel = GAME_CHANNEL;
-      if (!diag.channelOk) {
-        logErr('channelError', new Error(`bot is not an admin of ${GAME_CHANNEL}: ${(mem && (mem.error || mem.status)) || 'unknown'}`));
-        for (const a of ADMIN_IDS) tg('sendMessage', { chat_id: Number(a), text: `⚠️ Add @${me.username} to ${GAME_CHANNEL} as an admin (no special rights needed). Until then players are not asked to join and get no welcome gift.` }).catch(() => {});
-      }
+    BOT_ID = me.id;
+    if (GAME_CHANNEL && !(await checkChannel())) {
+      for (const a of ADMIN_IDS) tg('sendMessage', { chat_id: Number(a), text: `⚠️ Add @${me.username} to ${GAME_CHANNEL} as an admin (no special rights needed). Until then players are not asked to join and get no welcome gift. Send /channel to re-check.` }).catch(() => {});
     }
     if (WEBAPP_URL) await tg('setChatMenuButton', { menu_button: { type: 'web_app', text: TEXT.en.menu, web_app: { url: WEBAPP_URL } } });
     await tg('setMyCommands', { commands: [{ command: 'start', description: TEXT.en.cmd }] });
@@ -710,4 +726,4 @@ async function start() {
 }
 
 if (require.main === module) start();
-module.exports = { analytics, market, notifier, war, flushDb, server, verifyInitData, handleUpdate, pollLoop, setupBot, db, PACKS, stop: () => { polling = false; backup.stop(); arena.stop(); notifier.stop(); market.stop(); server.close(); } };
+module.exports = { analytics, market, notifier, war, flushDb, server, verifyInitData, handleUpdate, pollLoop, setupBot, db, PACKS, stop: () => { polling = false; clearInterval(channelTimer); backup.stop(); arena.stop(); notifier.stop(); market.stop(); server.close(); } };
