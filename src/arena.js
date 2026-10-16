@@ -132,7 +132,7 @@ function startPvp(m) {
     B: { t: 0, events: [], over: null, ult: { hero: 0, enemy: 0 }, heroes: units.filter(u => u.side === 'hero'), enemies: units.filter(u => u.side === 'enemy') } };
   const input = code => Online.pvp('input', { ticket: BT.ticket, code }).catch(() => {});
   buildBattle({
-    title: m.ai ? t.aiVs(t.aiLv[m.ai]) : `⚔️ ${t.pot(n(m.pot))}`, bg: ARENA_BG, mine, theirs,
+    title: m.ai ? t.aiVs(t.aiLv[m.ai]) : `⚔️ ${t.pot(n(m.pot))}`, bg: ARENA_BG, scene: { key: 'galaxy', ch: m.ai ? 0 : 2 }, mine, theirs,
     oppLabel: `🆚 ${esc(m.opp.name)} · ${t.power} ${n(m.opp.power)}`, myLabel: `🛡️ ${esc(m.you.name)} · ${t.power} ${n(m.you.power)}`,
     onTap: u => input(u.uid), onAuto: on => input(on ? -1 : -2), onUlt: () => input(-3),
   });

@@ -639,15 +639,16 @@ function unitCard(u) {
   const rc = !mine ? (u.boss ? '#ff3b3b' : '#e0475a') : RARITY[HERO_BY_ID[u.id].rarity].color;
   return `<div class="hcard ${mine ? 'hero' : 'enemy'} ${u.boss ? 'boss' : ''} ${mine ? frameOf(u.id) : ''}" data-uid="${u.uid}" style="--rc:${rc}">
     ${mine ? '<span class="ready">⚡</span>' : ''}${u.boss ? '<span class="crown">👑</span>' : ''}${u.weak ? `<span class="weak-tag">🎯${STATUS_ICON[u.weak]}</span>` : ''}${u.row === 'front' ? '<span class="row-tag">🛡️</span>' : ''}
+    <span class="orbit"><span class="ring"><i></i><i></i><i></i><i></i></span></span><span class="sheen" style="--sd:${(u.uid * 0.77) % 5}s"></span>
     <img src="${img(u.id)}" alt=""><div class="status"></div>
     <div class="hc-name ${u.name.length > 12 ? 'long' : ''}">${u.name}</div><div class="bar hp ${mine ? 'h' : ''}"><i></i><i class="sh" style="width:0"></i></div><div class="bar en"><i></i></div></div>`;
 }
 
 // Draws the battle screen for the current BT. mine = my cards (bottom), theirs = opponent cards (top).
-function buildBattle({ title, bg, mine, theirs, oppLabel, myLabel, onTap, onAuto, onUlt, showSpeed }) {
+function buildBattle({ title, bg, scene, mine, theirs, oppLabel, myLabel, onTap, onAuto, onUlt, showSpeed }) {
   const t = T(), el = $('#battle');
   el.style.background = bg; el.classList.remove('has-emotes');
-  el.innerHTML = `
+  el.innerHTML = `<canvas id="b-scene"></canvas>
     <div class="b-top">
       <button id="b-exit">✕</button>
       <div class="b-title">${title}</div>
@@ -664,6 +665,7 @@ function buildBattle({ title, bg, mine, theirs, oppLabel, myLabel, onTap, onAuto
     <div class="b-hint">${t.tapHint}</div>
     <div id="b-fx"></div>`;
   el.hidden = false;
+  Scene.start($('#b-scene'), scene ? scene.key : 'galaxy', scene ? scene.ch : 0);
   BT.els = new Map();
   el.querySelectorAll('[data-uid]').forEach(nd => {
     BT.els.set(+nd.dataset.uid, { root: nd, hp: nd.querySelector('.bar.hp i'), sh: nd.querySelector('.sh'), en: nd.querySelector('.bar.en i'), st: nd.querySelector('.status'), last: {} });
@@ -692,7 +694,7 @@ async function startBattle(idx) {
   BT = { mode: 'stage', B, idx, mySide: 'hero', inputs: [], queue: S.auto ? [-1] : [], acc: 0, last: performance.now(), raf: 0, ended: false, tut: tut ? { step: 0 } : null };
   buildBattle({
     title: `${t.stage(stageLabel(idx))}${isBossStage(idx) ? ' · ' + t.bossCrown : ''}`, bg: WORLDS[Math.floor(idx / STAGES_PER_WORLD)].bg,
-    mine: B.heroes, theirs: B.enemies, showSpeed: true,
+    scene: { key: WORLDS[Math.floor(idx / STAGES_PER_WORLD)].key, ch: WORLDS[Math.floor(idx / STAGES_PER_WORLD)].chapter }, mine: B.heroes, theirs: B.enemies, showSpeed: true,
     onTap: u => { BT.queue.push(u.uid); tutorDone(1); }, onAuto: on => BT.queue.push(on ? -1 : -2), onUlt: () => { BT.queue.push(-3); tutorDone(2); },
   });
   Sound.music('battle');
@@ -841,7 +843,7 @@ function processEvents() {
       case 'skill': {
         const enemy = !mineUid.has(ev.uid);
         Sound.play('skill');
-        if (e) anim(e.root, 'casting');
+        if (e) { anim(e.root, 'casting'); const bx = $('#battle').getBoundingClientRect(), r = e.root.getBoundingClientRect(); Scene.burst(r.left - bx.left + r.width / 2, r.top - bx.top + r.height / 2, enemy ? '#ff4a4a' : SKILL_COLORS[ev.id] || '#ffd85a'); }
         $('#b-banner').innerHTML = `<div class="banner ${enemy ? 'enemy' : ''}"><img src="${img(ev.id)}" alt=""><div><div class="s">${heroText(ev.id).skill}</div><div class="n">${HERO_BY_ID[ev.id].name}</div></div></div>`;
         flashScreen(enemy ? '#ff2a2a' : SKILL_COLORS[ev.id]);
         break;

@@ -619,3 +619,22 @@ img.mini.big { width: 84px; height: 84px; border-width: 3px; border-color: var(-
 .swap img { width: 100%; aspect-ratio: 3/4; object-fit: cover; object-position: top; border-radius: 7px; }
 .swap.up { border-color: rgba(46,204,113,.6); color: #5df29a; } .swap.down { border-color: rgba(255,77,77,.5); color: #ff7b7b; }
 .card .dhint { position: absolute; bottom: 44%; inset-inline-end: 5px; background: rgba(20,120,60,.9); color: #d9ffe8; border-radius: 7px; padding: 1px 6px; font-size: 11px; font-weight: 800; }
+/* living battle background + 3D cards */
+#b-scene { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
+.b-enemies, .b-heroes { perspective: 700px; }
+.hcard { will-change: translate, rotate; }
+.hcard .sheen { position: absolute; inset: 3px; border-radius: 8px; overflow: hidden; pointer-events: none; z-index: 2; }
+.hcard .sheen::after { content: ''; position: absolute; top: -10%; bottom: -10%; width: 38%; left: 0; background: linear-gradient(100deg, transparent, rgba(255,255,255,.32), transparent);
+  transform: translateX(-160%) skewX(-14deg); animation: sheen 5s ease-in-out infinite; animation-delay: var(--sd, 0s); }
+@keyframes sheen { 0%, 72% { transform: translateX(-160%) skewX(-14deg); } 100% { transform: translateX(360%) skewX(-14deg); } }
+.hcard .orbit { position: absolute; left: 50%; top: 52%; width: 125%; aspect-ratio: 1; transform: translate(-50%, -50%) rotateX(72deg); pointer-events: none; display: none; z-index: 3; mix-blend-mode: screen; }
+.hcard .orbit .ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--oc, var(--rc)) 60%, transparent); box-shadow: 0 0 12px var(--oc, var(--rc)), inset 0 0 12px var(--oc, var(--rc)); animation: orbitspin 2.2s linear infinite; }
+.hcard .orbit i { position: absolute; width: 14px; height: 14px; margin: -7px; border-radius: 50%; background: radial-gradient(circle, #fff 0 25%, var(--oc, var(--rc)) 45%, transparent 72%); box-shadow: 0 0 10px var(--oc, var(--rc)); }
+.hcard .orbit i:nth-child(1) { left: 50%; top: 0; } .hcard .orbit i:nth-child(2) { left: 100%; top: 50%; }
+.hcard .orbit i:nth-child(3) { left: 50%; top: 100%; } .hcard .orbit i:nth-child(4) { left: 0; top: 50%; }
+@keyframes orbitspin { to { transform: rotate(360deg); } }
+.hcard.full .orbit { display: block; --oc: #ffd85a; }
+.hcard.boss .orbit { display: block; --oc: #ff3b3b; }
+.hcard.boss .orbit .ring { animation-duration: 3.4s; }
+.hcard.dead .orbit, .hcard.dead .sheen { display: none; }
+@media (prefers-reduced-motion: reduce) { .hcard .sheen::after, .hcard .orbit .ring { animation: none; } }
