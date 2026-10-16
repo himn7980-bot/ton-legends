@@ -107,6 +107,45 @@ function showCoins(prev, prevGems) {
   updateBadge();
 }
 const teamPower = team => ECON.teamPower(S, team);
+// ---------- deck synergies (green = bonus, red = penalty, grey = could be added) ----------
+function synFx(x) {
+  const t = T(), f = x.fx, pc = v => `${v > 0 ? '+' : '−'}${n(Math.round(Math.abs(v) * 100))}%`;
+  return [f.hp ? `${pc(f.hp)} ${t.hp}` : '', f.atk ? `${pc(f.atk)} ${t.atk}` : '', f.energy ? t.synEnergy(n(f.energy)) : ''].filter(Boolean).join(' · ');
+}
+const synChip = (x, cls) => `<span class="syn ${cls}">${x.ico} ${T().synName[x.id]}<small>${synFx(x)}</small></span>`;
+function synergyStrip(team) {
+  const on = new Set(deckSynergies(team).ids);
+  const act = SYNERGIES.filter(x => on.has(x.id)), miss = SYNERGIES.filter(x => !x.bad && !on.has(x.id));
+  return `<button class="syn-strip" id="syn-info">${act.map(x => synChip(x, x.bad ? 'bad' : 'good')).join('')}
+    ${miss.map(x => `<span class="syn off">${x.ico} ${T().synNeed[x.id]}</span>`).join('')}<span class="syn-q">?</span></button>`;
+}
+// Power before → after, green when the deck gets stronger, red when weaker; plus synergies gained / lost.
+function deltaHtml(before, after, from, to) {
+  const t = T(), a = teamPower(from), b = teamPower(to), d = Math.round(b) - Math.round(a);
+  const s0 = new Set(deckSynergies(from).ids), s1 = new Set(deckSynergies(to).ids);
+  const gained = SYNERGIES.filter(x => s1.has(x.id) && !s0.has(x.id)), lost = SYNERGIES.filter(x => s0.has(x.id) && !s1.has(x.id));
+  return `<div class="pdelta ${d > 0 ? 'up' : d < 0 ? 'down' : ''}">${t.powerPreview(n(Math.round(a)), n(Math.round(b)))} <b>${d > 0 ? '▲ +' : d < 0 ? '▼ −' : ''}${n(Math.abs(d))}</b>
+    ${gained.length || lost.length ? `<div class="pd-syn">${gained.map(x => synChip(x, x.bad ? 'bad' : 'good')).join('')}${lost.map(x => `<span class="syn lost">✕ ${x.ico} ${t.synName[x.id]}</span>`).join('')}</div>` : ''}</div>`;
+}
+// Best swap for a card not in a full deck (null when no swap makes the deck stronger).
+function bestSwap(id) {
+  if (S.team.includes(id) || !S.owned[id]) return null;
+  const now = teamPower(S.team);
+  let best = null;
+  for (let i = 0; i < S.team.length; i++) {
+    const team = [...S.team]; team[i] = id;
+    if (teamError(team)) continue;
+    const d = teamPower(team) - now;
+    if (d > 0 && (!best || d > best.d)) best = { i, d };
+  }
+  return best;
+}
+function synergyModal() {
+  const t = T();
+  openModal(`<div class="h2">🔗 ${t.synTitle}</div><p class="muted small">${t.synNote}</p>
+    ${SYNERGIES.map(x => `<div class="syn-row ${x.bad ? 'bad' : 'good'}"><div class="row"><b>${x.ico} ${t.synName[x.id]}</b><span>${synFx(x)}</span></div><div class="muted small">${t.synNeed[x.id]}</div></div>`).join('')}
+    <div class="h2" style="font-size:16px">⚔️ ${t.pairsTitle}</div><p class="muted small">${t.pairsText}</p>`);
+}
 
 // Every change to coins/heroes/progress is an action. Online the server applies it (same rules, its own
 // clock and dice) and returns the updated profile; offline the rules run locally.
@@ -260,6 +299,7 @@ function renderHeroes() {
     <div class="team-slots ${ARRANGE ? 'arranging' : ''}">${[0, 1, 2, 3, 4].map(i => `<button class="slot ${i < 2 ? 'row-front' : 'row-back'} ${ARRANGE && ARRANGE.sel === i ? 'sel' : ''}" data-slot-i="${i}" data-id="${S.team[i] || ''}">${S.team[i] ? `<img src="${img(S.team[i])}" alt="">` : '+'}</button>`).join('')}</div>
     <div class="row" style="margin-top:6px"><span class="muted small" style="flex:1">${ARRANGE ? t.arrangeHint : t.formationNote}</span>
       ${S.team.length > 1 ? `<button class="tag ${ARRANGE ? 'gold' : ''}" id="arrange">${ARRANGE ? '✓ ' + t.ok : t.arrange}</button>` : ''}</div>
+    ${S.team.length ? synergyStrip(S.team) : ''}
     ${isOpen('duo') ? `<button class="btn wide lab-btn" id="to-lab">${t.openLab}</button>` : `<button class="btn wide ghost" disabled>${t.openLab} · 🔒 ${t.worldN(n(unlockWorld('duo')))}</button>`}
     <p class="muted small center" style="margin:6px 0 0">${t.teamRule}</p>
     <div class="h2">${t.setsTitle}</div>
@@ -284,9 +324,17 @@ function renderHeroes() {
   });
   if ($('#arrange')) $('#arrange').onclick = () => { ARRANGE = ARRANGE ? null : { sel: null }; renderHeroes(); };
   if ($('#to-lab')) $('#to-lab').onclick = () => show('lab');
+  if ($('#syn-info')) $('#syn-info').onclick = synergyModal;
 }
 const starsHtml = lv => { const k = ECON.starsOf(lv); return k ? `<span class="stars">${'★'.repeat(k)}</span>` : ''; };
 const EVENT_ICON = { coins: '🎉', war: '⚔️', ai: '🤖', chest: '🎁', sale: '🏷️', arena: '🥊', none: '📅' };
+// Collection hint: how much stronger the deck gets with this card (free slot) or with its best swap (full deck).
+function deckHint(id) {
+  if (!S.owned[id] || S.team.includes(id) || S.tab !== 'heroes') return '';
+  let d;
+  if (S.team.length < 5) { const team = [...S.team, id]; if (teamError(team)) return ''; d = teamPower(team) - teamPower(S.team); } else { const b = bestSwap(id); if (!b) return ''; d = b.d; }
+  return d >= 1 ? `<span class="dhint">▲ ${n(Math.round(d))}</span>` : '';
+}
 function cardHtml(h) {
   const t = T(), lv = S.owned[h.id], rc = RARITY[h.rarity].color;
   const canUp = lv && lv < MAX_LEVEL && S.coins >= ECON.upgradePrice(S, h.id, lv);
@@ -295,7 +343,7 @@ function cardHtml(h) {
     <img src="${img(h.id)}" alt="${h.name}" loading="lazy">
     ${lv ? `<span class="lv">${t.level(n(lv))}</span>` : '<span class="lock">🔒</span>'}${starsHtml(lv)}
     <span class="rl">${ROLES[h.role].icon}</span>
-    ${h.id === S.faction ? '<span class="fac-flag">🚩</span>' : ''}${canUp ? '<span class="up">⬆️</span>' : ''}${S.serials[h.id] ? `<span class="serial">#${n(S.serials[h.id])}</span>` : ''}
+    ${h.id === S.faction ? '<span class="fac-flag">🚩</span>' : ''}${canUp ? '<span class="up">⬆️</span>' : ''}${deckHint(h.id)}${S.serials[h.id] ? `<span class="serial">#${n(S.serials[h.id])}</span>` : ''}
     ${deck >= 0 ? `<span class="deck-mark"><b>✓</b>${t.inTeam} · ${n(deck + 1)}</span>` : ''}
     <div class="info"><div class="nm">${h.name}</div><div class="muted" style="font-size:11px">${heroText(h.id).title}</div></div>
   </button>`;
@@ -323,6 +371,7 @@ function heroModal(id) {
       <div>${t.atk}<b>${n(s.atk)}</b>${next ? `<span style="color:var(--green)">+${n(next.atk - s.atk)}</span>` : ''}</div>
       <div>${t.lvl}<b>${lv ? n(lv) : '—'}</b>${t.of(n(MAX_LEVEL))}</div>
     </div>
+    ${lv ? deckPreview(id) : ''}
     <div class="skill">${t.special} <b>${ht.skill}</b><div class="muted" style="color:var(--text);margin-top:4px">${ht.desc}</div></div>
     ${lv ? `<div class="btns">
       <button class="btn gold" id="up" ${!next || S.coins < cost ? 'disabled' : ''}>${next ? t.upgrade(n(cost)) : t.maxLevel}</button>
@@ -335,6 +384,10 @@ function heroModal(id) {
     if (tm) tm.onclick = async () => { const team = inTeam ? S.team.filter(x => x !== id) : [...S.team, id]; if (await tryAct({ type: 'team', team })) { closeModal(); refresh(); } };
     if (tc) tc.onclick = () => { closeModal(); show('chest'); };
     const tl = box.querySelector('#tolab'); if (tl) tl.onclick = () => { closeModal(); show('lab'); };
+    box.querySelectorAll('[data-swap]').forEach(b => b.onclick = async () => {
+      const team = [...S.team]; team[+b.dataset.swap] = id;
+      if (await tryAct({ type: 'team', team })) { haptic('medium'); closeModal(); refresh(); }
+    });
     box.querySelectorAll('[data-lead]').forEach(b => b.onclick = async () => {
       if (await tryAct({ type: 'leader', id, hero: b.dataset.lead })) { haptic('light'); refresh(); heroModal(id); }
     });
@@ -344,6 +397,17 @@ function heroModal(id) {
 function allyBanner() {
   const t = T(), now = Date.now(), list = (Online.state.alliances || []).filter(a => a.until > now);
   return list.map(a => `<div class="ally-banner">🤝 ${t.allyBanner(HERO_BY_ID[a.a].name, HERO_BY_ID[a.b].name, n(a.pct), n(Math.ceil((a.until - now) / 864e5)))}</div>`).join('');
+}
+// Card screen: what this card does to the deck — remove / add preview, or (deck full) every possible swap.
+function deckPreview(id) {
+  const t = T();
+  if (S.team.includes(id)) return S.team.length > 1 ? deltaHtml(0, 0, S.team, S.team.filter(x => x !== id)) : '';
+  if (S.team.length < 5) { const team = [...S.team, id]; return teamError(team) ? '' : deltaHtml(0, 0, S.team, team); }
+  const now = teamPower(S.team);
+  return `<div class="swap-box"><div class="muted small">${t.swapTitle}</div><div class="swap-row">${S.team.map((x, i) => {
+    const team = [...S.team]; team[i] = id; const bad = !!teamError(team), d = bad ? 0 : Math.round(teamPower(team) - now);
+    return `<button class="swap ${d > 0 ? 'up' : d < 0 ? 'down' : ''}" data-swap="${i}" ${bad ? 'disabled' : ''}><img src="${img(x)}" alt=""><b>${bad ? '—' : (d > 0 ? '▲ +' : d < 0 ? '▼ −' : '') + n(Math.abs(d))}</b></button>`;
+  }).join('')}</div></div>`;
 }
 // Alliance card: its member communities, the leader (shown big; you can change it) and an official alliance bonus.
 function allianceHtml(h, owned) {

@@ -219,6 +219,9 @@ function guideModal() {
   const t = T();
   openModal(`<div class="big center" style="font-size:22px">${t.guideTitle}</div>
     ${[...t.guideSections.map((sec, i) => (t.guideFix && t.guideFix[i]) || sec), ...(t.guideExtra || [])].map(([h, p]) => `<div class="guide-sec"><div class="t">${h}</div><p class="muted">${p}</p></div>`).join('')}
+    <div class="guide-sec"><div class="t">🔗 ${t.synTitle}</div><p class="muted">${t.synNote}</p>
+      ${SYNERGIES.map(x => `<div class="syn-row ${x.bad ? 'bad' : 'good'}"><div class="row"><b>${x.ico} ${t.synName[x.id]}</b><span>${synFx(x)}</span></div><div class="muted small">${t.synNeed[x.id]}</div></div>`).join('')}</div>
+    <div class="guide-sec"><div class="t">⚔️ ${t.pairsTitle}</div><p class="muted">${t.pairsText}</p></div>
     <button class="btn wide" id="g-ok">${t.close}</button>`, box => box.querySelector('#g-ok').onclick = closeModal);
 }
 

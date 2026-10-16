@@ -3,7 +3,7 @@
 (function (root, factory) {
   if (typeof module !== 'undefined') module.exports = factory(require('./engine.js'));
   // In the browser engine.js declares top-level consts (not window properties), so pass them explicitly.
-  else root.ECON = factory({ STAGES_PER_WORLD, STARTERS, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, fusionStartLevel, LEGACY_FUSION_IDS, teamError, duosWithin, factionMult, marketMult, HERO_BY_ID, MAX_LEVEL, TOTAL_STAGES, COIN_BONUS, heroStats, upgradeCost, stageReward, replayStage });
+  else root.ECON = factory({ STAGES_PER_WORLD, STARTERS, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, fusionStartLevel, LEGACY_FUSION_IDS, teamError, duosWithin, factionMult, marketMult, HERO_BY_ID, MAX_LEVEL, TOTAL_STAGES, COIN_BONUS, heroStats, upgradeCost, stageReward, replayStage, deckSynergies });
 })(typeof self !== 'undefined' ? self : this, function (E) {
   const CHESTS = {
     basic: { cost: 300, rates: { C: 55, R: 32, E: 11, L: 2 } },
@@ -200,7 +200,15 @@
   // so farming old stages dries up and progress comes from new stages, the idle chest, quests and the arena.
   const replayFactor = (p, idx) => (idx < p.cleared ? Math.pow(0.5, (p.replays[idx] || 0) + 1) : 2);
   const stageCoins = (p, idx, team, dip = 0) => Math.floor(E.stageReward(idx) * (1 + coinBonus(team) + dip) * replayFactor(p, idx));
-  const teamPower = (p, team = p.team) => { const pk = perksOf(p); return team.reduce((sum, id) => { const s0 = E.heroStats(id, p.owned[id] || 1), k = E.factionMult(id, p.faction), s = { hp: s0.hp * k * (1 + (pk.hp || 0)), atk: s0.atk * k * (1 + (pk.atk || 0)), spd: s0.spd }; return sum + s.hp / 10 + s.atk / s.spd * 2; }, 0); };
+  // Deck power: card stats with community, set perks and deck synergies (start energy counts a little too).
+  const teamPower = (p, team = p.team) => {
+    const pk = perksOf(p), sy = E.deckSynergies(team).fx;
+    return team.reduce((sum, id) => {
+      const s0 = E.heroStats(id, p.owned[id] || 1), k = E.factionMult(id, p.faction);
+      const hp = s0.hp * k * (1 + (pk.hp || 0)) * (1 + sy.hp), atk = s0.atk * k * (1 + (pk.atk || 0)) * (1 + sy.atk);
+      return sum + hp / 10 + atk / s0.spd * 2;
+    }, 0) * (1 + sy.energy / 300);
+  };
 
   function claimable(p, now) {
     ensureDQ(p, now);

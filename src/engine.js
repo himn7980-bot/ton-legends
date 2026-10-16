@@ -149,7 +149,7 @@ const ENEMY_HP = 0.56, ENEMY_ATK = 0.23, SC2 = 0.13;
 const CALIBRATED_FROM = 40;
 // Per-stage difficulty factor (worlds 5–20), calibrated by tools/calibrate.js against several reference teams so
 // the level a stage needs rises smoothly: a little easier at a world's start, a bump for the boss.
-const STAGE_K = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1.773, 1.98, 2.319, 1.28, 1.335, 1.217, 1.122, 1.062, 1.023, 1.14, 2.118, 2.581, 2.245, 1.438, 1.81, 1.498, 1.334, 1.303, 1.293, 1.209, 2.466, 2.789, 2.294, 1.972, 2.088, 1.52, 1.7, 1.683, 1.419, 1.501, 1.964, 2.047, 2.498, 1.876, 1.577, 1.693, 1.526, 1.547, 1.37, 1.508, 4.573, 4.067, 2.308, 2.204, 3.278, 1.782, 1.908, 1.975, 1.63, 2.365, 2.444, 2.074, 2.255, 1.73, 1.905, 1.454, 1.432, 1.445, 1.311, 1.305, 3.069, 2.522, 2.314, 2.167, 1.963, 1.561, 1.611, 1.65, 1.388, 1.885, 2.545, 2.546, 2.94, 2.119, 2.074, 2.026, 1.931, 1.777, 1.708, 1.766, 2.651, 2.317, 2.154, 2.07, 1.847, 1.374, 1.688, 1.593, 1.212, 1.855, 4.473, 2.827, 3.451, 3.576, 2.581, 2.343, 2.739, 2.188, 1.938, 2.642, 2.371, 3.389, 2.547, 1.925, 2.204, 1.668, 1.484, 1.689, 1.483, 1.618, 3.005, 3.362, 3.318, 2.262, 2.55, 1.795, 1.836, 1.993, 1.593, 1.764, 2.734, 2.995, 2.887, 2.337, 2.392, 2.06, 1.93, 2.072, 1.872, 1.771, 2.873, 2.857, 2.795, 2.145, 2.302, 2.003, 1.768, 1.85, 1.771, 1.795, 4.649, 4.224, 4.514, 3.709, 3.303, 2.654, 2.597, 2.795, 2.346, 2.752, 3.192, 3.073, 2.213, 2.173, 2.398, 1.757, 1.849, 1.811, 1.563, 1.918];
+const STAGE_K = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1.893, 2.105, 2.471, 1.372, 1.428, 1.253, 1.2, 1.098, 1.031, 1.225, 2.276, 2.732, 2.392, 1.552, 1.916, 1.586, 1.436, 1.406, 1.372, 1.302, 2.673, 2.902, 2.356, 2.096, 2.22, 1.633, 1.788, 1.781, 1.499, 1.582, 2.11, 2.171, 2.633, 1.999, 1.691, 1.773, 1.65, 1.624, 1.444, 1.572, 4.841, 4.287, 2.469, 2.368, 3.515, 1.878, 2.028, 2.127, 1.696, 2.498, 2.548, 2.195, 2.387, 1.808, 2.029, 1.513, 1.484, 1.539, 1.382, 1.393, 3.249, 2.681, 2.46, 2.255, 2.114, 1.621, 1.702, 1.743, 1.479, 1.953, 2.659, 2.638, 3.146, 2.205, 2.172, 2.122, 2.001, 1.885, 1.785, 1.849, 2.824, 2.479, 2.29, 2.239, 1.947, 1.405, 1.741, 1.679, 1.3, 1.943, 4.704, 2.973, 3.645, 3.777, 2.72, 2.433, 2.887, 2.296, 2.012, 2.815, 2.515, 3.626, 2.69, 2.02, 2.368, 1.728, 1.524, 1.757, 1.53, 1.713, 3.16, 3.498, 3.46, 2.338, 2.619, 1.88, 1.943, 2.092, 1.65, 1.816, 2.814, 3.123, 3.049, 2.385, 2.505, 2.157, 2.03, 2.151, 1.956, 1.855, 2.983, 3.031, 2.89, 2.275, 2.468, 2.116, 1.855, 1.958, 1.867, 1.941, 4.879, 4.433, 4.717, 3.892, 3.534, 2.809, 2.725, 2.89, 2.521, 2.907, 3.293, 3.191, 2.378, 2.305, 2.511, 1.813, 1.912, 1.905, 1.637, 2.035];
 function stageEnemies(idx) {
   const w = WORLDS[Math.floor(idx / STAGES_PER_WORLD)], local = idx % STAGES_PER_WORLD;
   // Difficulty follows the level a team of five non-fusion cards needs: ~5 at stage 20, ~45 at stage 100, ~95 at stage 200.
@@ -213,13 +213,35 @@ function marketMult(id, market) {
 const FRONT = 2, BACK_GUARD = 0.65;
 const rowOf = i => (i < FRONT ? 'front' : 'back');
 // perks: collection-set bonuses { hp: 0.05, atk: 0.05, energy: 25 } for the whole team.
+// Deck synergies: card pairings that make the whole deck stronger (green) — or weaker (red, `bad`). Alliance cards
+// count as every hero on them (they fire all those skills). The first two cards are the front row.
+const BURST = ['volya', 'noctis', 'paws', 'egor'], AREA = ['gramcat', 'utya', 'memegram', 'yoda'];
+const SYNERGIES = [
+  { id: 'wall', ico: '🛡️', fx: { hp: 0.08 }, test: d => d.front.includes('tank') },
+  { id: 'lifeline', ico: '💧', fx: { hp: 0.06 }, test: d => d.roles.includes('tank') && (d.roles.includes('healer') || d.roles.includes('support')) },
+  { id: 'shatter', ico: '❄️', fx: { atk: 0.08 }, test: d => d.any(['pengu', 'pinkbull']) && d.any(BURST) },
+  { id: 'plague', ico: '☠️', fx: { atk: 0.06 }, test: d => d.any(['virus']) && d.any(AREA) },
+  { id: 'charge', ico: '⚡', fx: { energy: 15 }, test: d => d.any(['dog']) && d.roles.includes('mage') },
+  { id: 'balance', ico: '🌈', fx: { hp: 0.04, atk: 0.04 }, test: d => new Set(d.roles).size >= 4 },
+  { id: 'exposed', ico: '⚠️', bad: true, fx: { hp: -0.08 }, test: d => d.size >= 3 && !d.front.some(r => r === 'tank' || r === 'warrior') },
+  { id: 'crowd', ico: '⚠️', bad: true, fx: { atk: -0.06 }, test: d => Math.max(...Object.values(d.roles.reduce((a, r) => ((a[r] = (a[r] || 0) + 1), a), {}))) >= 3 },
+];
+function deckSynergies(team) {
+  const hs = (team || []).map(id => HERO_BY_ID[id]).filter(Boolean);
+  const heroes = new Set(hs.flatMap(h => (h.fusion ? h.parts : [h.id])));
+  const d = { size: hs.length, roles: hs.map(h => h.role), front: hs.slice(0, FRONT).map(h => h.role), any: ids => ids.some(id => heroes.has(id)) };
+  const on = hs.length ? SYNERGIES.filter(x => x.test(d)) : [];
+  const fx = { hp: 0, atk: 0, energy: 0 };
+  for (const x of on) for (const k in x.fx) fx[k] += x.fx[k];
+  return { ids: on.map(x => x.id), fx };
+}
 function teamUnits(B, side, team, levels, faction, market, perks) {
-  const pk = perks || {};
+  const pk = perks || {}, sy = deckSynergies(team).fx;
   return team.map((id, i) => {
     const h = HERO_BY_ID[id], ms = pk.mascot && faction ? (id === faction ? pk.mascot : h && h.fusion && h.parts.includes(faction) ? pk.mascot / 2 : 0) : 0;
     const s = heroStats(id, levels[id] || 1), k = factionMult(id, faction) * marketMult(id, market) * (1 + ms);
-    const u = makeUnit(B, side, { ...HERO_BY_ID[id], ...s, hp: s.hp * k * (1 + (pk.hp || 0)), atk: s.atk * k * (1 + (pk.atk || 0)), row: rowOf(i) });
-    u.energy = Math.min(100, u.energy + (pk.energy || 0));
+    const u = makeUnit(B, side, { ...HERO_BY_ID[id], ...s, hp: s.hp * k * (1 + (pk.hp || 0)) * (1 + sy.hp), atk: s.atk * k * (1 + (pk.atk || 0)) * (1 + sy.atk), row: rowOf(i) });
+    u.energy = Math.min(100, u.energy + (pk.energy || 0) + sy.energy);
     return u;
   });
 }
@@ -438,5 +460,5 @@ function replayStage(team, levels, idx, seed, inputs, faction = null, market = n
 
 if (typeof module !== 'undefined') {
   module.exports = { RARITY, ROLES, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, fusionStartLevel, TEAM_MAX_FUSIONS, TEAM_MAX_TRIOS, teamError, duosWithin, ENRAGE_AT, LEGACY_FUSION_IDS, HERO_BY_ID, STARTERS, WORLDS, TOTAL_STAGES, STAGES_PER_WORLD, MAX_LEVEL, COIN_BONUS, TICK,
-    STAGE_K, CALIBRATED_FROM, FACTION_BONUS, FACTION_FUSION_BONUS, factionMult, marketMult, BOSS_WEAK, WEAK_BY, heroStats, upgradeCost, stageReward, stageEnemies, createBattle, createPvpBattle, step, castSkill, castUlt, applyInput, replayStage };
+    SYNERGIES, deckSynergies, STAGE_K, CALIBRATED_FROM, FACTION_BONUS, FACTION_FUSION_BONUS, factionMult, marketMult, BOSS_WEAK, WEAK_BY, heroStats, upgradeCost, stageReward, stageEnemies, createBattle, createPvpBattle, step, castSkill, castUlt, applyInput, replayStage };
 }
