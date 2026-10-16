@@ -65,7 +65,8 @@ module.exports = function createRaid({ db, persist, weekKey, credit, profileOut,
       const r = E.replayRaid(pd.team, pd.levels, pd.seed, body.inputs, { boss: pd.boss, level: pd.level, weak: pd.weak }, pd.faction, pd.market, pd.perks);
       const R = roll();
       // The fight counts against the boss that is up now (if it fell meanwhile, the damage goes to the next one).
-      const dmg = r.dmg, coins = Math.max(100, Math.min(20000, Math.round(Math.sqrt(dmg) * 20)));
+      // Coins scale with the player's progress (about one stage reward per fight, up to 1.5× for big damage).
+      const dmg = r.dmg, coins = Math.max(50, Math.round(E.stageReward(Math.min(E.TOTAL_STAGES - 1, u.profile.cleared)) * Math.max(0.5, Math.min(1.5, Math.sqrt(dmg) / 200))));
       u.profile.coins += coins;
       R.dmg[u.id] = (R.dmg[u.id] || 0) + dmg; R.total[u.id] = (R.total[u.id] || 0) + dmg;
       if (u.profile.faction) R.coms[u.profile.faction] = (R.coms[u.profile.faction] || 0) + dmg;

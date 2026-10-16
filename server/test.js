@@ -580,7 +580,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   r = await post('/api/raid/start', { initData: initData(alice) }); assert.ok(r.body.seed >= 0); assert.equal(r.body.raid.level, 1);
   const pts0 = srv.db.war.points[srv.db.users['111'].profile.faction] || 0;
   r = await post('/api/raid/end', { initData: initData(alice), inputs: [[0, -1]] });
-  assert.ok(r.body.dmg > 0, JSON.stringify(r.body)); assert.ok(r.body.coins >= 100); assert.equal(r.body.raid.tries, 2);
+  assert.ok(r.body.dmg > 0, JSON.stringify(r.body)); assert.ok(r.body.coins >= 50); assert.equal(r.body.raid.tries, 2);
   assert.equal(r.body.raid.mine.week, r.body.dmg); assert.equal(r.body.raid.hp, r.body.raid.max - r.body.dmg);
   assert.ok((srv.db.war.points[srv.db.users['111'].profile.faction] || 0) > pts0, 'boss damage earns war points');
   // the final blow: boss nearly down → killed, gems for everyone who hit it, level 2 appears
