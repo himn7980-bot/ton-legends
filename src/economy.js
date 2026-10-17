@@ -282,7 +282,7 @@
   const freezeReady = (p, now) => p.daily.freeze !== weekNo(now);
   const dailyFrozen = (p, now) => p.daily.last === day(now, -2) && p.daily.streak > 0 && freezeReady(p, now);
   const dailyNext = (p, now) => (p.daily.last === day(now, -1) || dailyFrozen(p, now) ? p.daily.streak % 7 + 1 : 1);
-  const afkRate = p => Math.round(progressReward(p) * 2.5);
+  const afkRate = p => Math.round(progressReward(p) * 1.2);
   const afkAmount = (p, now) => Math.floor(Math.min(afkCap(p, now) * 3600e3, now - (p.afkSince || now)) / 3600e3 * afkRate(p));
   const achTier = (p, a) => p.ach[a.id] || 0;
   const coinBonus = team => team.reduce((b, id) => b + (E.COIN_BONUS[id] || 0), 0);

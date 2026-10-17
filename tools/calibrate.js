@@ -14,7 +14,11 @@ const TEAMS = [
 const TARGET = idx => 1 + 95 * Math.pow(idx / 199, 1.1);
 const RAMP = [0.93, 0.95, 0.97, 0.99, 1.0, 1.01, 1.02, 1.03, 1.04, 1.1];
 const EARLY_FROM = 19, EARLY_LEVEL = 3, EARLY_TO = 40;
+// Late game is tuned on alliance decks: past ALLY_TO the alliance teams themselves need ALLY_TARGET levels (no
+// strength discount), so a deck of fusions is not a free pass. Between EARLY_TO and ALLY_TO the goal blends over.
+const ALLY_TARGET = idx => 1 + 75 * Math.pow(idx / 199, 1.1), ALLY_TO = 90;
 const goal = idx => (idx < EARLY_TO ? EARLY_LEVEL + (TARGET(EARLY_TO) - EARLY_LEVEL) * (idx - EARLY_FROM) / (EARLY_TO - EARLY_FROM) : TARGET(idx)) * RAMP[idx % 10];
+const allyW = idx => Math.max(0, Math.min(1, (idx - EARLY_TO) / (ALLY_TO - EARLY_TO)));
 function winRate(team, lv, idx, n = 16) {
   const levels = Object.fromEntries(team.map(id => [id, lv]));
   let w = 0;
@@ -22,8 +26,8 @@ function winRate(team, lv, idx, n = 16) {
   return w / n;
 }
 function need(team, idx) {
-  let lo = 1, hi = 140;
-  if (winRate(team, hi, idx) < 0.6) return 200;
+  let lo = 1, hi = 200;
+  if (winRate(team, hi, idx) < 0.6) return 400;
   while (lo < hi) { const mid = (lo + hi) >> 1; if (winRate(team, mid, idx) >= 0.6) hi = mid; else lo = mid + 1; }
   return lo;
 }
@@ -37,9 +41,17 @@ if (process.argv[2] === '--worker') {
     for (const idx of stages) {
       // Worlds 3–4 come before alliance cards, so only the plain-hero team counts there.
       const teams = idx < EARLY_TO ? TEAMS.slice(0, 1) : TEAMS;
-      const score = () => gmean(teams.map((t, i) => need(t, idx) / factors[i])) - goal(idx);
+      const w = allyW(idx), ally = factors.slice(1), aref = Math.min(...ally);
+      const score = () => {
+        const n = teams.map(t => need(t, idx));
+        const plain = gmean(n.map((x, i) => x / factors[i]));
+        if (!w) return plain - goal(idx);
+        // alliance teams scaled to the strongest one, aiming at ALLY_TARGET
+        const al = gmean(n.slice(1).map((x, i) => x * aref / ally[i]));
+        return Math.exp((1 - w) * Math.log(plain / goal(idx)) + w * Math.log(al / (ALLY_TARGET(idx) * RAMP[idx % 10])));
+      };
       let lo = Math.log(E.STAGE_K[idx] / 3), hi = Math.log(E.STAGE_K[idx] * 3);
-      for (let it = 0; it < 10; it++) { const mid = (lo + hi) / 2; E.STAGE_K[idx] = Math.exp(mid); if (score() > 0) hi = mid; else lo = mid; }
+      for (let it = 0; it < 10; it++) { const mid = (lo + hi) / 2; E.STAGE_K[idx] = Math.exp(mid); if (w ? score() > 1 : score() > 0) hi = mid; else lo = mid; }
       out[idx] = +Math.exp((lo + hi) / 2).toFixed(3);
       process.send({ progress: idx });
     }

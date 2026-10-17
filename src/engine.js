@@ -133,10 +133,11 @@ function heroStats(id, level) {
   return { hp: Math.round(r.hp * m), atk: Math.round(r.atk * m), spd: r.spd };
 }
 
-// Linear per level, so the total cost of a level grows like the coins the stages pay (both ~ stage²).
+// Grows a little faster than linear: early levels stay cheap, the last levels (the late-game) cost about 3× more.
+const UPGRADE_CURVE = 20;
 function upgradeCost(id, level) {
   const f = { C: 1, R: 1.3, E: 1.7, L: 2.2, M: 3, X: 4 }[HERO_BY_ID[id].rarity];
-  return Math.round((60 + 90 * level) * f);
+  return Math.round((60 + 90 * level) * f * (1 + level / UPGRADE_CURVE));
 }
 
 function stageReward(idx) {
@@ -149,7 +150,7 @@ const ENEMY_HP = 0.56, ENEMY_ATK = 0.23, SC2 = 0.13;
 const CALIBRATED_FROM = 20;
 // Per-stage difficulty factor (worlds 3–20), calibrated by tools/calibrate.js against several reference teams so
 // the level a stage needs rises smoothly: a little easier at a world's start, a bump for the boss.
-const STAGE_K = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1.885, 2.112, 1.719, 1.39, 1.675, 1.008, 1.144, 1.295, 0.995, 1.273, 2.205, 1.726, 2.099, 1.826, 1.571, 1.417, 1.329, 1.335, 1.276, 1.528, 1.893, 2.105, 2.471, 1.372, 1.428, 1.253, 1.2, 1.098, 1.031, 1.225, 2.276, 2.732, 2.392, 1.552, 1.916, 1.586, 1.436, 1.406, 1.372, 1.302, 2.673, 2.902, 2.356, 2.096, 2.22, 1.633, 1.788, 1.781, 1.499, 1.582, 2.11, 2.171, 2.633, 1.999, 1.691, 1.773, 1.65, 1.624, 1.444, 1.572, 4.841, 4.287, 2.469, 2.368, 3.515, 1.878, 2.028, 2.127, 1.696, 2.498, 2.548, 2.195, 2.387, 1.808, 2.029, 1.513, 1.484, 1.539, 1.382, 1.393, 3.249, 2.681, 2.46, 2.255, 2.114, 1.621, 1.702, 1.743, 1.479, 1.953, 2.659, 2.638, 3.146, 2.205, 2.172, 2.122, 2.001, 1.885, 1.785, 1.849, 2.824, 2.479, 2.29, 2.239, 1.947, 1.405, 1.741, 1.679, 1.3, 1.943, 4.704, 2.973, 3.645, 3.777, 2.72, 2.433, 2.887, 2.296, 2.012, 2.815, 2.515, 3.626, 2.69, 2.02, 2.368, 1.728, 1.524, 1.757, 1.53, 1.713, 3.16, 3.498, 3.46, 2.338, 2.619, 1.88, 1.943, 2.092, 1.65, 1.816, 2.814, 3.123, 3.049, 2.385, 2.505, 2.157, 2.03, 2.151, 1.956, 1.855, 2.983, 3.031, 2.89, 2.275, 2.468, 2.116, 1.855, 1.958, 1.867, 1.941, 4.879, 4.433, 4.717, 3.892, 3.534, 2.809, 2.725, 2.89, 2.521, 2.907, 3.293, 3.191, 2.378, 2.305, 2.511, 1.813, 1.912, 1.905, 1.637, 2.035];
+const STAGE_K = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1.885, 2.112, 1.719, 1.39, 1.675, 1.008, 1.144, 1.295, 0.995, 1.273, 2.205, 1.726, 2.099, 1.826, 1.571, 1.417, 1.329, 1.335, 1.276, 1.528, 1.895, 2.18, 2.557, 1.412, 1.495, 1.294, 1.241, 1.164, 1.083, 1.283, 2.368, 2.816, 2.522, 1.597, 1.992, 1.683, 1.465, 1.496, 1.478, 1.381, 2.839, 3.113, 2.493, 2.169, 2.346, 1.706, 1.957, 1.893, 1.634, 1.673, 2.243, 2.282, 2.795, 2.129, 1.855, 1.894, 1.75, 1.777, 1.6, 1.74, 5.297, 4.769, 2.703, 2.557, 3.753, 1.995, 2.204, 2.275, 1.848, 2.738, 2.784, 2.332, 2.563, 1.993, 2.207, 1.689, 1.67, 1.685, 1.509, 1.545, 3.571, 2.903, 2.612, 2.463, 2.284, 1.762, 1.866, 1.915, 1.612, 2.174, 2.83, 2.93, 3.304, 2.428, 2.402, 2.361, 2.246, 2.045, 1.969, 2.018, 3.28, 2.682, 2.494, 2.376, 2.08, 1.556, 1.932, 1.844, 1.459, 2.134, 5.211, 3.23, 4.011, 4.156, 3, 2.66, 3.184, 2.543, 2.262, 3.124, 2.668, 4.016, 2.928, 2.152, 2.406, 1.901, 1.706, 1.9, 1.684, 1.921, 3.469, 3.999, 3.814, 2.567, 2.937, 2.077, 2.101, 2.292, 1.862, 2.072, 3.062, 3.494, 3.206, 2.75, 2.72, 2.332, 2.242, 2.376, 2.161, 2.04, 3.295, 3.187, 3.185, 2.48, 2.612, 2.352, 2.009, 2.162, 2.075, 2.158, 5.308, 4.927, 5.109, 4.198, 3.877, 3.102, 3.061, 3.185, 2.862, 3.28, 3.772, 3.554, 2.5, 2.449, 2.737, 2.006, 2.162, 2.131, 1.803, 2.218];
 function stageEnemies(idx) {
   const w = WORLDS[Math.floor(idx / STAGES_PER_WORLD)], local = idx % STAGES_PER_WORLD;
   // Difficulty follows the level a team of five non-fusion cards needs: ~5 at stage 20, ~45 at stage 100, ~95 at stage 200.
@@ -195,14 +196,14 @@ function newBattle(seed, pvp) {
 }
 // ---------- skill play (only a player's own taps count; Auto never gets these) ----------
 // Perfect: a skill tapped PERFECT_FROM..PERFECT_TO ticks after its card filled up hits PERFECT_MULT harder.
-const PERFECT_FROM = 5, PERFECT_TO = 20, PERFECT_MULT = 1.3;
+const PERFECT_FROM = 2, PERFECT_TO = 15, PERFECT_MULT = 1.25;
 // Chain: skills tapped within CHAIN_GAP s of each other build a chain; each link adds CHAIN_STEP (up to CHAIN_MAX).
-const CHAIN_GAP = 2.5, CHAIN_STEP = 0.1, CHAIN_MAX = 1.5;
+const CHAIN_GAP = 2.5, CHAIN_STEP = 0.08, CHAIN_MAX = 1.4;
 // Boss weak spot: every EXPOSE_EVERY s a boss opens up for EXPOSE_FOR s; skills that hit it then deal ×EXPOSE_MULT.
-const EXPOSE_EVERY = 7, EXPOSE_AT = 4, EXPOSE_FOR = 1.5, EXPOSE_MULT = 2;
+const EXPOSE_EVERY = 7, EXPOSE_AT = 4, EXPOSE_FOR = 1.5, EXPOSE_MULT = 1.75;
 const exposed = (B, u) => !!(u && u.boss && !B.pvp && (B.t % EXPOSE_EVERY) >= EXPOSE_AT && (B.t % EXPOSE_EVERY) < EXPOSE_AT + EXPOSE_FOR);
 // Aimed ultimate: the ultimate hits the focused enemy AIM_MULT harder.
-const AIM_MULT = 1.5;
+const AIM_MULT = 1.35;
 // Treasure goblin (stages): sometimes runs across the field for a moment — tap it to catch it (coins, maybe a gem).
 const GOBLIN_CHANCE = 0.125, GOBLIN_FOR = 2.5;
 // Challenge modifiers (daily challenge): change the rules for both sides.
