@@ -53,7 +53,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     });
   });
   await new Promise(r => runwaySrv.listen(0, r));
-  Object.assign(process.env, { LB_CACHE_MS: '0', SAVE_MS: '1000', GAME_CHANNEL: '@gl_news', REF_MIN_AGE_MS: '1', RAID_MIN_MS: '0', RUNWAY_API: `http://127.0.0.1:${runwaySrv.address().port}`, RUNWAYML_API_SECRET: 'rw_test', RUNWAY_POLL_MS: '50' });
+  Object.assign(process.env, { LB_CACHE_MS: '0', SAVE_MS: '1000', GAME_CHANNEL: '@gl_news', REF_MIN_AGE_MS: '1', RAID_MIN_MS: '0', PICK_MS: '300', RUNWAY_API: `http://127.0.0.1:${runwaySrv.address().port}`, RUNWAYML_API_SECRET: 'rw_test', RUNWAY_POLL_MS: '50' });
   process.env.TL_EVENT = 'none'; // weekday events are tested explicitly below
   Object.assign(process.env, { ADSGRAM_BLOCK_ID: '1234', ADS_SECRET: 'adsecret', ADMIN_IDS: '111', ART_DIR: path.join(path.dirname(dataFile), 'art'), BOT_TOKEN: TOKEN, WEBAPP_URL: 'https://game.example', PORT: '0', DATA_FILE: dataFile, TELEGRAM_API: `http://127.0.0.1:${fake.address().port}` });
   const srv = require('./server.js');
@@ -826,6 +826,108 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     const au = play(true); assert.equal(au.manual, false);
   }
   console.log('   review fixes: idle/AI income after bosses, first chest new, shards, gem pity');
+  {
+    // ---------- skill play: perfect timing, chains, boss weak spot, focus, aimed ultimate, goblin ----------
+    const lv = Object.fromEntries(E.STARTERS.map(x => [x, 8]));
+    const run = (B, until) => { while (!B.over && !until(B)) { E.step(B); } };
+    // perfect: tapped inside the window after filling up → 'perfect'; right away → not
+    let B = E.createBattle(E.STARTERS, lv, 9, 777); const seen = [];
+    run(B, b => b.heroes.some(h => h.alive && h.fullAt != null && b.tick - h.fullAt === E.PERFECT_FROM + 2));
+    const h1 = B.heroes.find(h => h.alive && h.fullAt != null); B.events.length = 0; E.applyInput(B, h1.uid);
+    assert.ok(B.events.some(e => e.type === 'perfect'), 'perfect tap'); assert.equal(B.perfects, 1);
+    B = E.createBattle(E.STARTERS, lv, 9, 777); run(B, b => b.heroes.some(h => h.alive && h.fullAt === b.tick));
+    const h2 = B.heroes.find(h => h.alive && h.fullAt === B.tick); B.events.length = 0; E.applyInput(B, h2.uid);
+    assert.ok(!B.events.some(e => e.type === 'perfect'), 'too early is not perfect');
+    // auto never gets perfect or chains
+    B = E.createBattle(E.STARTERS, lv, 9, 777); E.applyInput(B, -1); run(B, () => false); assert.equal(B.perfects, 0); assert.equal(B.maxChain, 0);
+    // chain: two taps within the gap
+    B = E.createBattle(E.STARTERS, lv, 9, 778); E.step(B);
+    B.heroes[0].energy = 100; B.heroes[1].energy = 100; E.applyInput(B, B.heroes[0].uid); E.step(B); B.events.length = 0; E.applyInput(B, B.heroes[1].uid);
+    assert.ok(B.events.some(e => e.type === 'chain' && e.n === 2) && B.maxChain === 2, 'two quick taps make a chain');
+    // boss weak spot: exposed on schedule, skill damage doubled
+    B = E.createBattle(E.STARTERS, lv, 9, 779); const boss = B.enemies.find(e => e.boss);
+    run(B, b => E.exposed(b, boss)); assert.ok(E.exposed(B, boss) && (B.t % E.EXPOSE_EVERY) >= E.EXPOSE_AT, 'boss opens up');
+    // focus and aimed ultimate
+    const foe = B.enemies.find(e => e.alive && !e.boss) || boss; E.applyInput(B, -100 - foe.uid); assert.equal(B.focus.hero, foe.uid);
+    B.ult.hero = 100; const hp0 = foe.hp; E.applyInput(B, -200 - foe.uid); assert.ok(foe.hp < hp0 && B.ult.hero === 0, 'aimed ultimate fired');
+    // goblin: find a battle with one, catch it, and the replay agrees
+    let seed = 1; while (!E.createBattle(E.STARTERS, lv, 3, seed).goblin) seed++;
+    B = E.createBattle(E.STARTERS, lv, 3, seed); const inputs = [];
+    while (!B.over) { if (E.goblinUp(B) && !B.goblin.caught) { inputs.push([B.tick, -4]); E.applyInput(B, -4); } E.step(B); }
+    const rp = E.replayStage(E.STARTERS, lv, 3, seed, inputs);
+    if (B.goblin.at < B.t) { assert.ok(rp.goblin.caught, 'goblin caught in the replay'); }
+    // stars, hard mode, comeback, world chest
+    const q = ECON.newProfile(Date.now()); q.owned = { ...lv }; q.team = [...E.STARTERS];
+    assert.equal(ECON.starsFor({ result: 'win', lost: [], time: 20 }, true), 3); assert.equal(ECON.starsFor({ result: 'win', lost: ['x'], time: 20 }, true), 1); assert.equal(ECON.starsFor({ result: 'win', lost: [], time: 20 }, false), 2);
+    q.cleared = 5; assert.ok(!ECON.hardOpen(q, 0), 'hard mode after the world is done'); q.cleared = 10; assert.ok(ECON.hardOpen(q, 0) && !ECON.hardOpen(q, 1));
+    q.lossStreak = 3; const st = ECON.act(q, { type: 'stageStart', stage: 0 }, { now: Date.now(), rng: Math.random }); assert.equal(st.perks.comeback, ECON.COMEBACK, 'comeback boost after 3 losses');
+    q.stars = { 0: 3, 1: 3, 2: 3, 3: 1 }; const c0 = q.coins;
+    const sc = ECON.act(q, { type: 'starChest', world: 0 }, { now: Date.now(), rng: Math.random }); assert.equal(sc.tier, 0); assert.ok(q.coins > c0);
+    assert.throws(() => ECON.act(q, { type: 'starChest', world: 0 }, { now: Date.now(), rng: Math.random }), /not_ready/);
+    const hs = ECON.act(q, { type: 'stageStart', stage: 0, hard: true }, { now: Date.now(), rng: Math.random }); assert.equal(hs.hard, true); assert.equal(q.pending.hard, true);
+  }
+  console.log('   skill play: perfect taps, chains, boss weak spot, focus + aimed ultimate, goblin, stars, hard mode, comeback, world chest');
+
+  // ---------- skill modes: daily challenge, tower, raid enrage, war blitz, draft and ghost duels ----------
+  {
+    const kim = { id: 7201, first_name: 'Kim' }, lee = { id: 7202, first_name: 'Lee' };
+    for (const w of [kim, lee]) { await post('/api/profile', { initData: initData(w), local: {} }); Object.assign(srv.db.users[String(w.id)].profile, { cleared: 30, coins: 5000, owned: Object.fromEntries(E.STARTERS.map(x => [x, 25])), team: [...E.STARTERS] }); }
+    const autoRun = (seed, stage, team, levels, opts) => { const B = E.createBattle(team, levels, stage, seed, null, null, null, opts); E.applyInput(B, -1); while (!B.over) E.step(B); return [[0, -1]]; };
+    // daily challenge: same seed for everyone, today's twist, best of 3, first try pays
+    r = await post('/api/challenge/start', { initData: initData(kim) }); assert.ok(r.body.seed >= 0 && E.MODS[r.body.opts.mod], JSON.stringify(r.body));
+    const seedK = r.body.seed;
+    r = await post('/api/challenge/end', { initData: initData(kim), inputs: [[0, -1]] }); assert.ok(r.body.score > 0); assert.ok(r.body.coins > 0, 'first attempt pays');
+    r = await post('/api/challenge/start', { initData: initData(lee) }); assert.equal(r.body.seed, seedK, 'same seed for everyone today');
+    await post('/api/challenge/end', { initData: initData(lee), inputs: [[0, -1]] });
+    r = await post('/api/challenge/me', { initData: initData(kim) }); assert.equal(r.body.challenge.players, 2); assert.equal(r.body.challenge.tries, 2);
+    await post('/api/challenge/start', { initData: initData(kim) }); await post('/api/challenge/end', { initData: initData(kim), inputs: [] });
+    await post('/api/challenge/start', { initData: initData(kim) }); await post('/api/challenge/end', { initData: initData(kim), inputs: [] });
+    r = await post('/api/challenge/start', { initData: initData(kim) }); assert.equal(r.body.error, 'no_tries');
+    // yesterday's winner gets gems
+    const y = ECON.day(Date.now(), -1); srv.db.challenge.scores[y] = { 7202: { score: 1500, name: 'Lee' } }; srv.db.challenge.paid = null;
+    const gL = srv.db.users['7202'].profile.gems; await post('/api/challenge/me', { initData: initData(kim) });
+    assert.equal(srv.db.users['7202'].profile.gems, gL + 30, 'daily challenge winner paid');
+    // tower: floors climb; cards that fall stay out; a loss ends the run
+    r = await post('/api/tower/start', { initData: initData(kim) }); assert.equal(r.body.floor, 1);
+    r = await post('/api/tower/end', { initData: initData(kim), inputs: [[0, -1]] }); assert.equal(r.body.result, 'win'); assert.equal(r.body.tower.run.floor, 2); assert.equal(r.body.tower.best, 1);
+    srv.db.users['7201'].tower.run.dead = E.STARTERS.slice(0, 2);
+    r = await post('/api/tower/start', { initData: initData(kim) }); assert.deepEqual(r.body.team, E.STARTERS.slice(2), 'fallen cards stay out');
+    await post('/api/tower/end', { initData: initData(kim), inputs: [[0, -1]] });
+    srv.db.users['7201'].tower.run = { floor: 160, dead: [] };
+    r = await post('/api/tower/start', { initData: initData(kim) }); r = await post('/api/tower/end', { initData: initData(kim), inputs: [] });
+    assert.equal(r.body.result, 'lose'); assert.equal(r.body.over, true); assert.equal(r.body.tower.run, null);
+    r = await post('/api/tower/me', { initData: initData(kim) }); assert.ok(r.body.tower.top.some(x => x.me));
+    // world boss: enraged below 10% HP, latest hits listed
+    srv.db.raid.hp = Math.floor(srv.db.raid.max * 0.05);
+    r = await post('/api/raid/start', { initData: initData(kim) }); assert.equal(r.body.raid.enrage, true, 'boss enraged under 10%');
+    r = await post('/api/raid/end', { initData: initData(kim), inputs: [[0, -1]] }); assert.ok(r.body.raid.recent.length >= 1 && r.body.raid.recent[0].name === 'Kim', 'latest hits shown');
+    // war blitz: ×3 points in the window, members told once
+    process.env.BLITZ_HOUR = String(new Date().getUTCHours());
+    if (new Date().getUTCMinutes() < ECON.BLITZ.minutes) {
+      srv.db.users['111'].profile.team = ['pinkbull']; const fa = srv.db.users['111'].profile.faction, w0 = srv.db.war.points[fa] || 0;
+      srv.war.onWin('111', 'ai'); assert.equal((srv.db.war.points[fa] || 0) - w0, (ECON.eventOf(Date.now()) === 'war' ? 2 : 1) * ECON.BLITZ.mult, 'blitz ×3');
+      srv.db.blitzSent = null; assert.ok(srv.notifier.blitzCheck() >= 1); assert.equal(srv.notifier.blitzCheck(), 0, 'once a day');
+    }
+    delete process.env.BLITZ_HOUR;
+    { const d0 = Date.UTC(2026, 9, 20); assert.ok(ECON.blitzWindow(d0 + 18 * 3600e3 + 10 * 60e3, 18).on); assert.ok(!ECON.blitzWindow(d0 + 18 * 3600e3 + 40 * 60e3, 18).on);
+      assert.equal(ECON.blitzWindow(d0 + 19 * 3600e3, 18).start, d0 + 864e5 + 18 * 3600e3, 'next blitz tomorrow'); }
+    // draft duel: snake picks from one pool, everyone at the same level, then a normal duel
+    r = await post('/api/pvp/draft', { initData: initData(kim), stake: 100 }); const kT = r.body.ticket;
+    r = await post('/api/pvp/draft', { initData: initData(lee), stake: 100 }); const lT = r.body.ticket;
+    const lk = listen(kT), ll = listen(lT);
+    const d0 = await lk.wait('draft'); assert.equal(d0.data.pool.length, 8); assert.equal(d0.data.turn, 'you');
+    r = await post('/api/pvp/pick', { initData: initData(lee), ticket: lT, id: d0.data.pool[0] }); assert.equal(r.body.error, 'not_your_turn');
+    r = await post('/api/pvp/pick', { initData: initData(kim), ticket: kT, id: d0.data.pool[0] }); assert.equal(r.body.ok, true);
+    r = await post('/api/pvp/pick', { initData: initData(lee), ticket: lT, id: d0.data.pool[0] }); assert.equal(r.body.error, 'bad_action', 'a picked card is gone');
+    const mk = await lk.wait('match'); // the rest is auto-picked when the timer runs out
+    assert.equal(mk.data.units.filter(x => x.side === 'hero').length, 4); assert.ok(mk.data.units.some(x => x.id === d0.data.pool[0] && x.side === 'hero'));
+    await lk.wait('end'); await ll.wait('end'); lk.close(); ll.close();
+    // ghost duel: a real player's deck
+    r = await post('/api/pvp/ai', { initData: initData(kim), level: 'ghost' }); const gT = r.body.ticket;
+    const lg = listen(gT); const gm = await lg.wait('match'); assert.match(gm.data.opp.name, /👻|🤖/); await post('/api/pvp/input', { initData: initData(kim), ticket: gT, code: -1 });
+    const ge = await lg.wait('end'); lg.close(); assert.ok(['win', 'lose', 'draw'].includes(ge.data.result));
+  }
+  console.log('   skill modes: daily challenge (same seed, best of 3, prizes), tower, boss enrage + live hits, war blitz, draft and ghost duels');
 
   r = await fetch(base + '/api/status').then(x => x.json());
   assert.equal(r.webappUrlOk, true); assert.ok(r.updatesHandled >= 6); assert.equal(r.lastHandleError, null);

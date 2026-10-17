@@ -37,7 +37,7 @@ const tgScript = (user, startParam) => `
   const cg = http.createServer((req, res) => { res.writeHead(200); res.end(JSON.stringify({ notcoin: { usd: 0.004, usd_24h_change: 12.3 }, 'dogs-2': { usd: 0.0005, usd_24h_change: -4.1 } })); });
   await new Promise(r => cg.listen(0, r)); process.env.MARKET_API = `http://127.0.0.1:${cg.address().port}`;
   process.env.TL_EVENT = 'none';
-  Object.assign(process.env, { LB_CACHE_MS: '0', SAVE_MS: '1000', GAME_CHANNEL: 'off', REF_MIN_AGE_MS: '1', RAID_MIN_MS: '0', BOT_TOKEN: TOKEN, WEBAPP_URL: 'https://x', DATA_FILE: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tle-')), 'db.json'), TELEGRAM_API: `http://127.0.0.1:${fake.address().port}` });
+  Object.assign(process.env, { LB_CACHE_MS: '0', SAVE_MS: '1000', GAME_CHANNEL: 'off', REF_MIN_AGE_MS: '1', RAID_MIN_MS: '0', PICK_MS: '1500', BOT_TOKEN: TOKEN, WEBAPP_URL: 'https://x', DATA_FILE: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tle-')), 'db.json'), TELEGRAM_API: `http://127.0.0.1:${fake.address().port}` });
   const srv = require('../server/server.js');
   srv.server.listen(0); await new Promise(r => srv.server.once('listening', r));
   await srv.setupBot(); srv.pollLoop(); await srv.market.refresh();
@@ -266,6 +266,40 @@ const tgScript = (user, startParam) => `
   await p1.evaluate(() => show('fund')); await p1.waitForSelector('.fund-row');
   await p1.screenshot({ path: OUT + '/x11-fund.png', fullPage: true });
   console.log('✓ community fund page');
+
+  // ---- skill modes: daily challenge, tower, draft and ghost duels ----
+  await p1.evaluate(async () => { closeModal(); await syncServerProfile(); S.auto = true; S.speed = 3; save(); show('arena'); });
+  await p1.waitForSelector('#to-chal'); await p1.click('#to-chal'); await p1.waitForSelector('#ch-go');
+  await p1.screenshot({ path: OUT + '/y1-challenge.png', fullPage: true });
+  await p1.click('#ch-go'); await p1.waitForSelector('#md-ok', { timeout: 90000 });
+  await p1.screenshot({ path: OUT + '/y2-challenge-result.png' });
+  assert.ok(srv.db.challenge.scores[ECON.day(Date.now())]['777'], 'challenge score on the server'); await p1.click('#md-ok');
+  console.log('✓ daily challenge played and ranked');
+  serverProfile(777).cleared = Math.max(serverProfile(777).cleared, 25);
+  await p1.evaluate(async () => { await syncServerProfile(); show('tower'); }); await p1.waitForSelector('#tw-go');
+  await p1.click('#tw-go'); await p1.waitForSelector('#md-ok', { timeout: 90000 });
+  await p1.screenshot({ path: OUT + '/y3-tower-result.png' });
+  assert.ok(srv.db.users['777'].tower.best >= 1 || srv.db.users['777'].tower.run === null, 'tower floor verified'); await p1.click('#md-ok');
+  console.log('✓ tower floor fought and verified');
+  // draft duel between two players: picks from one pool, then a live duel
+  for (const [p, id] of [[p1, 777], [p2, 888]]) { serverProfile(id).coins = Math.max(serverProfile(id).coins, 1000); serverProfile(id).cleared = Math.max(serverProfile(id).cleared, 25); await p.evaluate(async () => { closeModal(); await syncServerProfile(); S.stake = 100; save(); show('arena'); }); }
+  await p1.click('#pv-draft'); await p1.waitForTimeout(300); await p2.click('#pv-draft');
+  await p1.waitForSelector('.draft-pool'); await p2.waitForSelector('.draft-pool');
+  await p1.screenshot({ path: OUT + '/y4-draft.png' });
+  const firstPicker = (await p1.$('.draft-turn.me')) ? p1 : p2;
+  await firstPicker.click('[data-dpick]:not([disabled])');
+  await p1.waitForSelector('#battle:not([hidden]) .hcard', { timeout: 30000 }); // the rest is auto-picked by the timer
+  assert.equal(await p1.evaluate(() => BT.B.heroes.length), 4, 'draft decks of 4');
+  await p1.waitForSelector('#pr-arena', { timeout: 150000 }); await p2.waitForSelector('#pr-arena, #pr-map', { timeout: 150000 });
+  await p1.click('#pr-arena'); await p2.click('#pr-map').catch(() => p2.click('#pr-arena'));
+  console.log('✓ draft duel: picks, then a live duel');
+  // ghost duel: a real player's saved deck
+  await p1.waitForSelector('[data-ai=ghost]'); await p1.click('[data-ai=ghost]');
+  await p1.waitForSelector('#battle:not([hidden]) .hcard', { timeout: 15000 });
+  assert.match(await p1.textContent('.b-name.opp'), /👻|🤖/);
+  await p1.waitForSelector('#pr-arena, #pr-map, #pr-ai', { timeout: 150000 }).catch(() => {});
+  await p1.evaluate(() => { closeModal(); if (BT) leaveBattle(); show('map'); });
+  console.log('✓ ghost duel');
 
   // ---- Telegram BackButton still drives navigation ----
   await p2.click('[data-tab=heroes]'); await p2.waitForTimeout(150);

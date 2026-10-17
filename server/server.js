@@ -24,6 +24,7 @@ const createRunway = require('./runway.js');
 const createBackup = require('./backup.js');
 const createReferral = require('./referral.js');
 const createRaid = require('./raid.js');
+const createModes = require('./modes.js');
 const createLeague = require('./league.js');
 const createPartners = require('./partners.js');
 const createWallet = require('./wallet.js');
@@ -571,7 +572,7 @@ function leaderboard(meId) {
 
 const analytics = createAnalytics({ db, persist });
 const clans = createClans({ db, persist, profileOut: u => (u.profile ? ECON.pickKeys(u.profile) : null) });
-const notifier = createNotifier({ db, persist, tg, webappUrl: () => WEBAPP_URL, logErr });
+const notifier = createNotifier({ db, persist, tg, webappUrl: () => WEBAPP_URL, logErr, blitz: now => war.blitz(now) });
 const SHARE_DIR = process.env.SHARE_DIR || path.join(require('os').tmpdir(), 'gl-share');
 const war = createWar({ db, persist, weekKey: clans.weekKey, shareDir: SHARE_DIR, profileOut: u => (u.profile ? ECON.pickKeys(u.profile) : null), onWeekEnd: (last, captains) => notifier.weekEnded(last, captains) });
 const market = createMarket({ db, persist, api: (process.env.MARKET_API || 'https://api.coingecko.com/api/v3').replace(/\/$/, ''), logErr });
@@ -584,13 +585,14 @@ const onWin = (uid, kind, info = {}) => {
   if (got || CLAN_POINTS[kind]) clans.addPoints(uid, got || CLAN_POINTS[kind]);
   const u = db.users[uid]; if (u && u.profile) market.addActivity(u.profile.faction, Math.max(1, got));
 };
-// World boss: fights use the same frozen boosts as stages (market moods, official alliances, set perks, mascot tier).
-const raid = createRaid({ db, persist, weekKey: clans.weekKey, credit, profileOut, onDamage: uid => onWin(uid, 'raid', {}),
-  ctxFor: u => {
-    const p = u.profile, all = battleMarket(), t = war.tierFor(p.faction);
-    const market = Object.fromEntries(Object.entries(all).filter(([id]) => p.team.some(x => x === id || (E.HERO_BY_ID[x].fusion && E.HERO_BY_ID[x].parts.includes(id)))));
-    return { market, perks: { ...ECON.perksOf(p), ...(t ? { mascot: t * ECON.MASCOT_PER_TIER } : {}) } };
-  } });
+// World boss, daily challenge and tower: fights use the same frozen boosts as stages (official alliances, set perks, mascot tier).
+const battleCtx = u => {
+  const p = u.profile, all = battleMarket(), t = war.tierFor(p.faction);
+  const market = Object.fromEntries(Object.entries(all).filter(([id]) => p.team.some(x => x === id || (E.HERO_BY_ID[x].fusion && E.HERO_BY_ID[x].parts.includes(id)))));
+  return { market, perks: { ...ECON.perksOf(p), ...(t ? { mascot: t * ECON.MASCOT_PER_TIER } : {}) } };
+};
+const raid = createRaid({ db, persist, weekKey: clans.weekKey, credit, profileOut, onDamage: uid => onWin(uid, 'raid', {}), ctxFor: battleCtx });
+const modes = createModes({ db, persist, credit, profileOut, ctxFor: battleCtx });
 const league = createLeague({ db, persist, profileOut });
 const fund = createFund({ db, persist, tg, admins: () => ADMIN_IDS });
 const support = createSupport({ db, persist, tg, admins: () => ADMIN_IDS, webapp: () => WEBAPP_URL });
@@ -666,6 +668,7 @@ const routes = {
   ...war.routes,
   ...referral.routes,
   ...raid.routes,
+  ...modes.routes,
   ...league.routes,
   ...partners.routes,
   ...wallet.routes,
@@ -780,4 +783,4 @@ async function start() {
 }
 
 if (require.main === module) start();
-module.exports = { analytics, fund, market, notifier, war, flushDb, server, verifyInitData, handleUpdate, pollLoop, setupBot, db, PACKS, stop: () => { polling = false; clearInterval(channelTimer); backup.stop(); arena.stop(); notifier.stop(); market.stop(); server.close(); } };
+module.exports = { analytics, fund, modes, market, notifier, war, flushDb, server, verifyInitData, handleUpdate, pollLoop, setupBot, db, PACKS, stop: () => { polling = false; clearInterval(channelTimer); backup.stop(); arena.stop(); notifier.stop(); market.stop(); server.close(); } };

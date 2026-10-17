@@ -24,7 +24,10 @@ function renderArena() {
     <div class="panel"><div class="row"><div class="t">${t.aiTitle}</div><span class="tag ${aiLeft ? 'gold' : ''}">${t.aiLeft(n(aiLeft), n(ECON.AI_DAILY))}</span></div>
       <p class="muted" style="margin:6px 0 0">${t.aiNote}</p>
       ${!isOpen('ai') ? lockNote('ai') : `<div class="ai-levels">${Object.keys(ECON.AI_LEVELS).map(lv => { const r = ECON.aiReward(S, lv);
-        return `<button class="btn ${lv === 'hard' ? 'gem' : lv === 'normal' ? 'gold' : ''}" data-ai="${lv}" ${S.team.length ? '' : 'disabled'}>${t.aiLv[lv]}<small>🪙 ${n(r.coins)}${r.gems ? ` +💎${n(r.gems)}` : ''}</small></button>`; }).join('')}</div>`}</div>
+        return `<button class="btn ${lv === 'hard' ? 'gem' : lv === 'normal' ? 'gold' : ''}" data-ai="${lv}" ${S.team.length ? '' : 'disabled'}>${t.aiLv[lv]}<small>🪙 ${n(r.coins)}${r.gems ? ` +💎${n(r.gems)}` : ''}</small></button>`; }).join('')}</div>
+        <button class="btn wide ghost-duel" data-ai="ghost" ${S.team.length ? '' : 'disabled'}>👻 ${t.aiLv.ghost}<small>${t.ghostNote}</small></button>`}</div>
+    <div class="mode-cards"><button class="panel mode-card" id="to-chal"><div class="mc-ico">🏅</div><div class="t">${t.chTitle}</div><div class="muted small">${isOpen('challenge') ? t.chShort : lockText('challenge')}</div></button>
+      <button class="panel mode-card" id="to-tower"><div class="mc-ico">🗼</div><div class="t">${t.towerTitle}</div><div class="muted small">${isOpen('tower') ? t.towerShort : lockText('tower')}</div></button></div>
     <div class="h2">${t.arenaTitle}</div>
     ${!isOpen('pvp') ? `<div class="panel">${lockNote('pvp')}<p class="muted small" style="margin:6px 0 0">${t.arenaNote}</p></div>` : `<div id="lg-box"></div>
     <p class="muted">${t.arenaNote} <b style="color:var(--gem)">+💎 ${n(2)}</b></p>
@@ -36,6 +39,7 @@ function renderArena() {
       <div class="mini-team">${[0, 1, 2, 3, 4].map(i => S.team[i] ? `<img src="${img(S.team[i])}" alt="">` : '<div class="empty"></div>').join('')}</div>
       <button class="btn wide gold" id="pv-find" ${S.coins < S.stake || !S.team.length ? 'disabled' : ''}>${t.findOpp}</button>
       <button class="btn wide" id="pv-room" style="margin-top:12px" ${S.coins < S.stake || !S.team.length ? 'disabled' : ''}>${t.challenge}</button>
+      <button class="btn wide gem" id="pv-draft" style="margin-top:12px" ${S.coins < S.stake ? 'disabled' : ''}>🎲 ${t.draftBtn}<small class="db-note">${t.draftNote(n(30))}</small></button>
     </div>`}
     <div class="panel"><div class="t">${t.haveCode}</div>
       <div class="code-row"><input id="pv-code" maxlength="6" placeholder="${t.codePh}" autocomplete="off" autocapitalize="characters"><button class="btn" id="pv-join">${t.join}</button></div></div>
@@ -45,7 +49,8 @@ function renderArena() {
   document.querySelectorAll('[data-stake]').forEach(b => b.onclick = () => { S.stake = +b.dataset.stake; save(); renderArena(); });
   if ($('#pv-team')) $('#pv-team').onclick = () => show('heroes');
   document.querySelectorAll('[data-ai]').forEach(b => b.onclick = () => startAi(b.dataset.ai));
-  if ($('#pv-find')) { $('#pv-find').onclick = () => arenaOpen('find'); $('#pv-room').onclick = () => arenaOpen('room'); }
+  if ($('#pv-find')) { $('#pv-find').onclick = () => arenaOpen('find'); $('#pv-room').onclick = () => arenaOpen('room'); $('#pv-draft').onclick = () => arenaOpen('draft'); }
+  $('#to-chal').onclick = () => show('challenge'); $('#to-tower').onclick = () => show('tower');
   $('#pv-join').onclick = () => { const c = $('#pv-code').value.trim().toUpperCase(); if (c) arenaJoinPrompt(c); };
 }
 
@@ -53,7 +58,7 @@ async function arenaOpen(kind) {
   try {
     const r = await Online.pvp(kind, { stake: S.stake });
     setServerCoins(r.coins);
-    watchDuel(r.ticket, { stake: S.stake, code: r.code || null });
+    watchDuel(r.ticket, { stake: S.stake, code: r.code || null, draft: kind === 'draft' });
   } catch (e) { toast(errText(e)); }
 }
 
@@ -84,9 +89,10 @@ async function arenaJoinPrompt(code) {
 // Open the live event stream for a duel ticket (searching → match → ticks → end).
 function watchDuel(ticket, info) {
   stopDuelStream();
-  PV = { ticket, stake: info.stake, code: info.code || null, ai: info.ai || null, done: false, since: Date.now() };
+  PV = { ticket, stake: info.stake, code: info.code || null, ai: info.ai || null, draft: !!info.draft, done: false, since: Date.now() };
   PV.es = Online.stream(ticket, {
     waiting: () => { if (!BT) showWaiting(); },
+    draft: d => showDraft(d),
     match: m => { if (BT && BT.mode === 'pvp') return; if (!$('#modal').hidden) closeModal(); startPvp(m); },
     tick: d => onPvpTick(d),
     end: d => onPvpEnd(d),
@@ -110,7 +116,8 @@ function showWaiting() {
     <div class="spinner"></div>
     <div class="big" style="font-size:22px">${PV.code ? t.waitingFriend : t.searching}</div>
     <p><span class="tag gold">${t.stake}: 🪙 ${n(PV.stake)}</span> <span class="tag gold">${t.pot(n(ECON.pvpPrize(PV.stake)))}</span></p>
-    ${PV.code || !isOpen('ai') ? '' : `<button class="btn wide gem" id="pv-ai" style="margin:8px 0" hidden>${t.aiInstead}</button>`}
+    ${PV.draft ? `<p class="muted small">🎲 ${t.draftBtn}</p>` : ''}
+    ${PV.code || PV.draft || !isOpen('ai') ? '' : `<button class="btn wide gem" id="pv-ai" style="margin:8px 0" hidden>${t.ghostInstead}</button>`}
     ${PV.code ? `<div class="muted">${t.inviteCode}</div><div class="duel-code">${PV.code}</div>
       <button class="btn wide gold" id="pv-share">${t.sendDuel}</button>` : ''}
     <button class="btn wide ghost" id="pv-cancel" style="margin-top:10px">${t.cancel}</button></div>`, box => {
@@ -121,7 +128,7 @@ function showWaiting() {
     const ai = box.querySelector('#pv-ai'), mine = PV;
     if (ai) {
       setTimeout(() => { if (PV === mine && !BT && ai.isConnected) ai.hidden = false; }, Math.max(0, 12000 - (Date.now() - PV.since)));
-      ai.onclick = async () => { await cancelDuel(); startAi('normal'); };
+      ai.onclick = async () => { await cancelDuel(); startAi('ghost'); };
     }
   }, { onBack: cancelDuel, lock: true });
 }
@@ -132,7 +139,30 @@ async function cancelDuel() {
   closeModal(); refresh();
 }
 
+// Draft: pick in turns (snake order) from one pool of 8 cards; every card fights at the same level.
+function showDraft(d) {
+  if (!PV || BT) return;
+  const t = T(), picked = new Set([...d.you, ...d.opp]), mine = d.turn === 'you';
+  PV.draftEnd = Date.now() + d.left;
+  const html = `<div class="center"><div class="big" style="font-size:22px">🎲 ${t.draftBtn}</div>
+    <p class="muted small">${t.draftVs(esc(d.oppName), n(d.level))} · ${t.pot(n(d.pot))}</p>
+    <div class="draft-turn ${mine ? 'me' : ''}">${mine ? t.draftYourTurn : t.draftTheirTurn} · <b id="dr-t">${n(Math.ceil(d.left / 1000))}</b>s</div>
+    <div class="grid draft-pool">${d.pool.map(id => { const h = HERO_BY_ID[id], who = d.you.includes(id) ? 'you' : d.opp.includes(id) ? 'opp' : '';
+      return `<button class="card ${who ? 'picked ' + who : ''}" data-dpick="${id}" ${!mine || picked.has(id) ? 'disabled' : ''} style="--rc:${RARITY[h.rarity].color}">
+        <img src="${img(id)}" alt=""><span class="rl">${ROLES[h.role].icon}</span>${who ? `<span class="dp-tag">${who === 'you' ? t.you : '🆚'}</span>` : ''}<div class="info"><div class="nm">${h.name}</div></div></button>`; }).join('')}</div>
+    <div class="draft-teams"><div>🛡️ ${d.you.map(id => `<img src="${img(id)}" alt="">`).join('')}</div><div>🆚 ${d.opp.map(id => `<img src="${img(id)}" alt="">`).join('')}</div></div></div>`;
+  openModal(html, box => {
+    box.querySelectorAll('[data-dpick]').forEach(b => b.onclick = async () => {
+      box.querySelectorAll('[data-dpick]').forEach(x => { x.disabled = true; });
+      haptic('medium');
+      try { await Online.pvp('pick', { ticket: PV.ticket, id: b.dataset.dpick }); } catch (e) { toast(errText(e)); }
+    });
+    clearInterval(PV.draftTimer);
+    PV.draftTimer = setInterval(() => { const el = box.querySelector('#dr-t'); if (!el || !PV) return clearInterval(PV && PV.draftTimer); el.textContent = n(Math.max(0, Math.ceil((PV.draftEnd - Date.now()) / 1000))); }, 250);
+  }, { lock: true, onBack: () => {} });
+}
 function startPvp(m) {
+  if (PV) clearInterval(PV.draftTimer);
   const t = T();
   const units = m.units.map(u => ({ ...u, hp: u.maxHp, shield: 0, energy: 20, alive: true, fx: {}, boss: false }));
   const mine = units.filter(u => u.side === m.side), theirs = units.filter(u => u.side !== m.side);
@@ -142,7 +172,7 @@ function startPvp(m) {
   buildBattle({
     title: m.ai ? t.aiVs(t.aiLv[m.ai]) : `⚔️ ${t.pot(n(m.pot))}`, bg: ARENA_BG, scene: { key: 'galaxy', ch: m.ai ? 0 : 2 }, mine, theirs,
     oppLabel: `🆚 ${avatarImg(m.opp.av)}${esc(m.opp.name)} · ${t.power} ${n(m.opp.power)}`, myLabel: `🛡️ ${avatarImg(m.you.av)}${esc(m.you.name)} · ${t.power} ${n(m.you.power)}`,
-    onTap: u => input(u.uid), onAuto: on => input(on ? -1 : -2), onUlt: () => input(-3),
+    onTap: u => input(u.uid), onAuto: on => input(on ? -1 : -2), onUlt: () => input(-3), onFocus: uid => input(-100 - uid), onAim: uid => input(-200 - uid),
   });
   if (S.auto) input(-1);
   // Emote bar: five quick reactions + your community mascot.
@@ -242,7 +272,7 @@ async function arenaBoot() {
   if (!duelLinkUsed && sp.startsWith('clan_')) { duelLinkUsed = true; show('clan'); return clanJoinPrompt(sp.slice(5)); }
   try {
     const r = await Online.pvp('state');
-    if (r.ticket && !PV) { show('arena'); watchDuel(r.ticket, { stake: r.stake, code: r.code }); }
+    if (r.ticket && !PV) { show('arena'); watchDuel(r.ticket, { stake: r.stake, code: r.code, draft: r.mode === 'draft' }); }
   } catch (e) {}
 }
 

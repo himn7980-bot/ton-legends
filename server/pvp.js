@@ -17,6 +17,11 @@ const roomCode = () => Array.from(crypto.randomBytes(6), b => 'ABCDEFGHJKLMNPQRS
 const PVP_WIN_GEMS = 2;
 const AI_NAMES = ['Neon Ronin', 'Frost Byte', 'Crypto Kraken', 'Shadow Bot', 'Lucky Lynx', 'Iron Gecko', 'Moon Mantis', 'Pixel Paladin', 'Turbo Tiger', 'Volt Viper'];
 
+// Draft duel: both players pick from the same DRAFT_POOL random heroes in snake order (A B B A A B B A), every card at
+// DRAFT_LEVEL with no community or set bonuses — pure skill. PICK_MS per pick, then a random card is picked for you.
+const DRAFT_POOL = 8, DRAFT_LEVEL = 30, PICK_MS = +process.env.PICK_MS || 10000, DRAFT_ORDER = ['a', 'b', 'b', 'a', 'a', 'b', 'b', 'a'];
+// Ghost duel: an AI-driven copy of a real player's saved deck of similar power (pays like the Normal AI).
+const GHOST_GAP = [0.8, 1.25];
 const EMOTES = 6; // 😂 🔥 😱 👏 🤝 + the sender's community mascot
 const winGems = () => PVP_WIN_GEMS * (ECON.eventOf(Date.now()) === 'arena' ? ECON.EVENT_FX.arena : 1); // Friday: arena day
 module.exports = function createArena({ db, persist, notify = () => {}, onPoints = () => {}, market = () => null, perksExtra = () => ({}), league = null }) {
@@ -63,9 +68,10 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
     return t;
   }
 
+  const qkey = t => t.qkey || t.stake;
   function unlist(t) {
-    const q = queues.get(t.stake);
-    if (q) queues.set(t.stake, q.filter(x => x !== t));
+    const q = queues.get(qkey(t));
+    if (q) queues.set(qkey(t), q.filter(x => x !== t));
     if (t.code) rooms.delete(t.code);
   }
 
@@ -87,13 +93,13 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
   function matchInfo(m, t) {
     const opp = t === m.a ? m.b : m.a;
     return { side: t.side, ai: m.ai, stake: m.stake, pot: ECON.pvpPrize(m.stake), startIn: Math.max(0, m.startAt - now()),
-      you: { name: t.name, power: t.power, av: ECON.avatarOf((db.users[t.uid] || {}).profile) }, opp: { name: opp.name, power: opp.power, av: opp.ai ? (opp.team || [])[0] : ECON.avatarOf((db.users[opp.uid] || {}).profile) },
+      you: { name: t.name, power: t.power, av: ECON.avatarOf((db.users[t.uid] || {}).profile) }, opp: { name: opp.name, power: opp.power, av: opp.ai ? opp.av || (opp.team || [])[0] : ECON.avatarOf((db.users[opp.uid] || {}).profile) },
       units: [...m.B.heroes, ...m.B.enemies].map(u => ({ uid: u.uid, side: u.side, id: u.id, name: u.name, maxHp: u.maxHp, row: u.row })) };
   }
 
   function startMatch(a, b) {
     unlist(a); unlist(b);
-    const B = E.createPvpBattle(a.team, a.levels, b.team, b.levels, crypto.randomInt(2 ** 32), a.faction || null, b.faction || null, market(), a.perks || null, b.perks || null);
+    const B = E.createPvpBattle(a.team, a.levels, b.team, b.levels, crypto.randomInt(2 ** 32), a.faction || null, b.faction || null, a.mode === 'draft' ? null : market(), a.perks || null, b.perks || null);
     const m = { id: rid(8), ai: a.aiLevel || null, a, b, B, stake: a.stake, startAt: now() + COUNTDOWN_MS, inputs: [], ev: [], timer: null };
     if (!m.ai) { const k = pairKey(a.uid, b.uid), P = pairs(); P[k] = (P[k] || 0) + 1; }
     a.side = 'hero'; b.side = 'enemy';
@@ -107,12 +113,8 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
     // A player who closed the game keeps fighting on auto, so leaving never helps.
     B.autoBy.hero = m.a.client ? m.a.auto : true;
     B.autoBy.enemy = m.b.client ? m.b.auto : true;
-    for (const inp of m.inputs.splice(0)) {
-      if (inp.code === -3) { E.castUlt(B, inp.side); continue; }
-      const list = inp.side === 'hero' ? B.heroes : B.enemies;
-      const u = list.find(x => x.uid === inp.code);
-      if (u) E.castSkill(B, u);
-    }
+    // skill taps, the ultimate (also aimed) and focus — the same rules as stages (perfect timing, chains)
+    for (const inp of m.inputs.splice(0)) if (inp.code === -3 || inp.code > 0 || inp.code <= -100) E.applyInput(B, inp.code, inp.side);
     E.step(B);
     m.ev.push(...B.events); B.events.length = 0;
     if (B.tick % 2 === 0 || B.over) {
@@ -147,6 +149,40 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
       if (!t.client) notify(t.uid, t.end);
     }
     persist();
+  }
+
+  // ---------- draft duel ----------
+  function draftState(d, t) {
+    const me = t === d.a ? 'a' : 'b', opp = me === 'a' ? 'b' : 'a', turn = DRAFT_ORDER[d.picks.a.length + d.picks.b.length];
+    return { pool: d.pool, you: d.picks[me], opp: d.picks[opp], turn: turn === me ? 'you' : 'opp', left: Math.max(0, d.deadline - now()), stake: d.a.stake, pot: ECON.pvpPrize(d.a.stake), level: DRAFT_LEVEL,
+      oppName: (me === 'a' ? d.b : d.a).name };
+  }
+  function draftSend(d) { for (const t of [d.a, d.b]) send(t, 'draft', draftState(d, t)); }
+  function startDraft(a, b) {
+    unlist(a); unlist(b);
+    const pool = []; const ids = E.BASE_HEROES.map(h => h.id);
+    while (pool.length < DRAFT_POOL) pool.push(ids.splice(crypto.randomInt(ids.length), 1)[0]);
+    const d = { a, b, pool, picks: { a: [], b: [] }, deadline: now() + PICK_MS, timer: null };
+    for (const t of [a, b]) { t.draft = d; t.status = 'drafting'; }
+    const k = pairKey(a.uid, b.uid), P = pairs(); P[k] = (P[k] || 0) + 1;
+    draftArm(d); draftSend(d);
+    return d;
+  }
+  function draftArm(d) {
+    clearTimeout(d.timer);
+    d.deadline = now() + PICK_MS;
+    d.timer = setTimeout(() => { const free = d.pool.filter(id => !d.picks.a.includes(id) && !d.picks.b.includes(id)); if (free.length) draftPick(d, DRAFT_ORDER[d.picks.a.length + d.picks.b.length], free[crypto.randomInt(free.length)]); }, PICK_MS);
+  }
+  function draftPick(d, side, id) {
+    d.picks[side].push(id);
+    if (d.picks.a.length + d.picks.b.length < DRAFT_ORDER.length) { draftArm(d); draftSend(d); return; }
+    clearTimeout(d.timer);
+    for (const [t, s] of [[d.a, 'a'], [d.b, 'b']]) {
+      t.team = [...d.picks[s]]; t.levels = Object.fromEntries(t.team.map(x => [x, DRAFT_LEVEL])); t.faction = null; t.perks = null;
+      t.power = Math.round(ECON.teamPower({ owned: t.levels }, t.team)); t.draft = null;
+    }
+    draftSend({ ...d, deadline: now() });
+    startMatch(d.a, d.b);
   }
 
   // ---------- AI rival ----------
@@ -211,6 +247,24 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
       } else queues.set(t.stake, [...(queues.get(t.stake) || []), t]);
       return { ticket: t.id, coins: u.profile.coins };
     },
+    'POST /api/pvp/draft': (body, u) => {
+      if (u.profile && !ECON.unlocked(u.profile, 'pvp')) fail('locked_feature');
+      const t = open(u, body.stake, 'draft');
+      t.qkey = 'd' + t.stake;
+      const q = (queues.get(t.qkey) || []).filter(x => x.status === 'waiting' && x.uid !== u.id && !pairFull(x.uid, u.id));
+      if (q.length) startDraft(q[0], t);
+      else queues.set(t.qkey, [...(queues.get(t.qkey) || []), t]);
+      return { ticket: t.id, coins: u.profile.coins };
+    },
+    'POST /api/pvp/pick': (body, u) => {
+      const t = own(u, body.ticket), d = t.draft;
+      if (!d || t.status !== 'drafting') fail('not_ready');
+      const side = t === d.a ? 'a' : 'b', id = String(body.id || '');
+      if (DRAFT_ORDER[d.picks.a.length + d.picks.b.length] !== side) fail('not_your_turn');
+      if (!d.pool.includes(id) || d.picks.a.includes(id) || d.picks.b.includes(id)) fail('bad_action');
+      draftPick(d, side, id);
+      return { ok: true };
+    },
     'POST /api/pvp/room': (body, u) => {
       if (u.profile && !ECON.unlocked(u.profile, 'pvp')) fail('locked_feature');
       const t = open(u, body.stake, 'room');
@@ -243,8 +297,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
       if (!m || m.B.over || t.status !== 'playing') return { ok: false };
       const code = Number(body.code);
       if (code === -1 || code === -2) t.auto = code === -1;
-      else if (code === -3) m.inputs.push({ side: t.side, code: -3 });
-      else if (Number.isInteger(code)) m.inputs.push({ side: t.side, code });
+      else if (code === -3 || (Number.isInteger(code) && (code > 0 || (code <= -100 && code > -300)))) m.inputs.push({ side: t.side, code });
       return { ok: true };
     },
     // Quick emotes during a duel (shown to both players). The AI rival sometimes answers.
@@ -262,7 +315,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
     },
     'POST /api/pvp/ai': (body, u) => {
       if (u.profile && !ECON.unlocked(u.profile, 'ai')) fail('locked_feature');
-      const level = Object.prototype.hasOwnProperty.call(ECON.AI_LEVELS, body.level) ? body.level : 'normal';
+      const level = body.level === 'ghost' ? 'ghost' : Object.prototype.hasOwnProperty.call(ECON.AI_LEVELS, body.level) ? body.level : 'normal';
       const p = u.profile;
       if (!p) fail('no_profile');
       if (!p.team.length) fail('bad_team');
@@ -270,8 +323,15 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
       const t = { id: rid(16), uid: u.id, name: u.name, stake: 0, mode: 'ai', team: [...p.team], faction: p.faction || null, perks: { ...ECON.perksOf(p), ...perksExtra(p) },
         levels: Object.fromEntries(p.team.map(id => [id, p.owned[id]])), power: Math.round(ECON.teamPower(p)), rating: league ? league.ratingOf(u.id) : 0,
         status: 'waiting', client: null, auto: false, created: now(), lastSeen: now() };
-      const ai = aiTeam(p, level);
-      const bot = { id: rid(16), uid: null, ai: true, name: '🤖 ' + AI_NAMES[crypto.randomInt(AI_NAMES.length)], stake: 0, ...ai,
+      // Ghost: a real player's saved deck of similar power (their community and set bonuses included); none → Normal AI.
+      let ghost = null;
+      if (level === 'ghost') {
+        const mine = ECON.teamPower(p), list = Object.values(db.users).filter(x => x.id !== u.id && x.profile && x.profile.team && x.profile.team.length && now() - (x.seen || 0) < 30 * 864e5)
+          .filter(x => { const r = ECON.teamPower(x.profile) / Math.max(1, mine); return r >= GHOST_GAP[0] && r <= GHOST_GAP[1]; });
+        if (list.length) { const g = list[crypto.randomInt(list.length)], gp = g.profile; ghost = { team: [...gp.team], levels: Object.fromEntries(gp.team.map(id => [id, gp.owned[id]])), faction: gp.faction || null, perks: { ...ECON.perksOf(gp), ...perksExtra(gp) }, power: Math.round(ECON.teamPower(gp)), name: '👻 ' + (g.name || 'Player'), av: ECON.avatarOf(gp) }; }
+      }
+      const ai = ghost || aiTeam(p, level === 'ghost' ? 'normal' : level);
+      const bot = { id: rid(16), uid: null, ai: true, name: ghost ? ghost.name : '🤖 ' + AI_NAMES[crypto.randomInt(AI_NAMES.length)], stake: 0, ...ai,
         status: 'waiting', client: null, auto: true, created: now(), lastSeen: now() };
       tickets.set(t.id, t); tickets.set(bot.id, bot);
       t.aiLevel = level;
@@ -280,7 +340,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
     },
     'POST /api/pvp/state': (body, u) => {
       const t = busyTicket(u.id);
-      return t ? { ticket: t.id, status: t.status, stake: t.stake, code: t.code || null } : { ticket: null };
+      return t ? { ticket: t.id, status: t.status, stake: t.stake, code: t.code || null, mode: t.mode } : { ticket: null };
     },
   };
 
@@ -294,10 +354,11 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
     t.client = res; t.lastSeen = now();
     const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch (e) {} }, 15e3);
     res.on('close', () => { clearInterval(ping); if (t.client === res) { t.client = null; t.lastSeen = now(); } });
-    if (t.status === 'waiting') send(t, 'waiting', { stake: t.stake, code: t.code || null });
+    if (t.status === 'waiting') send(t, 'waiting', { stake: t.stake, code: t.code || null, mode: t.mode });
+    else if (t.status === 'drafting' && t.draft) send(t, 'draft', draftState(t.draft, t));
     else if (t.status === 'playing') { send(t, 'match', matchInfo(t.match, t)); send(t, 'tick', { t: t.match.B.t, ev: [], u: snapshot(t.match.B) }); }
     else if (t.end) send(t, t.end.result === 'cancelled' ? 'cancelled' : 'end', t.end);
   }
 
-  return { routes, stream, STAKES, stop: () => { clearInterval(sweeper); for (const t of tickets.values()) if (t.match) clearInterval(t.match.timer); } };
+  return { routes, stream, STAKES, stop: () => { clearInterval(sweeper); for (const t of tickets.values()) { if (t.match) clearInterval(t.match.timer); if (t.draft) clearTimeout(t.draft.timer); } } };
 };

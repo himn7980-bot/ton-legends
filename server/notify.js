@@ -7,7 +7,7 @@ const BOT_TEXT = require('./bot-text.js');
 const ACTIVE_DAYS = 14; // only remind players who played in the last two weeks
 const STREAK_HOUR = 16; // UTC hour after which a "keep your streak" reminder may go out
 
-module.exports = function createNotifier({ db, persist, tg, webappUrl, logErr = () => {} }) {
+module.exports = function createNotifier({ db, persist, tg, webappUrl, logErr = () => {}, blitz = () => ({ on: false }) }) {
   const queue = [];
   const textFor = u => ({ ...BOT_TEXT.en, ...(BOT_TEXT[u.lang] || BOT_TEXT[String(u.tgLang || '').slice(0, 2)] || {}) }); // a missing key falls back to English
   function enqueue(uid, make) { queue.push({ uid: String(uid), make }); }
@@ -47,6 +47,22 @@ module.exports = function createNotifier({ db, persist, tg, webappUrl, logErr = 
     persist();
   }
   const timer = setInterval(() => { try { sweep(); } catch (e) { logErr('lastHandleError', e); } }, 10 * 60e3);
+  // War blitz started: tell every recently active community member once a day (opted-in players only).
+  function blitzCheck(now = Date.now()) {
+    const b = blitz(now), d = ECON.day(now);
+    if (!b.on || db.blitzSent === d) return 0;
+    db.blitzSent = d; let k = 0;
+    const H = require('../src/engine.js').HERO_BY_ID, mins = Math.max(1, Math.round((b.end - now) / 60e3));
+    for (const u of Object.values(db.users)) {
+      const p = u.profile;
+      if (!p || !p.faction || u.mute || u.blocked || now - (u.seen || 0) > 3 * 864e5) continue;
+      const name = (H[p.faction] || {}).name || p.faction;
+      enqueue(u.id, L => L.blitz(name, mins)); k++;
+    }
+    persist();
+    return k;
+  }
+  const blitzTimer = setInterval(() => { try { blitzCheck(); } catch (e) { logErr('lastHandleError', e); } }, 60e3);
 
   // Week over: tell everyone who took part how their community did.
   function weekEnded(last, captains = {}) {
@@ -62,5 +78,5 @@ module.exports = function createNotifier({ db, persist, tg, webappUrl, logErr = 
       enqueue(u.id, L => L.warEnd(place, name));
     }
   }
-  return { enqueue, sweep, weekEnded, queue, stop: () => { clearInterval(pump); clearInterval(timer); } };
+  return { enqueue, sweep, weekEnded, blitzCheck, queue, stop: () => { clearInterval(pump); clearInterval(timer); clearInterval(blitzTimer); } };
 };

@@ -190,8 +190,23 @@ function makeUnit(B, side, o) {
 }
 function newBattle(seed, pvp) {
   return { t: 0, tick: 0, seed: seed >>> 0, rng: mulberry32(seed >>> 0), nextUid: 1, events: [], over: null, pvp: !!pvp,
-    autoBy: { hero: false, enemy: !pvp }, ult: { hero: 0, enemy: 0 }, casting: false, comboSeen: null };
+    autoBy: { hero: false, enemy: !pvp }, ult: { hero: 0, enemy: 0 }, casting: false, comboSeen: null,
+    castMul: 1, focus: { hero: 0, enemy: 0 }, chain: { hero: { n: 0, at: -99 }, enemy: { n: 0, at: -99 } }, perfects: 0, maxChain: 0, mod: null };
 }
+// ---------- skill play (only a player's own taps count; Auto never gets these) ----------
+// Perfect: a skill tapped PERFECT_FROM..PERFECT_TO ticks after its card filled up hits PERFECT_MULT harder.
+const PERFECT_FROM = 5, PERFECT_TO = 20, PERFECT_MULT = 1.3;
+// Chain: skills tapped within CHAIN_GAP s of each other build a chain; each link adds CHAIN_STEP (up to CHAIN_MAX).
+const CHAIN_GAP = 2.5, CHAIN_STEP = 0.1, CHAIN_MAX = 1.5;
+// Boss weak spot: every EXPOSE_EVERY s a boss opens up for EXPOSE_FOR s; skills that hit it then deal ×EXPOSE_MULT.
+const EXPOSE_EVERY = 7, EXPOSE_AT = 4, EXPOSE_FOR = 1.5, EXPOSE_MULT = 2;
+const exposed = (B, u) => !!(u && u.boss && !B.pvp && (B.t % EXPOSE_EVERY) >= EXPOSE_AT && (B.t % EXPOSE_EVERY) < EXPOSE_AT + EXPOSE_FOR);
+// Aimed ultimate: the ultimate hits the focused enemy AIM_MULT harder.
+const AIM_MULT = 1.5;
+// Treasure goblin (stages): sometimes runs across the field for a moment — tap it to catch it (coins, maybe a gem).
+const GOBLIN_CHANCE = 0.125, GOBLIN_FOR = 2.5;
+// Challenge modifiers (daily challenge): change the rules for both sides.
+const MODS = { glass: { hp: 0.6, atk: 1.4 }, toxic: { poison: 2 }, swift: { spd: 0.75 }, noult: { noUlt: true } };
 // Community (faction): every player backs one of the 16 heroes. That hero's card fights harder for them,
 // and so (a little) does any fusion card that contains it.
 const FACTION_BONUS = 0.15, FACTION_FUSION_BONUS = 0.08;
@@ -236,35 +251,52 @@ function deckSynergies(team) {
   return { ids: on.map(x => x.id), fx };
 }
 function teamUnits(B, side, team, levels, faction, market, perks) {
-  const pk = perks || {}, sy = deckSynergies(team).fx;
+  const pk = perks || {}, sy = deckSynergies(team).fx, cb = 1 + (pk.comeback || 0);
   return team.map((id, i) => {
     const h = HERO_BY_ID[id], ms = pk.mascot && faction ? (id === faction ? pk.mascot : h && h.fusion && h.parts.includes(faction) ? pk.mascot / 2 : 0) : 0;
-    const s = heroStats(id, levels[id] || 1), k = factionMult(id, faction) * marketMult(id, market) * (1 + ms);
+    const s = heroStats(id, levels[id] || 1), k = factionMult(id, faction) * marketMult(id, market) * (1 + ms) * cb;
     const u = makeUnit(B, side, { ...HERO_BY_ID[id], ...s, hp: s.hp * k * (1 + (pk.hp || 0)) * (1 + sy.hp), atk: s.atk * k * (1 + (pk.atk || 0)) * (1 + sy.atk), row: rowOf(i) });
     u.energy = Math.min(100, u.energy + (pk.energy || 0) + sy.energy);
     return u;
   });
 }
-function createBattle(team, levels, idx, seed = (Math.random() * 2 ** 32) >>> 0, faction = null, market = null, perks = null) {
+// opts: { enemyMult (hard mode / tower), mod (challenge modifier key), goblin: false to turn the goblin off }
+function createBattle(team, levels, idx, seed = (Math.random() * 2 ** 32) >>> 0, faction = null, market = null, perks = null, opts = {}) {
   const B = newBattle(seed, false);
   B.idx = idx;
   B.heroes = teamUnits(B, 'hero', team, levels, faction, market, perks);
-  B.enemies = stageEnemies(idx).map((e, i) => makeUnit(B, 'enemy', { ...e, row: rowOf(i) }));
+  const em = opts.enemyMult || 1;
+  B.enemies = stageEnemies(idx).map((e, i) => makeUnit(B, 'enemy', { ...e, hp: e.hp * em, atk: e.atk * em, row: rowOf(i) }));
+  if (opts.mod && MODS[opts.mod]) applyMod(B, opts.mod);
+  // The goblin uses its own dice so the fight itself stays the same with or without it.
+  const g = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+  if (opts.goblin !== false && idx >= 1 && idx % STAGES_PER_WORLD !== STAGES_PER_WORLD - 1 && g() < GOBLIN_CHANCE) B.goblin = { at: +(6 + g() * 14).toFixed(2), dur: GOBLIN_FOR, gem: g() < 0.25, caught: false, shown: false };
   return B;
 }
+function applyMod(B, key) {
+  const m = MODS[key]; B.mod = key;
+  for (const u of [...B.heroes, ...B.enemies]) {
+    if (m.hp) { u.maxHp = Math.round(u.maxHp * m.hp); u.hp = u.maxHp; }
+    if (m.atk) u.atk *= m.atk;
+    if (m.spd) u.spd *= m.spd;
+  }
+}
+const goblinUp = B => !!(B.goblin && !B.goblin.caught && B.t >= B.goblin.at && B.t < B.goblin.at + B.goblin.dur);
 // World boss (raid): one giant boss shared by every player. It never falls inside a fight — the fight lasts
 // RAID_TIME seconds (or until your deck is down) and what counts is the damage dealt. Its attack is set from your
 // own deck (so every player meets a fair fight) and keeps growing, so stronger decks last longer and hit harder.
 const RAID_TIME = 45;
+// raid.enrage: the boss is below 10% HP — it hits much harder (everyone races for the last hit).
+const RAID_ENRAGE_ATK = 1.6;
 function createRaid(team, levels, seed, raid, faction = null, market = null, perks = null) {
   const B = newBattle(seed, false);
   B.raid = { dmg: 0 }; B.idx = -1;
   B.heroes = teamUnits(B, 'hero', team, levels, faction, market, perks);
   const h = HERO_BY_ID[raid.boss], avgHp = B.heroes.reduce((a, u) => a + u.maxHp, 0) / Math.max(1, B.heroes.length);
-  const atk = avgHp * 0.11 * (1 + 0.04 * ((raid.level || 1) - 1));
+  const atk = avgHp * 0.11 * (1 + 0.04 * ((raid.level || 1) - 1)) * (raid.enrage ? RAID_ENRAGE_ATK : 1);
   const u = makeUnit(B, 'enemy', { id: raid.boss, name: h.name, role: h.role, boss: true, weak: raid.weak || null, hp: 1e12, atk, spd: 1.4, row: 'front' });
   u.raidBoss = true; u.baseAtk = atk;
-  B.enemies = [u];
+  B.enemies = [u]; B.raidEnrage = !!raid.enrage;
   return B;
 }
 function replayRaid(team, levels, seed, inputs, raid, faction = null, market = null, perks = null) {
@@ -272,7 +304,7 @@ function replayRaid(team, levels, seed, inputs, raid, faction = null, market = n
   const q = (Array.isArray(inputs) ? inputs : []).filter(x => Array.isArray(x) && Number.isInteger(x[0]) && Number.isInteger(x[1])).sort((a, b) => a[0] - b[0]);
   let i = 0;
   while (!B.over) { while (i < q.length && q[i][0] <= B.tick) applyInput(B, q[i++][1]); step(B); B.events.length = 0; }
-  return { dmg: Math.round(B.raid.dmg), time: +B.t.toFixed(2) };
+  return { dmg: Math.round(B.raid.dmg), time: +B.t.toFixed(2), perfects: B.perfects, maxChain: B.maxChain };
 }
 // PvP: side A plays as 'hero', side B as 'enemy'; both sides use the same (hero) rules.
 function createPvpBattle(teamA, levelsA, teamB, levelsB, seed, factionA = null, factionB = null, market = null, perksA = null, perksB = null) {
@@ -306,8 +338,9 @@ const rage = B => (B.t > ENRAGE_AT ? 1 + 0.06 * (B.t - ENRAGE_AT) : 1);
 function damage(B, src, tgt, amount, opts = {}) {
   if (!tgt || !tgt.alive) return 0;
   if (!opts.pure && on(B, tgt, 'dodge')) { B.events.push({ type: 'miss', uid: tgt.uid }); return 0; }
-  let dmg = amount * rage(B);
+  let dmg = amount * rage(B) * (B.casting && !opts.pure ? B.castMul : 1);
   if (on(B, tgt, 'vuln')) dmg *= 1.3;
+  if (B.casting && src && !opts.pure && heroRules(B, src) && exposed(B, tgt)) { dmg *= EXPOSE_MULT; if (!B.exposedSeen) { B.exposedSeen = true; B.events.push({ type: 'exposedhit', uid: tgt.uid }); } }
   // Combos: skills hit harder on frozen (shatter), stunned (crush) or poisoned (toxic) targets.
   if (B.casting && src && !opts.pure) {
     const c = on(B, tgt, 'freeze') ? ['shatter', 1.5] : on(B, tgt, 'stun') ? ['crush', 1.3] : on(B, tgt, 'poison') ? ['toxic', 1.25] : null;
@@ -329,14 +362,18 @@ function damage(B, src, tgt, amount, opts = {}) {
 
 function heal(B, tgt, amount) {
   if (!tgt || !tgt.alive) return;
-  const v = Math.round(Math.min(tgt.maxHp - tgt.hp, amount / rage(B)));
+  const v = Math.round(Math.min(tgt.maxHp - tgt.hp, amount * (B.casting ? B.castMul : 1) / rage(B)));
   tgt.hp += v;
   if (v > 0) B.events.push({ type: 'heal', uid: tgt.uid, amount: v });
 }
 
+// The enemy the player tapped (focus) while it lives, else null.
+function focusOf(B, u) { const id = B.focus[u.side]; return id ? foesOf(B, u).find(e => e.uid === id) || null : null; }
+const primary = (B, u) => focusOf(B, u) || foesOf(B, u)[0];
 function heroTarget(B, u) {
   const foes = foesOf(B, u);
   if (!foes.length) return null;
+  const f = focusOf(B, u); if (f) return f;
   if (u.role === 'assassin') return lowest(foes);
   if (u.role === 'archer' || u.role === 'mage') return pick(B, foes);
   return foes[0];
@@ -364,10 +401,10 @@ function basicAttack(B, u) {
 const SKILLS = {
   pinkbull(B, u) { for (const e of foesOf(B, u)) { damage(B, u, e, atkOf(B, u) * 1.5); e.fx.stun = B.t + 1.5; } },
   notcoin(B, u) { for (const f of friendsOf(B, u)) addShield(B, f, f.maxHp * 0.25 * (u.skillK || 1)); },
-  volya(B, u) { const fs = foesOf(B, u); const t = fs.reduce((a, b) => (b.hp > a.hp ? b : a), fs[0]); damage(B, u, t, atkOf(B, u) * 4.5); },
-  egor(B, u) { const t = foesOf(B, u)[0]; damage(B, u, t, atkOf(B, u) * 2.5); if (t) t.fx.vuln = B.t + 5; },
-  paws(B, u) { for (let i = 0; i < 3; i++) damage(B, u, foesOf(B, u)[0], atkOf(B, u) * 1.4); },
-  noctis(B, u) { damage(B, u, lowest(foesOf(B, u)), atkOf(B, u) * 5); u.fx.dodge = B.t + 3; },
+  volya(B, u) { const fs = foesOf(B, u); const t = focusOf(B, u) || fs.reduce((a, b) => (b.hp > a.hp ? b : a), fs[0]); damage(B, u, t, atkOf(B, u) * 4.5); },
+  egor(B, u) { const t = primary(B, u); damage(B, u, t, atkOf(B, u) * 2.5); if (t) t.fx.vuln = B.t + 5; },
+  paws(B, u) { for (let i = 0; i < 3; i++) damage(B, u, primary(B, u), atkOf(B, u) * 1.4); },
+  noctis(B, u) { damage(B, u, focusOf(B, u) || lowest(foesOf(B, u)), atkOf(B, u) * 5); u.fx.dodge = B.t + 3; },
   gramcat(B, u) { for (const e of foesOf(B, u)) damage(B, u, e, atkOf(B, u) * 1.7); },
   utya(B, u) { for (const e of foesOf(B, u)) { damage(B, u, e, atkOf(B, u) * 1.4); e.fx.slow = B.t + 3; } },
   pengu(B, u) { for (const e of foesOf(B, u)) { damage(B, u, e, atkOf(B, u) * 0.9); e.fx.stun = B.t + 2.5; e.fx.freeze = B.t + 2.5; } },
@@ -386,12 +423,20 @@ for (const f of FUSIONS) SKILLS[f.id] = (B, u) => {
   try { for (const p of f.parts) if (foesOf(B, u).length) SKILLS[p](B, u); } finally { u.atk = atk; u.skillK = 1; }
 };
 
-function castSkill(B, u) {
+// manual: the player tapped it (perfect timing and chains only count for taps).
+function castSkill(B, u, manual = false) {
   if (!u || !u.alive || u.energy < 100 || B.over || !foesOf(B, u).length) return false;
-  u.energy = 0;
+  const age = B.tick - (u.fullAt == null ? B.tick : u.fullAt);
+  u.energy = 0; u.fullAt = null;
   B.events.push({ type: 'skill', uid: u.uid, id: u.id, side: u.side });
-  B.casting = true; B.comboSeen = new Set();
-  try { SKILLS[u.id](B, u); } finally { B.casting = false; B.comboSeen = null; }
+  let mul = 1;
+  if (manual && heroRules(B, u)) {
+    if (age >= PERFECT_FROM && age <= PERFECT_TO) { mul *= PERFECT_MULT; if (u.side === 'hero') B.perfects++; B.events.push({ type: 'perfect', uid: u.uid, side: u.side }); }
+    const c = B.chain[u.side]; c.n = B.t - c.at <= CHAIN_GAP ? c.n + 1 : 1; c.at = B.t;
+    if (c.n >= 2) { mul *= Math.min(CHAIN_MAX, 1 + CHAIN_STEP * (c.n - 1)); if (u.side === 'hero') B.maxChain = Math.max(B.maxChain, c.n); B.events.push({ type: 'chain', n: c.n, side: u.side }); }
+  }
+  B.casting = true; B.comboSeen = new Set(); B.castMul = mul; B.exposedSeen = false;
+  try { SKILLS[u.id](B, u); } finally { B.casting = false; B.comboSeen = null; B.castMul = 1; }
   // Every skill charges the team's ultimate.
   if (B.pvp || u.side === 'hero') B.ult[u.side] = Math.min(100, B.ult[u.side] + ULT_PER_SKILL);
   checkEnd(B);
@@ -402,7 +447,7 @@ function castSkill(B, u) {
 // to every enemy) and the team heals 15%. In stages only the player has it; in PvP both sides do.
 const ULT_PER_SKILL = 25;
 function castUlt(B, side) {
-  if (B.over || B.ult[side] < 100) return false;
+  if (B.over || B.ult[side] < 100 || (B.mod && MODS[B.mod].noUlt)) return false;
   const mine = alive(side === 'hero' ? B.heroes : B.enemies);
   if (!mine.length) return false;
   B.ult[side] = 0;
@@ -410,7 +455,8 @@ function castUlt(B, side) {
   B.events.push({ type: 'ult', side });
   B.casting = true; B.comboSeen = new Set();
   try {
-    for (const e of alive(side === 'hero' ? B.enemies : B.heroes)) damage(B, mine[0], e, atk * 2.5);
+    const aim = B.focus[side];
+    for (const e of alive(side === 'hero' ? B.enemies : B.heroes)) damage(B, mine[0], e, atk * 2.5 * (aim && e.uid === aim ? AIM_MULT : 1));
     for (const f of mine) heal(B, f, f.maxHp * 0.15);
   } finally { B.casting = false; B.comboSeen = null; }
   checkEnd(B);
@@ -423,12 +469,17 @@ function checkEnd(B) {
   else if (!alive(B.heroes).length) B.over = 'lose';
 }
 
-// Inputs are [tick, code]: code > 0 casts the skill of unit `code`; -1 / -2 turn hero auto on / off; -3 = team ultimate.
-function applyInput(B, code) {
-  if (code === -1) B.autoBy.hero = true;
-  else if (code === -2) B.autoBy.hero = false;
-  else if (code === -3) castUlt(B, 'hero');
-  else { const u = B.heroes.find(x => x.uid === code); if (u) castSkill(B, u); }
+// Inputs are [tick, code]: code > 0 casts the skill of unit `code`; -1 / -2 turn hero auto on / off; -3 = team ultimate;
+// -4 catches the treasure goblin; -100 - uid focuses that enemy; -200 - uid aims the ultimate at it.
+function applyInput(B, code, side = 'hero') {
+  const mine = side === 'hero' ? B.heroes : B.enemies, foes = side === 'hero' ? B.enemies : B.heroes;
+  if (code === -1) B.autoBy[side] = true;
+  else if (code === -2) B.autoBy[side] = false;
+  else if (code === -3) castUlt(B, side);
+  else if (code === -4) { if (side === 'hero' && goblinUp(B)) { B.goblin.caught = true; B.events.push({ type: 'goblincaught', gem: B.goblin.gem }); } }
+  else if (code <= -200) { const e = foes.find(x => x.uid === -200 - code && x.alive); if (e) { B.focus[side] = e.uid; castUlt(B, side); } }
+  else if (code <= -100) { const e = foes.find(x => x.uid === -100 - code && x.alive); if (e) { B.focus[side] = e.uid; B.events.push({ type: 'focus', uid: e.uid, side }); } }
+  else { const u = mine.find(x => x.uid === code); if (u) castSkill(B, u, true); }
 }
 
 // Advance exactly one fixed tick.
@@ -442,7 +493,7 @@ function step(B) {
   for (const u of [...B.heroes, ...B.enemies]) {
     if (!u.alive) continue;
     if (u.shield > 0 && B.t >= u.shieldUntil) u.shield = 0;
-    if (on(B, u, 'poison') && B.t >= u.poisonNext) { u.poisonNext += 1; damage(B, null, u, u.poisonDps, { pure: true, poison: true }); if (!u.alive) continue; }
+    if (on(B, u, 'poison') && B.t >= u.poisonNext) { u.poisonNext += 1; damage(B, null, u, u.poisonDps * (B.mod && MODS[B.mod].poison || 1), { pure: true, poison: true }); if (!u.alive) continue; }
     if (on(B, u, 'stun')) continue;
     u.timer += dt * (on(B, u, 'slow') ? 0.55 : 1);
     if (u.timer >= u.spd) { u.timer -= u.spd; basicAttack(B, u); }
@@ -455,6 +506,14 @@ function step(B) {
       }
     }
     if (u.energy >= 100 && B.autoBy[u.side]) castSkill(B, u);
+  }
+  // when each card filled up (perfect timing is measured from here)
+  for (const u of [...B.heroes, ...B.enemies]) if (u.alive) { if (u.energy >= 100) { if (u.fullAt == null) u.fullAt = B.tick; } else u.fullAt = null; }
+  // boss weak spot opens / closes; the goblin appears / runs off
+  for (const e of B.enemies) if (e.boss && e.alive && !B.pvp) { const x = exposed(B, e); if (x !== !!e.exposedNow) { e.exposedNow = x; B.events.push({ type: x ? 'exposed' : 'covered', uid: e.uid }); } }
+  if (B.goblin && !B.goblin.caught) {
+    if (!B.goblin.shown && goblinUp(B)) { B.goblin.shown = true; B.events.push({ type: 'goblin' }); }
+    else if (B.goblin.shown && !B.goblin.gone && !goblinUp(B)) { B.goblin.gone = true; B.events.push({ type: 'goblingone' }); }
   }
   for (const side of ['hero', 'enemy']) if (B.autoBy[side] && B.ult[side] >= 100) castUlt(B, side);
   checkEnd(B);
@@ -469,8 +528,8 @@ function step(B) {
 }
 
 // Server-side verification of a stage battle: replay it from its seed and the player's inputs.
-function replayStage(team, levels, idx, seed, inputs, faction = null, market = null, perks = null) {
-  const B = createBattle(team, levels, idx, seed, faction, market, perks);
+function replayStage(team, levels, idx, seed, inputs, faction = null, market = null, perks = null, opts = {}) {
+  const B = createBattle(team, levels, idx, seed, faction, market, perks, opts);
   const q = (Array.isArray(inputs) ? inputs : []).filter(x => Array.isArray(x) && Number.isInteger(x[0]) && Number.isInteger(x[1])).sort((a, b) => a[0] - b[0]);
   let i = 0, skills = 0;
   while (!B.over) {
@@ -480,10 +539,13 @@ function replayStage(team, levels, idx, seed, inputs, faction = null, market = n
     step(B);
   }
   for (const e of B.events) if (e.type === 'skill' && e.side === 'hero') skills++;
-  return { result: B.over, ticks: B.tick, skills };
+  const lost = B.heroes.filter(u => !u.alive).map(u => u.id), hpLeft = (arr => arr.reduce((a, u) => a + u.hp, 0) / arr.reduce((a, u) => a + u.maxHp, 0))(B.enemies);
+  return { result: B.over, ticks: B.tick, time: +B.t.toFixed(2), skills, lost, perfects: B.perfects, maxChain: B.maxChain,
+    goblin: B.goblin ? { caught: B.goblin.caught, gem: B.goblin.gem } : null, enemyHpLeft: +hpLeft.toFixed(4), heroHpLeft: +(arr => arr.reduce((a, u) => a + u.hp, 0) / arr.reduce((a, u) => a + u.maxHp, 0))(B.heroes).toFixed(4) };
 }
 
 if (typeof module !== 'undefined') {
   module.exports = { RARITY, ROLES, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, fusionStartLevel, TEAM_MAX_FUSIONS, TEAM_MAX_TRIOS, teamError, duosWithin, ENRAGE_AT, LEGACY_FUSION_IDS, HERO_BY_ID, STARTERS, WORLDS, TOTAL_STAGES, STAGES_PER_WORLD, MAX_LEVEL, COIN_BONUS, TICK,
+    PERFECT_FROM, PERFECT_TO, PERFECT_MULT, CHAIN_GAP, CHAIN_STEP, CHAIN_MAX, EXPOSE_EVERY, EXPOSE_AT, EXPOSE_FOR, EXPOSE_MULT, exposed, AIM_MULT, GOBLIN_CHANCE, goblinUp, MODS, RAID_ENRAGE_ATK,
     RAID_TIME, createRaid, replayRaid, SYNERGIES, deckSynergies, STAGE_K, CALIBRATED_FROM, FACTION_BONUS, FACTION_FUSION_BONUS, factionMult, marketMult, BOSS_WEAK, WEAK_BY, heroStats, upgradeCost, stageReward, stageEnemies, createBattle, createPvpBattle, step, castSkill, castUlt, applyInput, replayStage };
 }

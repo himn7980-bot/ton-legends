@@ -144,6 +144,60 @@ const assert = require('assert');
   assert.ok(!(await p.textContent('#screen')).includes('·'), 'no "·" in Persian');
   await p.screenshot({ path: out + '/r6-fa-chest.png', fullPage: true });
   console.log('✓ Persian separator');
+  // ---------- skill play ----------
+  await p.click('#settings'); await p.click('#s-lang'); await p.click('[data-lang=en]'); await p.waitForTimeout(150); await p.click('#m-close');
+  // boss stage: the boss makes an entrance; tapping an enemy focuses it; the ring shows on full cards
+  await p.evaluate(() => { S.cleared = 70; S.auto = false; S.speed = 1; S.tutDone = true; S.tutUlt = true; S.team = ['notcoin', 'volya', 'noctis', 'babyshark', 'yaya'].filter(id => S.owned[id]); if (S.team.length < 3) S.team = Object.keys(S.owned).filter(id => !id.startsWith('f')).slice(0, 5); save(); startBattle(9); });
+  await p.waitForSelector('.boss-intro'); await p.screenshot({ path: out + '/s1-boss-intro.png' });
+  await p.waitForSelector('.boss-intro', { state: 'detached', timeout: 5000 });
+  const foe = await p.$('.hcard.enemy'); await foe.click(); await p.waitForTimeout(150);
+  assert.ok(await p.$('.hcard.enemy.focused'), 'tapped enemy is focused'); assert.ok(await p.evaluate(() => BT.inputs.some(x => x[1] <= -100) || BT.queue.some(c => c <= -100)), 'focus sent as an input');
+  await p.waitForSelector('.hcard.hero.full', { timeout: 20000 });
+  await p.screenshot({ path: out + '/s2-ring.png' });
+  // a perfect tap: wait for the green window, then tap
+  // (tapped from inside the page the moment the ring turns green — a test click's own delay would miss the window)
+  await p.evaluate(() => new Promise(res => { const t0 = Date.now(); (function poll() { const c = document.querySelector('.hcard.hero.full.pwin'); if (c) { c.click(); return res(); } if (Date.now() - t0 > 8000) return res(); requestAnimationFrame(poll); })(); }));
+  await p.waitForTimeout(300); assert.ok(await p.evaluate(() => BT && BT.B.perfects >= 1), 'perfect tap counted');
+  // the boss's weak spot opens on schedule
+  await p.waitForSelector('.hcard.enemy.exposed', { timeout: 15000 }); await p.screenshot({ path: out + '/s3-exposed.png' });
+  // aimed ultimate: drag 💥 onto an enemy
+  await p.evaluate(() => { BT.B.ult.hero = 100; render(); });
+  const ub = await p.$('#b-ult'), eb = await p.$('.hcard.enemy:not(.dead)'), ubb = await ub.boundingBox(), ebb = await eb.boundingBox();
+  await p.mouse.move(ubb.x + ubb.width / 2, ubb.y + ubb.height / 2); await p.mouse.down(); await p.mouse.move(ebb.x + ebb.width / 2, ebb.y + ebb.height / 2, { steps: 5 }); await p.mouse.up();
+  await p.waitForTimeout(200); assert.ok(await p.evaluate(() => BT.inputs.some(x => x[1] <= -200)), 'aimed ultimate sent');
+  await p.evaluate(() => { S.auto = true; S.speed = 3; BT.queue.push(-1); });
+  await p.waitForSelector('#r-map, #r-heroes', { timeout: 90000 });
+  await p.screenshot({ path: out + '/s4-result.png' });
+  assert.ok(await p.$('.star-row') || await p.$('#r-heroes'), 'stars on a win');
+  console.log('✓ battle: boss intro, focus, perfect ring + tap, weak spot, aimed ultimate, stars');
+  await p.evaluate(() => { closeModal(); $('#battle').hidden = true; show('map'); });
+  // goblin: a battle with one, tapped while it runs
+  const gs = await p.evaluate(() => { let sd = 1; while (!createBattle(S.team, S.owned, 3, sd).goblin) sd++; return sd; });
+  await p.evaluate(sd => { S.auto = true; S.speed = 1; save(); const B = createBattle(S.team, S.owned, 3, sd); B.goblin.at = 1; BT = { mode: 'stage', B, idx: 3, mySide: 'hero', inputs: [], queue: [-1], acc: 0, last: performance.now(), raf: 0, ended: false };
+    buildBattle({ title: 'g', bg: '#000', mine: B.heroes, theirs: B.enemies, showSpeed: true, ...queueControls(), onTap: u => BT.queue.push(u.uid) }); BT.raf = requestAnimationFrame(loop); }, gs);
+  await p.waitForSelector('#b-goblin:not([hidden])', { timeout: 30000 }); await p.screenshot({ path: out + '/s5-goblin.png' });
+  await p.evaluate(() => $('#b-goblin').click()); await p.waitForTimeout(300);
+  assert.ok(await p.evaluate(() => BT.B.goblin.caught), 'goblin caught');
+  await p.evaluate(() => { cancelAnimationFrame(BT.raf); BT = null; $('#battle').hidden = true; show('map'); });
+  console.log('✓ treasure goblin caught');
+  // world chest from stars, hard mode toggle
+  await p.evaluate(() => { S.world = 0; S.stars = { 0: 3, 1: 3, 2: 3, 3: 3 }; S.starClaims = {}; save(); show('map'); });
+  assert.ok(await p.$('#w-chest.ready')); const cc = await p.evaluate(() => S.coins);
+  // (the chest button pulses, so Playwright never sees it "stable": click it from the page)
+  await p.$eval('#w-chest', b => b.click()); await p.waitForSelector('#gm-ok'); assert.ok(await p.evaluate(c => S.coins > c, cc), 'world chest paid'); await p.click('#gm-ok');
+  await p.click('#w-hard'); await p.waitForTimeout(150); assert.ok(await p.$('.stages.hard') && await p.$('#go.hard'), 'hard mode view');
+  await p.screenshot({ path: out + '/s6-hard-map.png' });
+  await p.click('#w-hard'); await p.waitForTimeout(150);
+  // comeback boost after 3 losses; near-miss line on a close defeat
+  await p.evaluate(() => { S.lossStreak = 3; save(); show('map'); }); assert.ok(await p.$('.comeback'), 'comeback banner');
+  await p.evaluate(() => { S.lossStreak = 0; save(); showStageResult(5, { result: 'lose', stage: 5, unlocked: [], enemyHpLeft: 0.08, perfects: 2, maxChain: 3 }); });
+  assert.match(await p.textContent('.near-miss'), /8%/); assert.ok(await p.$('.skill-line'));
+  await p.screenshot({ path: out + '/s7-near-miss.png' }); await p.click('#r-heroes'); await p.waitForTimeout(150);
+  // chest suspense: the card back shows first, then flips
+  await p.evaluate(() => { S.coins += 1000; save(); show('chest'); }); await p.click('[data-k=basic]');
+  await p.waitForSelector('.chest-reveal.waiting'); await p.screenshot({ path: out + '/s8-chest-wait.png' });
+  await p.waitForSelector('.chest-reveal:not(.waiting)', { timeout: 3000 }); await p.click('#cl');
+  console.log('✓ world chest, hard mode, comeback, near miss, chest suspense');
   // languages
   for (const code of ['ar', 'zh', 'hi', 'en']) {
     await p.click('#settings'); await p.click('#s-lang'); await p.click(`[data-lang=${code}]`); await p.waitForTimeout(150);

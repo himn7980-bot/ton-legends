@@ -17,6 +17,9 @@ const ECON = require('../src/economy.js');
 
 const C = ECON.COMMUNITY;
 const MIN_POINTS = 10, ACTIVE_FLOOR = 5;
+// Daily war blitz (ECON.BLITZ): war points ×3 for half an hour at BLITZ_HOUR (UTC, default 18).
+const blitzHour = () => (process.env.BLITZ_HOUR !== undefined ? +process.env.BLITZ_HOUR : ECON.BLITZ.hour);
+const blitz = (now = Date.now()) => ECON.blitzWindow(now, blitzHour());
 const REWARDS = [{ gems: 30, coins: 5000 }, { gems: 15, coins: 3000 }, { gems: 8, coins: 1500 }];
 const REWARD_REST = { gems: 3, coins: 500 };
 const FACTIONS = E.BASE_HEROES.map(h => h.id);
@@ -121,6 +124,7 @@ module.exports = function createWar({ db, persist, weekKey, shareDir, profileOut
       let mult = hasOwnCard(p) ? 2 : 1;
       if (cryOf(f) === 'rally') mult *= C.CRIES.rally.points;
       if (ECON.eventOf(Date.now()) === 'war') mult *= ECON.EVENT_FX.war; // Monday: war day
+      if (blitz().on) mult *= ECON.BLITZ.mult;
       const opp = info.vs && db.users[info.vs] && db.users[info.vs].profile;
       if (kind === 'pvp' && opp && opp.faction && W.derby[f] === opp.faction) mult *= C.DERBY_MULT;
       got = Math.round(base * mult);
@@ -177,7 +181,7 @@ module.exports = function createWar({ db, persist, weekKey, shareDir, profileOut
     const total = f ? W.total[f] || 0 : 0, tier = tierOf(total);
     const cap = f ? W.captains[f] || null : null;
     return {
-      week: W.week, endsAt: weekEnd(), min: MIN_POINTS, floor: ACTIVE_FLOOR, rewards: REWARDS, rest: REWARD_REST,
+      week: W.week, endsAt: weekEnd(), min: MIN_POINTS, floor: ACTIVE_FLOOR, blitz: { ...blitz(), mult: ECON.BLITZ.mult }, rewards: REWARDS, rest: REWARD_REST,
       standings: sorted(sc).map(id => ({ id, score: sc[id], pts: pts[id] || 0, active: act[id] || 0, members: m[id] || 0, worlds: Object.values(own).filter(x => x === id).length })),
       mine: { pts: w.pts, double: !!(f && hasOwnCard(p)) },
       owners: own, terr,
@@ -241,7 +245,7 @@ module.exports = function createWar({ db, persist, weekKey, shareDir, profileOut
   // What a stage battle needs from the war (frozen into the battle by economy.js).
   const tierFor = f => (f ? tierOf(W.total[f] || 0) : 0);
   const community = p => { roll(); return { owners: owners(), cry: cryOf(p && p.faction), tier: tierFor(p && p.faction) }; };
-  return { routes, onWin, addPoints, roll, userWar, community, tierFor, owners, MIN_POINTS, REWARDS };
+  return { routes, onWin, addPoints, roll, userWar, community, tierFor, owners, blitz, MIN_POINTS, REWARDS };
 };
 module.exports.weekEnd = weekEnd;
 module.exports.pairUp = pairUp;

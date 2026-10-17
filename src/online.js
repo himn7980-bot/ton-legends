@@ -66,7 +66,7 @@ const Online = (() => {
   const pvp = (op, body) => call('pvp/' + op, body || {});
   function stream(ticket, handlers) {
     const es = new EventSource(`${API}/api/pvp/stream?ticket=${encodeURIComponent(ticket)}`);
-    for (const type of ['waiting', 'match', 'tick', 'end', 'cancelled', 'emote']) {
+    for (const type of ['waiting', 'draft', 'match', 'tick', 'end', 'cancelled', 'emote']) {
       es.addEventListener(type, e => { if (handlers[type]) handlers[type](JSON.parse(e.data)); });
     }
     return es;

@@ -121,7 +121,8 @@ async function renderRaid() {
   RAID = r.raid;
   const R = RAID, h = HERO_BY_ID[R.boss], pctLeft = R.hp / R.max * 100;
   $('#screen').innerHTML = `<div class="h2">${t.raidTitle}</div>
-    <div class="raid-hero">
+    ${R.enrage ? `<div class="raid-enrage">🔥 ${t.raidEnrage}</div>` : ''}
+    <div class="raid-hero ${R.enrage ? 'enraged' : ''}">
       <img src="${img(R.boss)}" alt=""><div class="rh-info"><div class="tag">${t.raidLevel(n(R.level))}</div><div class="big latin">${h.name}</div>
 </div>
       <div class="raid-hp"><i style="width:${pctLeft}%"></i><span>❤️ ${n(R.hp)} / ${n(R.max)}</span></div>
@@ -130,12 +131,31 @@ async function renderRaid() {
     <p class="muted small">${t.raidNote(n(R.time))}</p>
     ${deckSwitcher()}
     <button class="btn wide gold" id="rd-go" ${S.team.length ? '' : 'disabled'}>${R.tries > 0 ? t.raidFight(n(R.tries)) : t.raidBuy(n(R.extraGems))}</button>
+    ${R.recent && R.recent.length ? `<div class="panel live-hits"><div class="t">⚡ ${t.raidLive}</div><div id="rd-live">${raidHits(R.recent)}</div></div>` : ''}
     <div class="panel"><div class="ref-nums"><div><b>${n(R.mine.boss)}</b><small>${t.raidMineBoss}</small></div><div><b>${n(R.mine.week)}</b><small>${t.raidMineWeek}</small></div><div><b>${R.mine.rank ? '#' + n(R.mine.rank) : '—'}</b><small>${t.raidRank}</small></div></div>
       <p class="muted small" style="margin:8px 0 0">${t.raidRewards(n(R.rewards.kill), n(R.rewards.top), n(R.rewards.last))}</p></div>
     ${R.coms.length ? `<div class="h2">${t.raidComs}</div><div class="panel">${R.coms.slice(0, 8).map((c, i) => `<div class="row lb-row"><span>${i + 1}. <img class="mini-av" src="${img(c.id)}" alt=""> ${factionName(c.id)}</span><b>${n(c.dmg)}</b></div>`).join('')}</div>` : ''}
     ${R.top.length ? `<div class="h2">${t.raidTop}</div><div class="panel">${R.top.map((p, i) => `<div class="row lb-row ${p.me ? 'me' : ''}"><span>${['🥇', '🥈', '🥉'][i] || i + 1 + '.'} ${avatarImg(p.av)}${esc(p.name)}</span><b>${n(p.dmg)}</b></div>`).join('')}</div>` : ''}
     ${R.kills.length ? `<div class="h2">${t.raidKills}</div><div class="panel">${R.kills.map(k => `<div class="row lb-row"><span>💀 ${HERO_BY_ID[k.boss].name} · ${t.raidLevel(n(k.level))}</span><span class="muted">⚔️ ${esc(k.name)} · 👥 ${n(k.players)}</span></div>`).join('')}</div>` : ''}`;
   $('#rd-go').onclick = e => { e.currentTarget.disabled = true; startRaid(R.tries <= 0).finally(() => { const b = $('#rd-go'); if (b) b.disabled = false; }); };
+  raidPoll();
+}
+const raidHits = list => list.slice(0, 6).map(x => `<div class="row lb-row"><span>${avatarImg(x.av)}${esc(x.name)}</span><b>💥 ${n(x.dmg)}</b></div>`).join('');
+// While the world boss screen is open, the HP bar and the latest hits refresh every few seconds.
+let RAID_POLL = 0;
+function raidPoll() {
+  clearTimeout(RAID_POLL);
+  RAID_POLL = setTimeout(async () => {
+    if (S.tab !== 'raid' || BT || !$('#modal').hidden) return S.tab === 'raid' ? raidPoll() : null;
+    let r; try { r = await Online.api('raid/me'); } catch (e) { return raidPoll(); }
+    if (S.tab !== 'raid' || BT) return;
+    if (r.raid.level !== RAID.level || r.raid.enrage !== RAID.enrage) { RAID = r.raid; return renderRaid(); }
+    RAID = r.raid;
+    const bar = document.querySelector('.raid-hp'), live = $('#rd-live');
+    if (bar) { bar.querySelector('i').style.width = r.raid.hp / r.raid.max * 100 + '%'; bar.querySelector('span').textContent = `❤️ ${n(r.raid.hp)} / ${n(r.raid.max)}`; }
+    if (live) live.innerHTML = raidHits(r.raid.recent || []);
+    raidPoll();
+  }, 5000);
 }
 let RAID_STARTING = false;
 async function startRaid(buy) {
@@ -149,8 +169,8 @@ async function startRaidNow(buy) {
   const B = createRaid(S.team, S.owned, r.seed, r.raid, S.faction || null, r.market || null, r.perks || null);
   BT = { mode: 'raid', B, mySide: 'hero', inputs: [], queue: S.auto ? [-1] : [], acc: 0, last: performance.now(), raf: 0, ended: false, raid: r.raid };
   buildBattle({ title: `👹 ${t.raidTitle} · ${t.raidLevel(n(r.raid.level))}`, bg: 'radial-gradient(circle at 50% 30%,#5a0d1e 0,#1a0612 55%,#05020a 100%)', scene: { key: 'temple', ch: 3 },
-    mine: B.heroes, theirs: B.enemies, showSpeed: true,
-    onTap: u => BT.queue.push(u.uid), onAuto: on => BT.queue.push(on ? -1 : -2), onUlt: () => BT.queue.push(-3) });
+    mine: B.heroes, theirs: B.enemies, showSpeed: true, ...queueControls(), onTap: u => BT.queue.push(u.uid) });
+  if (r.raid.enrage) { $('#battle').classList.add('enraged'); bossIntro(B.enemies[0]); }
   const hud = document.createElement('div'); hud.className = 'raid-hud';
   hud.innerHTML = `<div>⏱ <b id="rh-t">${n(RAID_TIME)}</b></div><div>💥 <b id="rh-d">0</b></div>`;
   $('#battle').insertBefore(hud, $('#battle .b-enemies'));
@@ -329,4 +349,85 @@ function bindAds() {
     } catch (e) { toast(T().adsNone); }
     if (S.tab === 'chest') renderChest();
   };
+}
+
+// ---------- skill modes: daily challenge and endless tower ----------
+// Both are fought here like a stage (seed + taps) and verified by the server replay.
+const MOD_ICON = { glass: '🔪', toxic: '☠️', swift: '💨', noult: '🚫' };
+let CHAL = null, TOWER = null;
+async function startModeBattle(kind) {
+  if (BT) return;
+  const t = T(), m = kind === 'challenge' ? { start: 'challenge/start', end: 'challenge/end', tab: 'challenge' } : { start: 'tower/start', end: 'tower/end', tab: 'tower' };
+  const r = await tryApi(m.start); if (!r) return;
+  const team = r.team || S.team, B = createBattle(team, S.owned, r.stage, r.seed, S.faction || null, r.market || null, r.perks || null, r.opts || {});
+  BT = { mode: 'mode', kind, modeInfo: m, B, mySide: 'hero', inputs: [], queue: S.auto ? [-1] : [], acc: 0, last: performance.now(), raf: 0, ended: false };
+  const W = WORLDS[Math.floor(r.stage / STAGES_PER_WORLD)];
+  buildBattle({ title: kind === 'challenge' ? `🏅 ${t.chTitle} · ${MOD_ICON[r.opts.mod]} ${t.modName[r.opts.mod]}` : `🗼 ${t.towerTitle} · ${t.towerFloor(n(r.floor))}`,
+    bg: W.bg, scene: { key: W.key, ch: W.chapter }, mine: B.heroes, theirs: B.enemies, showSpeed: true, ...queueControls(), onTap: u => BT.queue.push(u.uid) });
+  Sound.music('battle');
+  BT.raf = requestAnimationFrame(loop);
+}
+async function finishMode() {
+  if (!BT || BT.mode !== 'mode') return;
+  const t = T(), { kind, modeInfo: m, inputs } = BT;
+  cancelAnimationFrame(BT.raf); BT = null; Sound.music('menu');
+  let r = null; try { r = await apiCall(m.end, { inputs }); } catch (e) { toast(errText(e)); }
+  $('#battle').hidden = true;
+  if (r && r.profile) { const prev = S.coins, pg = S.gems; Object.assign(S, r.profile); save(); showCoins(prev, pg); }
+  if (r && r.challenge) CHAL = r.challenge;
+  if (r && r.tower) TOWER = r.tower;
+  show(m.tab);
+  if (!r) return;
+  Sound.play(r.result === 'win' ? 'win' : 'lose');
+  const stats = skillLine(r);
+  openModal(kind === 'challenge' ? `<div class="center"><div style="font-size:56px">${r.result === 'win' ? '🏅' : '💪'}</div><div class="big" style="font-size:24px">${r.result === 'win' ? t.victory : t.defeat}</div>
+      <div class="big" style="color:var(--gold)">${t.chScore(n(r.score))}</div>${stats}
+      ${r.coins ? `<p>🪙 +${n(r.coins)}</p>` : ''}<p class="muted">${r.challenge.rank ? t.chRank(n(r.challenge.rank), n(r.challenge.players)) : ''}</p>
+      <button class="btn wide" id="md-ok">${t.ok}</button></div>`
+    : `<div class="center"><div style="font-size:56px">${r.result === 'win' ? '🗼' : '💀'}</div><div class="big" style="font-size:24px">${r.result === 'win' ? t.towerCleared(n(r.floor)) : t.towerFell(n(r.floor))}</div>
+      ${stats}<p>${r.coins ? `🪙 +${n(r.coins)}` : ''}${r.gems ? ` 💎 +${n(r.gems)}` : ''}</p>
+      ${r.lost && r.lost.length && !r.over ? `<p class="muted small">${t.towerLost}: ${r.lost.map(id => HERO_BY_ID[id].name).join(', ')}</p>` : ''}
+      ${r.over ? `<p class="muted">${t.towerOver(n(r.tower.best))}</p>` : ''}
+      <div class="btns sticky"><button class="btn ghost" id="md-ok">${t.ok}</button>${!r.over && r.result === 'win' ? `<button class="btn gold" id="md-next">${t.towerNext(n(r.floor + 1))}</button>` : ''}</div></div>`, box => {
+    box.querySelector('#md-ok').onclick = () => { closeModal(); refresh(); };
+    const nx = box.querySelector('#md-next'); if (nx) nx.onclick = () => { closeModal(); startModeBattle('tower'); };
+  });
+}
+const rankRows = (list, val) => list.map((x, i) => `<div class="brow ${x.me ? 'me' : ''}"><span class="rk">${i < 3 ? ['🥇', '🥈', '🥉'][i] : n(i + 1)}</span><span class="bn">${avatarImg(x.av)}${esc(x.name)}</span><span class="bs">${val(x)}</span></div>`).join('');
+async function renderChallenge() {
+  const t = T();
+  if (!Online.state.profile) { $('#screen').innerHTML = onlineOnly(t.chTitle); return; }
+  if (!isOpen('challenge')) { $('#screen').innerHTML = `<div class="h2">🏅 ${t.chTitle}</div><div class="panel center"><div style="font-size:54px">🏅</div>${lockNote('challenge')}</div>`; return; }
+  if (!CHAL) $('#screen').innerHTML = `<div class="h2">🏅 ${t.chTitle}</div><p class="muted center">${t.loading}</p>`;
+  const r = await tryApi('challenge/me'); if (!r || S.tab !== 'challenge') return;
+  const C = CHAL = r.challenge, hrs = Math.max(1, Math.ceil((C.ends - Date.now()) / 3600e3));
+  $('#screen').innerHTML = `<div class="h2">🏅 ${t.chTitle}</div>
+    <div class="panel ch-hero"><div class="ch-mod">${MOD_ICON[C.mod]}</div><div><div class="t">${t.modName[C.mod]}</div><div class="muted small">${t.modDesc[C.mod]}</div></div></div>
+    <div class="panel"><div class="row"><span>${t.stage(stageLabel(C.stage))} · ${t.chStronger}</span><span class="tag">⏳ ${t.hoursLeft(n(hrs))}</span></div>
+      <p class="muted small" style="margin:6px 0">${t.chNote(n(C.maxTries), n(C.coins))}</p>
+      <div class="ref-nums"><div><b>${n(C.tries)}/${n(C.maxTries)}</b><small>${t.chTries}</small></div><div><b>${C.best === null ? '—' : n(C.best)}</b><small>${t.chBest}</small></div><div><b>${C.rank ? '#' + n(C.rank) : '—'}</b><small>${t.chPlayers(n(C.players))}</small></div></div>
+      <button class="btn wide gold" id="ch-go" ${C.tries > 0 && S.team.length ? '' : 'disabled'}>${C.tries > 0 ? t.chPlay : t.comeBack}</button></div>
+    <div class="panel"><div class="t">🏆 ${t.chPrizes}</div><div class="tiers">${C.prizes.map((g, i) => `<span>${['🥇', '🥈', '🥉'][i]}</span><span>💎 ${n(g)}</span>`).join('')}</div></div>
+    <div class="h2">${t.chToday}</div><div class="panel board">${rankRows(C.top, x => n(x.score)) || `<p class="muted center">${t.boardEmpty}</p>`}</div>
+    ${C.yesterday.length ? `<div class="h2">${t.chYesterday}</div><div class="panel board">${rankRows(C.yesterday, x => n(x.score))}</div>` : ''}`;
+  $('#ch-go').onclick = () => startModeBattle('challenge');
+}
+async function renderTower() {
+  const t = T();
+  if (!Online.state.profile) { $('#screen').innerHTML = onlineOnly(t.towerTitle); return; }
+  if (!isOpen('tower')) { $('#screen').innerHTML = `<div class="h2">🗼 ${t.towerTitle}</div><div class="panel center"><div style="font-size:54px">🗼</div>${lockNote('tower')}</div>`; return; }
+  if (!TOWER) $('#screen').innerHTML = `<div class="h2">🗼 ${t.towerTitle}</div><p class="muted center">${t.loading}</p>`;
+  const r = await tryApi('tower/me'); if (!r || S.tab !== 'tower') return;
+  const W = TOWER = r.tower, dead = W.run ? W.run.dead : [], alive = S.team.filter(id => !dead.includes(id));
+  $('#screen').innerHTML = `<div class="h2">🗼 ${t.towerTitle}</div>
+    <div class="panel tower-hero"><div class="tw-floor">${n(W.next)}</div><div><div class="t">${t.towerFloor(n(W.next))}</div><div class="muted small">${t.towerNote(n(W.milestone), n(W.milestoneGems))}</div></div></div>
+    <div class="panel"><div class="muted small">${t.yourTeam(n(teamPower(alive)))}</div>
+      <div class="mini-team">${S.team.map(id => `<img class="${dead.includes(id) ? 'dead' : ''}" src="${img(id)}" alt="">`).join('')}</div>
+      ${dead.length ? `<p class="muted small">💀 ${t.towerDead(n(dead.length))}</p>` : ''}
+      <button class="btn wide gold" id="tw-go" ${alive.length ? '' : 'disabled'}>${W.run ? t.towerContinue(n(W.next)) : t.towerStart}</button>
+      ${W.run ? `<button class="btn wide ghost" id="tw-reset" style="margin-top:8px">${t.towerReset}</button>` : ''}</div>
+    <div class="h2">${t.towerBoard} <span class="muted">${W.rank ? '#' + n(W.rank) : ''} · ${t.towerBest(n(W.best))}</span></div>
+    <div class="panel board">${rankRows(W.top, x => t.towerFloor(n(x.best))) || `<p class="muted center">${t.boardEmpty}</p>`}</div>`;
+  $('#tw-go').onclick = () => startModeBattle('tower');
+  if ($('#tw-reset')) $('#tw-reset').onclick = async () => { const x = await tryApi('tower/reset'); if (x) { TOWER = x.tower; renderTower(); } };
 }

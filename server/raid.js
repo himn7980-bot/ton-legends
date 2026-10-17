@@ -2,12 +2,15 @@
 // (server-verified replay, like stages) whose damage comes off the boss's shared HP. When it falls, everyone who hit
 // it gets gems (more for the top 3 and the final blow) and a stronger one appears. Damage also earns community war
 // points. 3 free attempts a day; more cost gems. The weekly ranking shows players and communities by damage.
+// Below ENRAGE_AT of its HP the boss is enraged (hits much harder) and the screen shows the latest hits live —
+// everyone races for the final blow.
 const crypto = require('crypto');
 const E = require('../src/engine.js');
 const ECON = require('../src/economy.js');
 
 const BOSSES = ['teddy', 'notcoin', 'pinkbull', 'noctis', 'yoda', 'babyshark', 'volya', 'virus'];
 const WEAK = ['stun', 'freeze', 'poison', 'vuln', 'slow'];
+const ENRAGE_AT = 0.1, RECENT = 10;
 const FREE_TRIES = 3, MAX_EXTRA = 3, EXTRA_GEMS = 10, KILL_GEMS = 5, TOP_GEMS = 25, LAST_HIT_GEMS = 20;
 
 module.exports = function createRaid({ db, persist, weekKey, credit, profileOut, ctxFor, onDamage = () => {} }) {
@@ -34,7 +37,7 @@ module.exports = function createRaid({ db, persist, weekKey, credit, profileOut,
   function view(u) {
     const R = roll(), top = Object.entries(R.total).sort((a, b) => b[1] - a[1]);
     return {
-      week: R.week, level: R.level, boss: R.boss, weak: R.weak, hp: R.hp, max: R.max, time: E.RAID_TIME,
+      week: R.week, level: R.level, boss: R.boss, weak: R.weak, hp: R.hp, max: R.max, time: E.RAID_TIME, enrage: R.hp / R.max <= ENRAGE_AT, recent: (R.recent || []).slice(-RECENT).reverse(),
       tries: triesLeft(u), free: FREE_TRIES, extraGems: EXTRA_GEMS, rewards: { kill: KILL_GEMS, top: TOP_GEMS, last: LAST_HIT_GEMS },
       mine: { boss: R.dmg[u.id] || 0, week: R.total[u.id] || 0, rank: top.findIndex(([id]) => id === u.id) + 1 || null },
       top: top.slice(0, 10).map(([id, d]) => ({ name: (db.users[id] || {}).name || 'Player', av: ECON.avatarOf((db.users[id] || {}).profile), dmg: d, me: id === u.id })),
@@ -53,11 +56,11 @@ module.exports = function createRaid({ db, persist, weekKey, credit, profileOut,
         if ((p.gems || 0) < EXTRA_GEMS) fail('no_gems');
         p.gems -= EXTRA_GEMS; u.raidDay.extra++;
       }
-      const R = roll(), seed = crypto.randomInt(2 ** 32), { market, perks } = ctxFor(u);
-      u.raidPending = { seed, level: R.level, boss: R.boss, weak: R.weak, team: [...p.team], levels: Object.fromEntries(p.team.map(id => [id, p.owned[id]])), faction: p.faction || null, market, perks, at: Date.now() };
+      const R = roll(), seed = crypto.randomInt(2 ** 32), { market, perks } = ctxFor(u), enrage = R.hp / R.max <= ENRAGE_AT;
+      u.raidPending = { seed, level: R.level, boss: R.boss, weak: R.weak, enrage, team: [...p.team], levels: Object.fromEntries(p.team.map(id => [id, p.owned[id]])), faction: p.faction || null, market, perks, at: Date.now() };
       u.raidDay.used++;
       persist();
-      return { seed, raid: { boss: R.boss, level: R.level, weak: R.weak, hp: R.hp, max: R.max }, market, perks, profile: profileOut(u) };
+      return { seed, raid: { boss: R.boss, level: R.level, weak: R.weak, hp: R.hp, max: R.max, enrage }, market, perks, profile: profileOut(u) };
     },
     'POST /api/raid/end': (body, u) => {
       const pd = u.raidPending; if (!pd) fail('no_battle');
@@ -65,7 +68,7 @@ module.exports = function createRaid({ db, persist, weekKey, credit, profileOut,
       if (Date.now() - pd.at > 10 * 60e3) fail('expired');
       // A fight plays for at least RAID_TIME / 3 seconds of real time (×3 speed); a scripted instant end is refused.
       if (Date.now() - pd.at < (process.env.RAID_MIN_MS !== undefined ? +process.env.RAID_MIN_MS : E.RAID_TIME / 3 * 1000 - 3000)) { u.raidPending = pd; fail('too_soon'); }
-      const r = E.replayRaid(pd.team, pd.levels, pd.seed, body.inputs, { boss: pd.boss, level: pd.level, weak: pd.weak }, pd.faction, pd.market, pd.perks);
+      const r = E.replayRaid(pd.team, pd.levels, pd.seed, body.inputs, { boss: pd.boss, level: pd.level, weak: pd.weak, enrage: !!pd.enrage }, pd.faction, pd.market, pd.perks);
       const R = roll();
       // The fight counts against the boss that is up now (if it fell meanwhile, the damage goes to the next one).
       // Coins scale with the player's progress (about one stage reward per fight, up to 1.5× for big damage).
@@ -74,6 +77,7 @@ module.exports = function createRaid({ db, persist, weekKey, credit, profileOut,
       R.dmg[u.id] = (R.dmg[u.id] || 0) + dmg; R.total[u.id] = (R.total[u.id] || 0) + dmg;
       if (u.profile.faction) R.coms[u.profile.faction] = (R.coms[u.profile.faction] || 0) + dmg;
       R.hp = Math.max(0, R.hp - dmg);
+      R.recent = [...(R.recent || []), { name: u.name || 'Player', av: ECON.avatarOf(u.profile), dmg, at: Date.now() }].slice(-RECENT);
       onDamage(u.id, dmg);
       let killed = null;
       if (R.hp <= 0) { killed = { level: R.level, boss: R.boss }; kill(R, u.id); }

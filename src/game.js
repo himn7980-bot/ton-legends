@@ -218,7 +218,7 @@ function goBack() {
   if (BT) return BT.ended ? undefined : confirmLeave();
   if (S.tab !== 'map') show(PARENT_TAB[S.tab] || 'map');
 }
-const PARENT_TAB = { clan: 'rank', lab: 'heroes', pass: 'quests', friends: 'rank', raid: 'map', fund: 'rank' };
+const PARENT_TAB = { clan: 'rank', lab: 'heroes', pass: 'quests', friends: 'rank', raid: 'map', fund: 'rank', challenge: 'arena', tower: 'arena' };
 function syncNav() {
   const can = canGoBack(), w = Online.tg();
   const back = $('#back'); if (back) back.hidden = S.tab === 'map';
@@ -244,7 +244,7 @@ window.addEventListener('popstate', () => {
 function show(tab) {
   S.tab = tab; save();
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === (PARENT_TAB[tab] || tab)));
-  ({ map: renderMap, arena: renderArena, lab: renderLab, heroes: renderHeroes, chest: renderChest, quests: renderQuests, rank: renderRank, clan: renderClan, war: renderWar, pass: renderPass, friends: () => renderFriends(), raid: () => renderRaid(), fund: () => renderFund() })[tab]();
+  ({ map: renderMap, arena: renderArena, lab: renderLab, heroes: renderHeroes, chest: renderChest, quests: renderQuests, rank: renderRank, clan: renderClan, war: renderWar, pass: renderPass, friends: () => renderFriends(), raid: () => renderRaid(), fund: () => renderFund(), challenge: () => renderChallenge(), tower: () => renderTower() })[tab]();
   updateBadge();
   window.scrollTo(0, 0);
   syncNav();
@@ -259,14 +259,19 @@ function renderMap() {
   if (S.sel < lo || S.sel > hi || S.sel > S.cleared) S.sel = Math.min(S.cleared, hi);
   const nextOpen = w + 1 < WORLDS.length && (w + 1) * STAGES_PER_WORLD <= S.cleared;
   const rtl = L().dir === 'rtl';
+  // Hard mode: a world you finished can be replayed with much stronger enemies (first clears pay).
+  const worldDone = (w + 1) * STAGES_PER_WORLD <= S.cleared, hard = !!S.hardView && worldDone;
+  if (hard && !ECON.hardOpen(S, S.sel)) S.sel = Math.max(lo, Math.min(hi, S.hard || 0));
   let nodes = '';
   for (let i = 0; i < STAGES_PER_WORLD; i++) {
     const gi = lo + i, boss = i === STAGES_PER_WORLD - 1;
-    const st = gi < S.cleared ? 'done' : gi === S.cleared ? 'current' : 'locked';
-    const inner = boss ? `<img src="${img(W.boss)}" alt="">` : st === 'locked' ? '🔒' : n(i + 1);
+    const st = hard ? (gi < (S.hard || 0) ? 'done' : ECON.hardOpen(S, gi) ? 'current' : 'locked') : gi < S.cleared ? 'done' : gi === S.cleared ? 'current' : 'locked';
+    const inner = boss ? `<img src="${img(W.boss)}" alt="">` : st === 'locked' ? '🔒' : n(i + 1), k = (S.stars && S.stars[gi]) || 0;
     nodes += `<button class="stage ${st} ${boss ? 'boss' : ''} ${gi === S.sel ? 'sel' : ''}" data-i="${gi}" ${st === 'locked' ? 'disabled' : ''}>
-      ${inner}${st === 'done' ? '<span class="star">⭐</span>' : ''}</button>`;
+      ${inner}${st === 'done' && !hard ? `<span class="star s${k}">${'★'.repeat(k || 1)}</span>` : st === 'done' ? '<span class="star">🔥</span>' : ''}</button>`;
   }
+  // World chest: stars of this world open it in three steps (always shows how far the next reward is).
+  const ws = ECON.worldStars(S, w), wt = (S.starClaims && S.starClaims[w]) || 0, wNext = ECON.STAR_CHEST[wt], wReady = wNext && ws >= wNext;
   const foes = stageEnemies(S.sel);
   const first = S.sel === S.cleared;
   // Extra coins today: market dip, your community's territory and the captain's "gold" cry (the server freezes these per battle).
@@ -281,18 +286,24 @@ function renderMap() {
         <div><div class="world-num">${t.worldOf(n(w + 1), n(WORLDS.length))}</div><div class="world-name">${worldName(w)}</div>${WAR && WAR.owners && WAR.owners[w] ? `<div class="world-owner ${WAR.owners[w] === S.faction ? 'mine' : ''}">🏰 <img src="${img(WAR.owners[w])}" alt="">${t.army(factionName(WAR.owners[w]))}</div>` : ''}</div>
         <button class="arrow" data-w="${w + 1}" ${nextOpen ? '' : 'disabled'}>${rtl ? '◀' : '▶'}</button>
       </div>
-      <div class="stages">${nodes}</div>
+      <div class="stages ${hard ? 'hard' : ''}">${nodes}</div>
+      <div class="world-foot">
+        <button class="star-chest ${wReady ? 'ready' : ''}" id="w-chest" ${wReady ? '' : 'disabled'}>🎁 <span class="sc-bar"><i style="width:${wNext ? Math.min(100, ws / wNext * 100) : 100}%"></i></span><b>★ ${n(ws)}/${n(wNext || 30)}</b></button>
+        ${worldDone ? `<button class="hard-toggle ${hard ? 'on' : ''}" id="w-hard">🔥 ${t.hardMode}</button>` : ''}
+      </div>
     </div>
+    ${(S.lossStreak || 0) >= ECON.COMEBACK_AFTER ? `<div class="comeback">💪 ${t.comebackOn(pct(ECON.COMEBACK * 100))}</div>` : ''}
+    ${blitzChip()}
     <div class="panel stage-panel">
       <div class="row"><div class="h2" style="margin:0">${t.stage(stageLabel(S.sel))} ${isBossStage(S.sel) ? '· ' + t.boss : ''}</div>
-        <span class="tag gold">🪙 ${n(reward)}${first ? t.firstX2 : ` · 🔁 ${pct(factor * 100)}`}${dip ? ` · 📉 +${pct(dip * 100)}` : ''}${terr ? ` · 🏰 +${pct(terr * 100)}` : ''}${gold ? ` · 📯 +${pct(gold * 100)}` : ''}${weekend ? ` · 🎉 +${pct(weekend * 100)}` : ''}</span></div>
+        <span class="tag gold">🪙 ${n(hard ? (S.sel === (S.hard || 0) ? Math.floor(stageReward(S.sel) * ECON.HARD.coins) : 0) : reward)}${hard ? ` · 🔥 ×${n(ECON.HARD.mult * 10) / 10}` : first ? t.firstX2 : ` · 🔁 ${pct(factor * 100)}`}${dip ? ` · 📉 +${pct(dip * 100)}` : ''}${terr ? ` · 🏰 +${pct(terr * 100)}` : ''}${gold ? ` · 📯 +${pct(gold * 100)}` : ''}${weekend ? ` · 🎉 +${pct(weekend * 100)}` : ''}</span></div>
       ${isBossStage(S.sel) ? weakHint(W.weak) : ''}
       <div class="muted" style="margin-top:8px">${t.enemyCards}</div>
       <div class="foes">${foes.map(f => `<div class="foe ${f.boss ? 'b' : ''}"><img src="${img(f.id)}" alt="${esc(f.name)}"></div>`).join('')}</div>
       ${deckSwitcher()}
       <div class="row"><span class="muted">${t.yourTeam(n(teamPower(S.team)))}</span><button class="tag" id="edit-team">${t.editTeam}</button></div>
       <div class="mini-team">${[0, 1, 2, 3, 4].map(i => S.team[i] ? `<img src="${img(S.team[i])}" alt="">` : '<div class="empty"></div>').join('')}</div>
-      <div class="fight-bar"><button class="btn wide" id="go" ${S.team.length ? '' : 'disabled'}>${t.fight} · ${t.stage(stageLabel(S.sel))}</button></div>
+      <div class="fight-bar"><button class="btn wide ${hard ? 'hard' : ''}" id="go" ${S.team.length ? '' : 'disabled'}>${hard ? '🔥 ' : ''}${t.fight} · ${t.stage(stageLabel(S.sel))}</button></div>
       ${S.cleared >= TOTAL_STAGES ? `<p class="center muted">${t.allDone}</p>` : ''}
     </div>
     ${nextGoalBanner()}
@@ -312,7 +323,21 @@ function renderMap() {
   $('#to-cal').onclick = () => show('quests');
   if ($('#to-rookie')) $('#to-rookie').onclick = () => show('quests');
   if ($('#ticker')) $('#ticker').onclick = marketModal;
-  $('#go').onclick = () => startBattle(S.sel);
+  $('#go').onclick = () => startBattle(S.sel, hard);
+  if ($('#w-hard')) $('#w-hard').onclick = () => { S.hardView = !S.hardView; S.sel = -1; save(); renderMap(); };
+  $('#w-chest').onclick = async () => {
+    const r = await tryAct({ type: 'starChest', world: w }); if (!r) return;
+    if (r.chestResult) chestReveal(CHESTS.find(c => c.key === 'royal'), r.chestResult); else giftModal('🎁', t.worldChest, r.coins, '', r.gems);
+  };
+  if ($('#blitz')) $('#blitz').onclick = () => show('war');
+}
+// War blitz: live (×3 points, countdown) or starting within the hour.
+function blitzChip() {
+  const b = WAR && WAR.blitz, t = T(); if (!b || !S.faction) return '';
+  const now = Date.now(), mins = m => n(Math.max(1, Math.ceil(m / 60e3)));
+  if (b.on || (now >= b.start && now < b.end)) return `<button class="blitz-chip on" id="blitz">⚡ <b>${t.blitzOn(n(b.mult))}</b> · ${t.minLeft(mins(b.end - now))}</button>`;
+  if (b.start - now < 3600e3 && b.start > now) return `<button class="blitz-chip" id="blitz">⚡ ${t.blitzSoon(mins(b.start - now), n(b.mult))}</button>`;
+  return '';
 }
 
 // One "next goal" banner instead of a stack of them: rewards waiting → rookie journey → the next feature unlock.
@@ -571,6 +596,7 @@ async function buyPack(id, btn) {
   } catch (e) { giftModal('⚠️', t.buyErr, 0, t.buyErrNote); }
   if (btn) btn.disabled = false;
 }
+function flashGold() { const d = document.createElement('div'); d.className = 'gold-burst'; document.body.appendChild(d); setTimeout(() => d.remove(), 1200); }
 let CHEST_BUSY = false;
 async function openChest(c) {
   if (!chestCan(c) || CHEST_BUSY) return;
@@ -583,10 +609,12 @@ function chestReveal(c, r) {
   const t = T(), h = HERO_BY_ID[r.id], rarity = r.rarity, R = RARITY[rarity];
   const msg = r.outcome === 'new' ? t.newHero + (r.added ? t.addedTeam : '') : r.outcome === 'dupe' ? (r.levels ? t.dupeUp(n(r.level), n(r.shards)) : t.dupeShards(n(r.shards), n(r.left || 0)))
     : t.maxRefund(n(r.refund));
-  haptic('heavy'); Sound.play('chest'); if (rarity === 'L' || rarity === 'E') Sound.play('legend');
-  openModal(`<div class="center">
-    <div class="tag" style="color:${R.color}">${L().rarity[rarity]}</div>
-    <div class="reveal" style="--rc:${R.color}"><div class="flip ${r.holo ? 'holo' : ''}"><img src="${img(h.id)}" alt=""></div></div>
+  // Suspense: the card back shakes in its rarity's glow (longer and brighter for Epic and Legendary), then flips.
+  const big = rarity === 'L' || rarity === 'E', wait = rarity === 'L' ? 1700 : big ? 1300 : 900;
+  haptic('light'); Sound.play('chest');
+  openModal(`<div class="center chest-reveal waiting rar-${rarity}">
+    <div class="tag cr-late" style="color:${R.color}">${L().rarity[rarity]}</div>
+    <div class="reveal" style="--rc:${R.color}"><div class="card-back"><span>❓</span></div><div class="flip ${r.holo ? 'holo' : ''}"><img src="${img(h.id)}" alt=""></div></div>
     ${r.holo ? `<p class="holo-msg">${t.holoNew}</p>` : ''}
     <div class="big latin" style="font-size:26px">${h.name}</div>
     <div class="muted">${heroText(h.id).title} · ${ROLES[h.role].icon} ${L().role[h.role]}</div>
@@ -595,6 +623,8 @@ function chestReveal(c, r) {
   </div>`, box => {
     box.querySelector('#cl').onclick = () => { closeModal(); refresh(); };
     box.querySelector('#again').onclick = () => openChest(c);
+    const cr = box.querySelector('.chest-reveal');
+    setTimeout(() => { if (!cr.isConnected) return; cr.classList.remove('waiting'); haptic('heavy'); if (big) { Sound.play('legend'); if (rarity === 'L') flashGold(); } }, wait);
   });
   if (S.tab === 'chest') renderChest();
 }
@@ -743,14 +773,16 @@ function unitCard(u) {
   return `<div class="hcard ${mine ? 'hero ' + skinClass() : 'enemy'} ${u.boss ? 'boss' : ''} ${mine ? frameOf(u.id) : ''}" data-uid="${u.uid}" style="--rc:${rc}">
     ${mine ? '<span class="ready">⚡</span>' : ''}${u.boss ? '<span class="crown">👑</span>' : ''}${u.weak ? `<span class="weak-tag">🎯${STATUS_ICON[u.weak]}</span>` : ''}${u.row === 'front' ? '<span class="row-tag">🛡️</span>' : ''}
     <span class="orbit"><span class="ring"><i></i><i></i><i></i><i></i></span></span><span class="sheen" style="--sd:${(u.uid * 0.77) % 5}s"></span>
+    ${mine ? '<span class="pring"></span>' : '<span class="aim">🎯</span>'}
     <img src="${img(u.id)}" alt=""><div class="status"></div>
     <div class="hc-name ${u.name.length > 12 ? 'long' : ''}">${u.name}</div><div class="bar hp ${mine ? 'h' : ''}"><i></i><i class="sh" style="width:0"></i></div><div class="bar en"><i></i></div></div>`;
 }
 
 // Draws the battle screen for the current BT. mine = my cards (bottom), theirs = opponent cards (top).
-function buildBattle({ title, bg, scene, mine, theirs, oppLabel, myLabel, onTap, onAuto, onUlt, showSpeed }) {
+// onFocus(uid): tap an enemy to focus it; onAim(uid): drag the ultimate onto an enemy; onGoblin(): tap the goblin.
+function buildBattle({ title, bg, scene, mine, theirs, oppLabel, myLabel, onTap, onAuto, onUlt, showSpeed, onFocus, onAim, onGoblin }) {
   const t = T(), el = $('#battle');
-  el.style.background = bg; el.classList.remove('has-emotes');
+  el.style.background = bg; el.classList.remove('has-emotes', 'enraged', 'aiming');
   el.innerHTML = `<canvas id="b-scene"></canvas>
     <div class="b-top">
       <button id="b-exit">✕</button>
@@ -765,7 +797,8 @@ function buildBattle({ title, bg, scene, mine, theirs, oppLabel, myLabel, onTap,
     <div class="b-heroes ${tallNames(mine)}">${mine.map(unitCard).join('')}</div>
     ${myLabel ? `<div class="b-name me">${myLabel}</div>` : ''}
     <div class="ult-wrap"><div class="ult-bar"><i id="b-ult-i"></i></div><button id="b-ult" disabled>${t.ult}</button></div>
-    <div class="b-hint">${t.tapHint}</div>
+    <div class="b-hint">${t.tapHint}<br><small>${t.battleHint2}</small></div>
+    <button id="b-goblin" hidden>💰👺</button>
     <div id="b-fx"></div>`;
   el.hidden = false;
   el.classList.toggle('fx-low', (S.fx ?? 2) < 2); el.classList.toggle('fx-off', (S.fx ?? 2) === 0);
@@ -779,32 +812,64 @@ function buildBattle({ title, bg, scene, mine, theirs, oppLabel, myLabel, onTap,
     if (BT && !BT.ended && u && u.alive && u.energy >= 100) { haptic('medium'); onTap(u); }
   });
   $('#b-exit').onclick = confirmLeave;
-  $('#b-ult').onclick = () => { if (BT && !BT.ended && BT.B.ult && BT.B.ult[BT.mySide] >= 100) { haptic('heavy'); onUlt(); } };
+  // Tap an enemy: your cards focus it (single-target skills too).
+  el.querySelectorAll('.hcard.enemy').forEach(nd => nd.onclick = () => {
+    if (!BT || BT.ended || !onFocus) return;
+    const uid = +nd.dataset.uid, u = theirs.find(x => x.uid === uid); if (!u || !u.alive) return;
+    BT.focusUid = uid; haptic('light'); onFocus(uid); render();
+  });
+  // Ultimate: tap to fire, or drag it onto an enemy to aim it (that enemy takes extra damage).
+  const ub = $('#b-ult'), ultReady = () => BT && !BT.ended && BT.B.ult && BT.B.ult[BT.mySide] >= 100;
+  ub.onpointerdown = e => { if (!ultReady()) return; BT.drag = true; try { ub.setPointerCapture(e.pointerId); } catch (x) {} el.classList.add('aiming'); };
+  ub.onpointerup = e => {
+    if (!BT) return; const was = BT.drag; BT.drag = false; el.classList.remove('aiming');
+    if (!was || !ultReady()) return;
+    const hit = document.elementFromPoint(e.clientX, e.clientY), card = hit && hit.closest && hit.closest('.hcard.enemy');
+    const u = card && theirs.find(x => x.uid === +card.dataset.uid && x.alive);
+    haptic('heavy');
+    if (u && onAim) { BT.focusUid = u.uid; onAim(u.uid); } else onUlt();
+  };
+  ub.onpointercancel = () => { if (BT) BT.drag = false; el.classList.remove('aiming'); };
+  $('#b-goblin').onclick = () => { if (BT && !BT.ended && onGoblin) { haptic('heavy'); onGoblin(); $('#b-goblin').classList.add('caught'); } };
   if (showSpeed) $('#b-speed').onclick = e => { S.speed = S.speed === 1 ? 2 : S.speed === 2 ? 3 : 1; save(); e.target.textContent = '×' + n(S.speed); };
   $('#b-auto').onclick = e => { S.auto = !S.auto; save(); e.target.classList.toggle('on', S.auto); onAuto(S.auto); };
   render();
   syncNav();
 }
 
-async function startBattle(idx) {
+async function startBattle(idx, hard = false) {
   if (BT) return;
-  const r = await tryAct({ type: 'stageStart', stage: idx });
+  const r = await tryAct({ type: 'stageStart', stage: idx, ...(hard ? { hard: true } : {}) });
   if (!r) { $('#battle').hidden = true; refresh(); syncNav(); return; }
-  const t = T(), B = createBattle(S.team, S.owned, idx, r.seed, S.faction || null, r.market || null, r.perks || null);
+  const t = T(), B = createBattle(S.team, S.owned, idx, r.seed, S.faction || null, r.market || null, r.perks || null, r.opts || {});
   // Taps are queued and applied at the next fixed tick, and recorded as [tick, code] so the server can replay the fight.
   // The very first battle is guided: it pauses and shows what to tap (a glowing card, then the ultimate).
   // If the team ultimate never filled up in the first battle, the next early battles still teach it.
   const tut = !S.tutDone && S.cleared === 0 && idx === 0, tutUlt = !tut && !S.tutUlt && !S.auto && S.cleared < 10;
   if (tut) { S.auto = false; save(); }
-  BT = { mode: 'stage', B, idx, mySide: 'hero', inputs: [], queue: S.auto ? [-1] : [], acc: 0, last: performance.now(), raf: 0, ended: false, tut: tut ? { step: 0 } : tutUlt ? { step: 1.5 } : null };
+  BT = { mode: 'stage', B, idx, hard, mySide: 'hero', inputs: [], queue: S.auto ? [-1] : [], acc: 0, last: performance.now(), raf: 0, ended: false, tut: tut ? { step: 0 } : tutUlt ? { step: 1.5 } : null };
   buildBattle({
-    title: `${t.stage(stageLabel(idx))}${isBossStage(idx) ? ' · ' + t.bossCrown : ''}`, bg: WORLDS[Math.floor(idx / STAGES_PER_WORLD)].bg,
+    title: `${hard ? '🔥 ' : ''}${t.stage(stageLabel(idx))}${isBossStage(idx) ? ' · ' + t.bossCrown : ''}`, bg: WORLDS[Math.floor(idx / STAGES_PER_WORLD)].bg,
     scene: { key: WORLDS[Math.floor(idx / STAGES_PER_WORLD)].key, ch: WORLDS[Math.floor(idx / STAGES_PER_WORLD)].chapter }, mine: B.heroes, theirs: B.enemies, showSpeed: true,
-    onTap: u => { BT.queue.push(u.uid); tutorDone(1); }, onAuto: on => BT.queue.push(on ? -1 : -2), onUlt: () => { BT.queue.push(-3); tutorDone(2); },
+    ...queueControls(),
+    onTap: u => { BT.queue.push(u.uid); tutorDone(1); }, onUlt: () => { BT.queue.push(-3); tutorDone(2); },
   });
   Sound.music('battle');
   if (tut) coach(T().tut1, 3200);
+  if (isBossStage(idx) && !tut) bossIntro(B.enemies.find(e => e.boss));
   BT.raf = requestAnimationFrame(loop);
+}
+// Controls for battles simulated here (stages, world boss, challenge, tower): taps go into the input queue.
+const queueControls = () => ({ onAuto: on => BT.queue.push(on ? -1 : -2), onUlt: () => BT.queue.push(-3), onFocus: uid => BT.queue.push(-100 - uid),
+  onAim: uid => BT.queue.push(-200 - uid), onGoblin: () => BT.queue.push(-4) });
+// Boss entrance: the screen darkens, the boss's name lands, then the fight starts.
+function bossIntro(boss) {
+  if (!boss || !BT) return;
+  const d = document.createElement('div'); d.className = 'boss-intro';
+  d.innerHTML = `<img src="${img(boss.id)}" alt=""><div class="bi-tag">👑 ${T().bossWord}</div><div class="bi-name">${esc(boss.name)}</div>${boss.weak ? `<div class="bi-weak">🎯 ${T().st[boss.weak]}</div>` : ''}`;
+  $('#battle').appendChild(d); BT.paused = true; haptic('heavy'); Sound.play('boss');
+  const mine = BT;
+  setTimeout(() => { d.classList.add('out'); if (BT === mine) { BT.paused = false; BT.last = performance.now(); } setTimeout(() => d.remove(), 400); }, 1700);
 }
 
 // ---------- first-battle coach ----------
@@ -856,6 +921,8 @@ function leaveBattle() {
   if (BT.es) BT.es.close();
   // World boss: the fight is sent anyway (your cards finish it on auto), so the try isn't wasted.
   if (BT.mode === 'raid') { const inputs = [...BT.inputs, [BT.B.tick, -1]]; apiCall('raid/end', { inputs }).then(r => { if (r) { RAID = r.raid; toast(`💥 ${n(r.dmg)} · 🪙 +${n(r.coins)}`); if (S.tab === 'raid') renderRaid(); } }).catch(() => {}); }
+  // Challenge / tower: the attempt is sent anyway (your cards finish on auto).
+  if (BT.mode === 'mode') { const m = BT.modeInfo, inputs = [...BT.inputs, [BT.B.tick, -1]]; apiCall(m.end, { inputs }).then(r => { if (r && r.profile) { Object.assign(S, r.profile); save(); showCoins(); } if (S.tab === m.tab) refresh(); }).catch(() => {}); }
   if (BT.mode === 'pvp') { if (typeof PV !== 'undefined') PV = null; Online.loadProfile(null).then(p => { Object.assign(S, p); save(); showCoins(); }).catch(() => {}); }
   BT = null;
   Sound.music('menu');
@@ -864,7 +931,7 @@ function leaveBattle() {
 }
 
 function loop(now) {
-  if (!BT || BT.mode !== 'stage') return;
+  if (!BT || (BT.mode !== 'stage' && BT.mode !== 'mode')) return;
   const { B } = BT;
   if (BT.paused) { BT.last = now; BT.raf = requestAnimationFrame(loop); return; }
   BT.acc += Math.min(0.25, (now - BT.last) / 1000) * S.speed;
@@ -876,7 +943,7 @@ function loop(now) {
     if (BT.tut) { tutorCheck(); if (BT.paused) break; }
   }
   flush();
-  if (B.over && !BT.ended) { BT.ended = true; syncNav(); setTimeout(finishStage, 900); }
+  if (B.over && !BT.ended) { BT.ended = true; syncNav(); setTimeout(BT.mode === 'mode' ? finishMode : finishStage, 900); }
   BT.raf = requestAnimationFrame(loop);
 }
 
@@ -900,7 +967,7 @@ function render() {
     if (Lst.sh !== sh) { e.sh.style.width = sh + '%'; Lst.sh = sh; }
     const en = Math.round(u.energy); if (Lst.en !== en) { e.en.style.width = en + '%'; Lst.en = en; }
     const full = isMine(u) && u.alive && u.energy >= 100;
-    if (Lst.full !== full) { e.root.classList.toggle('full', full); Lst.full = full; }
+    if (Lst.full !== full) { e.root.classList.toggle('full', full); Lst.full = full; if (!full && BT.fullT) delete BT.fullT[u.uid]; }
     if (Lst.alive !== u.alive) { e.root.classList.toggle('dead', !u.alive); Lst.alive = u.alive; }
     const frozen = u.alive && (u.fx.freeze || 0) > B.t;
     if (Lst.frozen !== frozen) { e.root.classList.toggle('frozen', frozen); Lst.frozen = frozen; }
@@ -908,7 +975,24 @@ function render() {
     if (u.alive && u.shield > 0) st += '🛡️';
     if (st.includes('❄️')) st = st.replace('💫', '');
     if (Lst.st !== st) { e.st.textContent = st; Lst.st = st; }
+    // perfect-timing ring on my full cards: closes in, glows green inside the perfect window
+    if (isMine(u)) {
+      const age = full ? fullAge(u) : -1, win = age >= PERFECT_FROM && age <= PERFECT_TO;
+      if (full) e.root.style.setProperty('--p', Math.min(1, age / PERFECT_TO).toFixed(2));
+      if (Lst.pwin !== win) { e.root.classList.toggle('pwin', win); Lst.pwin = win; }
+    } else {
+      const foc = u.alive && BT.focusUid === u.uid, ex = !BT.B.pvp && !!BT.B.tick && u.alive && exposed(BT.B, u);
+      if (Lst.foc !== foc) { e.root.classList.toggle('focused', foc); Lst.foc = foc; }
+      if (Lst.ex !== ex) { e.root.classList.toggle('exposed', ex); Lst.ex = ex; }
+    }
   }
+}
+// Ticks since a card filled up (stages: the engine's own record; duels: when the stream first showed it full).
+function fullAge(u) {
+  if (BT.mode !== 'pvp') return u.fullAt == null ? 0 : BT.B.tick - u.fullAt;
+  BT.fullT = BT.fullT || {};
+  if (BT.fullT[u.uid] == null) BT.fullT[u.uid] = BT.B.t;
+  return Math.round((BT.B.t - BT.fullT[u.uid]) / TICK);
 }
 
 function anim(node, cls) { node.classList.remove(cls); void node.offsetWidth; node.classList.add(cls); }
@@ -931,6 +1015,20 @@ const SKILL_COLORS = { pinkbull: '#ff5fa2', notcoin: '#ffc531', volya: '#ff3030'
   gramcat: '#bfe6ff', utya: '#8fe3ff', pengu: '#9ee7ff', memegram: '#7aa0ff', yoda: '#45c4ff', virus: '#7dff3a',
   babyshark: '#3fffd0', yaya: '#ff9a3a', dog: '#ffd27a', teddy: '#ff7ac8' };
 
+// Combo chain counter in the middle of the field.
+function chainTag(k) {
+  const d = document.createElement('div'); d.className = 'chain-tag'; d.textContent = `${T().chainWord} ×${n(k)}`;
+  d.style.fontSize = `${Math.min(46, 26 + k * 4)}px`;
+  $('#b-fx').appendChild(d); setTimeout(() => d.remove(), 1000);
+  haptic(k >= 4 ? 'heavy' : 'medium');
+}
+// The treasure goblin runs across the field for GOBLIN_FOR battle seconds.
+function goblinRun() {
+  const g = $('#b-goblin'); if (!g) return;
+  g.classList.remove('caught'); g.hidden = false;
+  g.style.animationDuration = `${GOBLIN_FOR / (S.speed || 1)}s`;
+  anim(g, 'run'); Sound.play('skill');
+}
 function processEvents() {
   const t = T(), B = BT.B;
   const evs = B.events.splice(0);
@@ -958,6 +1056,13 @@ function processEvents() {
         break;
       }
       case 'combo': float(ev.uid, t.combo[ev.kind], 'combo'); Sound.play('crit'); break;
+      case 'perfect': if (ev.side === BT.mySide) { float(ev.uid, t.perfect, 'perfect'); haptic('medium'); Sound.play('crit'); } break;
+      case 'chain': if (ev.side === BT.mySide) chainTag(ev.n); break;
+      case 'exposed': if (e) { float(ev.uid, '🎯 ' + t.exposedOpen, 'weak'); haptic('light'); } break;
+      case 'exposedhit': float(ev.uid, '💥 ×2', 'crit'); haptic('heavy'); flashScreen('#ffd85a'); break;
+      case 'goblin': goblinRun(); break;
+      case 'goblingone': { const g = $('#b-goblin'); if (g) g.hidden = true; break; }
+      case 'goblincaught': { const g = $('#b-goblin'); if (g) { g.classList.add('caught'); setTimeout(() => { g.hidden = true; }, 500); } toast(`👺 ${t.goblinCaught}${ev.gem ? ' 💎' : ''}`); Sound.play('coin'); break; }
       case 'weakhit': float(ev.uid, t.weakHit, 'weak'); haptic('medium'); break;
       case 'ult':
         flashScreen(ev.side === BT.mySide ? '#ffd85a' : '#ff3b3b'); anim($('#battle'), 'shake'); haptic('heavy'); Sound.play('legend');
@@ -978,7 +1083,7 @@ function processEvents() {
 // The stage is over on screen; the server (or local rules offline) replays it and decides the reward.
 async function finishStage() {
   if (!BT || BT.mode !== 'stage') return;
-  const { idx, inputs } = BT, timeout = !!(BT.B && BT.B.timeout);
+  const { idx, inputs, hard } = BT, timeout = !!(BT.B && BT.B.timeout);
   if (BT.tut) { S.tutDone = true; save(); coach(null); }
   cancelAnimationFrame(BT.raf);
   BT = null;
@@ -986,10 +1091,17 @@ async function finishStage() {
   const before = Object.keys(ECON.UNLOCKS).filter(isOpen);
   let res;
   try { res = await act({ type: 'stageEnd', inputs }); } catch (e) { toast(errText(e)); res = { result: 'lose', stage: idx }; }
-  res.timeout = timeout;
+  res.timeout = timeout; res.hard = res.hard || hard;
   res.unlocked = Object.keys(ECON.UNLOCKS).filter(k => isOpen(k) && !before.includes(k));
   showStageResult(idx, res);
 }
+// Skill summary under a result: perfect taps, best chain, the goblin.
+function skillLine(res) {
+  const t = T(), bits = [res.perfects ? `✨ ${t.perfect} ×${n(res.perfects)}` : '', res.maxChain >= 2 ? `🔗 ${t.chainWord} ×${n(res.maxChain)}` : '',
+    res.goblin ? `👺 +🪙 ${n(res.goblin.coins)}${res.goblin.gems ? ` +💎 ${n(res.goblin.gems)}` : ''}` : ''].filter(Boolean);
+  return bits.length ? `<p class="skill-line">${bits.join(' · ')}</p>` : '';
+}
+const starRow = (k, fresh = 0) => `<div class="star-row">${[1, 2, 3].map(i => `<span class="${i <= k ? 'on' : ''} ${i > k - fresh && i <= k ? 'new' : ''}">★</span>`).join('')}</div>`;
 
 function showStageResult(idx, res) {
   const t = T();
@@ -997,7 +1109,8 @@ function showStageResult(idx, res) {
   if (res.result === 'win') {
     Sound.play('win'); haptic('heavy');
     const nextIdx = Math.min(idx + 1, TOTAL_STAGES - 1);
-    const hasNext = idx + 1 < TOTAL_STAGES && idx + 1 <= S.cleared;
+    const hasNext = res.hard ? ECON.hardOpen(S, idx + 1) : idx + 1 < TOTAL_STAGES && idx + 1 <= S.cleared;
+    LAST_HARD = !!res.hard;
     S.sel = hasNext ? nextIdx : idx;
     S.world = Math.floor(S.sel / STAGES_PER_WORLD);
     save();
@@ -1005,8 +1118,12 @@ function showStageResult(idx, res) {
     openModal(`<div class="center">
       <div style="font-size:64px">${worldDone ? '🏆' : '🎉'}</div>
       <div class="big">${t.victory}</div>
+      ${res.hard ? '' : starRow(res.stars || 1, res.newStars || 0)}
+      ${res.hard ? `<p class="muted">🔥 ${t.hardMode}</p>` : ''}
       <p class="muted">${t.stage(stageLabel(idx))} ${worldDone ? t.worldDone(worldName(Math.floor(idx / STAGES_PER_WORLD))) : ''}</p>
-      <div class="big" style="color:var(--gold)">+🪙 ${n(res.coins)}</div>
+      <div class="big" style="color:var(--gold)">+🪙 ${n(res.coins)}${res.gems ? ` <span style="color:var(--gem)">+💎 ${n(res.gems)}</span>` : ''}</div>
+      ${skillLine(res)}
+      ${!res.hard && (res.stars || 1) < 3 ? `<p class="muted small">${t.starHow(n(ECON.STAR_TIME))}</p>` : ''}
       ${res.first ? `<p class="muted">${t.firstBonus}</p>` : ''}
       ${res.manual ? `<p class="manual-tag">🎮 ${t.manualBonus(pct(ECON.MANUAL_BONUS * 100))}</p>` : res.result === 'win' && S.auto ? `<p class="muted small">🎮 ${t.manualHint(pct(ECON.MANUAL_BONUS * 100))}</p>` : ''}
       ${res.timeout ? `<p class="muted">⏱️ ${t.timeUp}</p>` : ''}
@@ -1018,11 +1135,14 @@ function showStageResult(idx, res) {
         ${hasNext ? `<button class="btn" id="r-next">${t.next}</button>` : ''}
       </div></div>`, box => bindResult(box, idx, nextIdx), { lock: true, onBack: resultBack });
   } else {
-    Sound.play('lose');
+    Sound.play('lose'); LAST_HARD = !!res.hard;
     openModal(`<div class="center">
       <div style="font-size:64px">💔</div>
       <div class="big">${t.defeat}</div>
       ${res.timeout ? `<p class="muted">⏱️ ${t.timeUp}</p>` : ''}
+      ${res.enemyHpLeft > 0 && res.enemyHpLeft <= 0.3 ? `<p class="near-miss">😤 ${t.nearMiss(pct(Math.max(1, Math.round(res.enemyHpLeft * 100))))}</p>` : ''}
+      ${skillLine(res)}
+      ${res.comeback ? `<p class="comeback">💪 ${t.comebackOn(pct(ECON.COMEBACK * 100))}</p>` : ''}
       <p class="muted">${t.defeatTip}</p>
       ${coinHelp()}
       <div class="btns sticky" style="margin-top:14px">
@@ -1048,7 +1168,7 @@ function coinHelp() {
   ].filter(Boolean);
   return rows.length ? `<div class="get-coins"><div class="t">🪙 ${t.getCoins}</div>${rows.join('')}</div>` : '';
 }
-let PICK_ASKED = false;
+let PICK_ASKED = false, LAST_HARD = false;
 function bindResult(box, idx, nextIdx) {
   // After the first win, leaving the result screen first offers the community picker (once per session).
   const leave = (fn) => () => {
@@ -1062,8 +1182,8 @@ function bindResult(box, idx, nextIdx) {
   if (q('#gc-afk')) q('#gc-afk').onclick = async () => { const b = q('#gc-afk'); b.disabled = true; const r = await tryAct({ type: 'afk' }); if (r) { b.textContent = `✓ +🪙 ${n(r.coins)}`; } };
   if (q('#r-map')) q('#r-map').onclick = leave(() => { $('#battle').hidden = true; show('map'); });
   if (q('#r-heroes')) q('#r-heroes').onclick = leave(() => { $('#battle').hidden = true; show('heroes'); });
-  if (q('#r-again')) q('#r-again').onclick = leave(() => startBattle(idx));
-  if (q('#r-next')) q('#r-next').onclick = leave(() => startBattle(nextIdx));
+  if (q('#r-again')) q('#r-again').onclick = leave(() => startBattle(idx, LAST_HARD && ECON.hardOpen(S, idx)));
+  if (q('#r-next')) q('#r-next').onclick = leave(() => startBattle(nextIdx, LAST_HARD));
   // "Show me" on a newly unlocked feature: go straight to it.
   const where = { royal: 'chest', gemChest: 'chest', exchange: 'chest', ai: 'arena', pvp: 'arena', duo: 'lab', trio: 'lab', clan: 'clan', pass: 'pass', war: 'war', raid: 'raid', decks: 'heroes', sets: 'heroes', ach: 'quests' };
   box.querySelectorAll('[data-go]').forEach(b => b.onclick = leave(() => { $('#battle').hidden = true; show(where[b.dataset.go] || 'map'); }));
