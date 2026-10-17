@@ -893,6 +893,14 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     srv.db.users['7201'].tower.run.dead = E.STARTERS.slice(0, 2);
     r = await post('/api/tower/start', { initData: initData(kim) }); assert.deepEqual(r.body.team, E.STARTERS.slice(2), 'fallen cards stay out');
     await post('/api/tower/end', { initData: initData(kim), inputs: [[0, -1]] });
+    // story floor: every 10th floor is a villain (skin over a hero's skills), replayed the same way by the server
+    srv.db.users['7201'].tower.run = { floor: 30, dead: [] };
+    r = await post('/api/tower/me', { initData: initData(kim) }); assert.equal(r.body.tower.villain, 'rug'); assert.equal(r.body.tower.storyFloor, 30);
+    r = await post('/api/tower/start', { initData: initData(kim) }); assert.equal(r.body.opts.villain, 'rug');
+    { const B = E.createBattle(r.body.team, srv.db.users['7201'].profile.owned, r.body.stage, r.body.seed, null, null, null, r.body.opts);
+      assert.equal(B.enemies[1].skin, 'v:rug'); assert.equal(B.enemies[1].boss, true); assert.equal(B.mod, 'toxic', 'villain twist'); }
+    r = await post('/api/tower/end', { initData: initData(kim), inputs: [] }); assert.equal(r.body.villain, 'rug');
+    assert.equal(E.villainAt(100), 'silo'); assert.equal(E.villainAt(110), 'spam', 'the story loops, stronger'); assert.equal(E.villainAt(15), null);
     srv.db.users['7201'].tower.run = { floor: 160, dead: [] };
     r = await post('/api/tower/start', { initData: initData(kim) }); r = await post('/api/tower/end', { initData: initData(kim), inputs: [] });
     assert.equal(r.body.result, 'lose'); assert.equal(r.body.over, true); assert.equal(r.body.tower.run, null);

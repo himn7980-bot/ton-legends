@@ -361,15 +361,43 @@ async function startModeBattle(kind) {
   if (BT) return;
   const t = T(), m = kind === 'challenge' ? { start: 'challenge/start', end: 'challenge/end', tab: 'challenge' } : { start: 'tower/start', end: 'tower/end', tab: 'tower' };
   const r = await tryApi(m.start); if (!r) return;
+  // Story floor: Captain Plane introduces the villain first.
+  if (r.opts && r.opts.villain) await storyIntro(r.opts.villain, r.floor);
+  if (BT) return;
   const team = r.team || S.team, B = createBattle(team, S.owned, r.stage, r.seed, S.faction || null, r.market || null, r.perks || null, r.opts || {});
   BT = { mode: 'mode', kind, modeInfo: m, B, mySide: 'hero', inputs: [], queue: S.auto ? [-1] : [], acc: 0, last: performance.now(), raf: 0, ended: false };
   const W = WORLDS[Math.floor(r.stage / STAGES_PER_WORLD)];
-  buildBattle({ title: kind === 'challenge' ? `🏅 ${t.chTitle} · ${MOD_ICON[r.opts.mod]} ${t.modName[r.opts.mod]}` : `🗼 ${t.towerTitle} · ${t.towerFloor(n(r.floor))}`,
+  buildBattle({ title: kind === 'challenge' ? `🏅 ${t.chTitle} · ${MOD_ICON[r.opts.mod]} ${t.modName[r.opts.mod]}` : `🗼 ${t.towerFloor(n(r.floor))}${r.opts.villain ? ' · 👑 ' + esc(vText(r.opts.villain).name) : ''}`,
     bg: W.bg, scene: { key: W.key, ch: W.chapter }, mine: B.heroes, theirs: B.enemies, showSpeed: true, ...queueControls(), onTap: u => BT.queue.push(u.uid) });
   Sound.music('battle');
   const mineBT = BT; BT.paused = true;
   BFX.intro({ mine: B.heroes, theirs: B.enemies }, () => { if (BT !== mineBT) return; BT.paused = false; BT.last = performance.now(); });
   BT.raf = requestAnimationFrame(loop);
+}
+// ---------- tower story ----------
+const vText = id => (T().villain || {})[id] || { name: id, intro: '', win: '' };
+const chapterOf = floor => ((floor / STORY_EVERY - 1) % TOWER_STORY.length) + 1;
+function storyIntro(id, floor) {
+  const t = T(), v = vText(id);
+  return new Promise(done => openModal(`<div class="story-modal">
+      <div class="st-chap">📖 ${t.storyChapter(n(chapterOf(floor)), n(TOWER_STORY.length))}${floor > STORY_EVERY * TOWER_STORY.length ? ` · ${t.storyRound(n(Math.ceil(floor / (STORY_EVERY * TOWER_STORY.length))))}` : ''}</div>
+      <img class="st-villain" src="${img('v:' + id)}" alt="">
+      <div class="st-name">${esc(v.name)}</div>
+      <div class="st-say"><span class="st-cap">✈️</span><div><b>${t.storyCaptain}</b><p>${v.intro}</p></div></div>
+      <button class="btn wide gold" id="st-go">${t.storyFight}</button></div>`, box => {
+    box.querySelector('#st-go').onclick = () => { closeModal(); done(); };
+  }, { lock: true, onBack: () => { closeModal(); done(); } }));
+}
+// The 10 villains on the tower screen: beaten ones lit, the next one with its floor.
+function storyPanel(W) {
+  const t = T(), all = TOWER_STORY.length, beaten = Math.min(all, W.chapters || 0), next = W.villain;
+  return `<div class="h2">📖 ${t.storyTitle} <span class="muted">${n(beaten)}/${n(all)}</span></div>
+    <div class="panel story-panel">
+      <div class="st-say"><span class="st-cap">✈️</span><div><b>${t.storyCaptain}</b><p class="small">${t.storyPrologue}</p></div></div>
+      <div class="story-chips">${TOWER_STORY.map((id, i) => `<div class="sc ${i < beaten ? 'won' : ''} ${id === next && i >= beaten ? 'next' : ''}" title="${esc(vText(id).name)}">
+        <img src="${img('v:' + id)}" alt="">${i < beaten ? '<b>✓</b>' : ''}<small>${n((i + 1) * STORY_EVERY)}</small></div>`).join('')}</div>
+      ${next ? `<div class="st-next">🎯 ${t.storyNext(n(W.storyFloor), esc(vText(next).name))}</div>` : ''}
+    </div>`;
 }
 async function finishMode() {
   if (!BT || BT.mode !== 'mode') return;
@@ -389,6 +417,7 @@ async function finishMode() {
       ${r.coins ? `<p>🪙 +${n(r.coins)}</p>` : ''}<p class="muted">${r.challenge.rank ? t.chRank(n(r.challenge.rank), n(r.challenge.players)) : ''}</p>
       <button class="btn wide" id="md-ok">${t.ok}</button></div>`
     : `<div class="center"><div style="font-size:56px">${r.result === 'win' ? '🗼' : '💀'}</div><div class="big" style="font-size:24px">${r.result === 'win' ? t.towerCleared(n(r.floor)) : t.towerFell(n(r.floor))}</div>
+      ${r.villain && r.result === 'win' ? `<div class="st-win"><div class="big" style="font-size:20px;color:var(--gold)">🏛️💥 ${t.storyWin}</div><div class="st-say"><span class="st-cap">✈️</span><p>${vText(r.villain).win}</p></div></div>` : ''}
       ${stats}<p>${r.coins ? `🪙 +${n(r.coins)}` : ''}${r.gems ? ` 💎 +${n(r.gems)}` : ''}</p>
       ${r.lost && r.lost.length && !r.over ? `<p class="muted small">${t.towerLost}: ${r.lost.map(id => HERO_BY_ID[id].name).join(', ')}</p>` : ''}
       ${r.over ? `<p class="muted">${t.towerOver(n(r.tower.best))}</p>` : ''}
@@ -430,6 +459,7 @@ async function renderTower() {
       ${dead.length ? `<p class="muted small">💀 ${t.towerDead(n(dead.length))}</p>` : ''}
       <button class="btn wide gold" id="tw-go" ${alive.length ? '' : 'disabled'}>${W.run ? t.towerContinue(n(W.next)) : t.towerStart}</button>
       ${W.run ? `<button class="btn wide ghost" id="tw-reset" style="margin-top:8px">${t.towerReset}</button>` : ''}</div>
+    ${storyPanel(W)}
     <div class="h2">${t.towerBoard} <span class="muted">${W.rank ? '#' + n(W.rank) : ''} · ${t.towerBest(n(W.best))}</span></div>
     <div class="panel board">${rankRows(W.top, x => t.towerFloor(n(x.best))) || `<p class="muted center">${t.boardEmpty}</p>`}</div>`;
   $('#tw-go').onclick = () => startModeBattle('tower');

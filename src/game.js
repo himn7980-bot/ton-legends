@@ -5,11 +5,37 @@ const IMAGES = {/*IMAGES*/};
 const BASE_IMG = {}, FART = {};
 const baseSrc = id => IMAGES[id] || `images/${id}.jpg`;
 function img(id, leader) {
+  if (typeof id === 'string' && id.startsWith('v:')) return villainArt(id);
   const h = HERO_BY_ID[id];
   if (!h || !h.fusion) return baseSrc(id);
   if (Online.state.art && Online.state.art.has(h.num)) return `art/${h.num}?v=${Online.state.art.get(h.num)}`;
   const lead = leader && h.parts.includes(leader) ? leader : S.owned && S.owned[id] ? ECON.leaderOf(S, id) : h.parts[0], off = officialPct(h), key = `${id}:${lead}:${off}`;
   return FART[key] || (FART[key] = drawFusion(h, lead, off)) || baseSrc(lead);
+}
+// Tower story villains (skins 'v:<id>' and minions 'v:<id>:m'): no artwork, so the card is drawn here —
+// the villain's colours, its emblem big in a glow, and its name on a dark band.
+const VART = {};
+const villainName = skin => { const [, id, m] = skin.split(':'), v = (T().villain || {})[id] || {}; return (m ? v.minion : v.name) || id; };
+const unitName = u => (u.skin ? villainName(u.skin) : u.name);
+function villainArt(skin) {
+  if (VART[skin]) return VART[skin];
+  const [, id, m] = skin.split(':'), V = VILLAINS[id]; if (!V) return baseSrc('virus');
+  const c = document.createElement('canvas'); c.width = 300; c.height = 420;
+  const g = c.getContext('2d');
+  const bg = g.createLinearGradient(0, 0, 0, 420); bg.addColorStop(0, V.col[1]); bg.addColorStop(0.55, V.col[0]); bg.addColorStop(1, '#05040a');
+  g.fillStyle = bg; g.fillRect(0, 0, 300, 420);
+  // diagonal "wall" bricks: the Silo Empire's mark
+  g.globalAlpha = 0.12; g.strokeStyle = '#fff'; g.lineWidth = 2;
+  for (let y = 0; y < 420; y += 28) for (let x = (y / 28) % 2 ? -30 : 0; x < 300; x += 60) g.strokeRect(x, y, 60, 28);
+  g.globalAlpha = 1;
+  const glow = g.createRadialGradient(150, 175, 10, 150, 175, 150); glow.addColorStop(0, 'rgba(255,255,255,.55)'); glow.addColorStop(0.35, V.col[1]); glow.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = glow; g.fillRect(0, 0, 300, 360);
+  g.font = `${m ? 130 : 160}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.shadowColor = 'rgba(0,0,0,.7)'; g.shadowBlur = 24; g.fillText(m ? V.mIcon : V.icon, 150, 178); g.shadowBlur = 0;
+  // a red "SILO" seal at the bottom (the name is shown by the card itself)
+  g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, 352, 300, 68); g.fillStyle = V.col[1]; g.fillRect(0, 352, 300, 3);
+  g.font = '900 30px system-ui,sans-serif'; g.fillStyle = m ? 'rgba(255,255,255,.75)' : '#ff4a4a'; g.fillText(m ? '🔒' : '🏛️ SILO', 150, 388);
+  return (VART[skin] = c.toDataURL('image/jpeg', 0.85));
 }
 function preloadBaseImages(done) {
   let left = BASE_HEROES.length;
@@ -774,8 +800,8 @@ function unitCard(u) {
     ${mine ? '<span class="ready">⚡</span>' : ''}${u.boss ? '<span class="crown">👑</span>' : ''}${u.weak ? `<span class="weak-tag">🎯${STATUS_ICON[u.weak]}</span>` : ''}${u.row === 'front' ? '<span class="row-tag">🛡️</span>' : ''}
     <span class="orbit"><span class="ring"><i></i><i></i><i></i><i></i></span></span><span class="sheen" style="--sd:${(u.uid * 0.77) % 5}s"></span>
     ${mine ? '<span class="pring"></span>' : '<span class="aim">🎯</span>'}
-    <img src="${img(u.id)}" alt=""><div class="status"></div>
-    <div class="hc-name ${u.name.length > 12 ? 'long' : ''}">${u.name}</div><div class="bar hp ${mine ? 'h' : ''}"><i></i><i class="sh" style="width:0"></i></div><div class="bar en"><i></i></div></div>`;
+    <img src="${img(u.skin || u.id)}" alt=""><div class="status"></div>
+    <div class="hc-name ${unitName(u).length > 12 ? 'long' : ''}">${esc(unitName(u))}</div><div class="bar hp ${mine ? 'h' : ''}"><i></i><i class="sh" style="width:0"></i></div><div class="bar en"><i></i></div></div>`;
 }
 
 // Draws the battle screen for the current BT. mine = my cards (bottom), theirs = opponent cards (top).
@@ -872,7 +898,7 @@ const queueControls = () => ({ onAuto: on => BT.queue.push(on ? -1 : -2), onUlt:
 function bossIntro(boss) {
   if (!boss || !BT) return;
   const d = document.createElement('div'); d.className = 'boss-intro';
-  d.innerHTML = `<img src="${img(boss.id)}" alt=""><div class="bi-tag">👑 ${T().bossWord}</div><div class="bi-name">${esc(boss.name)}</div>${boss.weak ? `<div class="bi-weak">🎯 ${T().st[boss.weak]}</div>` : ''}`;
+  d.innerHTML = `<img src="${img(boss.skin || boss.id)}" alt=""><div class="bi-tag">👑 ${T().bossWord}</div><div class="bi-name">${esc(unitName(boss))}</div>${boss.weak ? `<div class="bi-weak">🎯 ${T().st[boss.weak]}</div>` : ''}`;
   $('#battle').appendChild(d); BT.paused = true; haptic('heavy'); Sound.play('boss');
   const mine = BT;
   setTimeout(() => { d.classList.add('out'); if (BT === mine) { BT.paused = false; BT.last = performance.now(); } setTimeout(() => d.remove(), 400); }, 1700);
@@ -1057,7 +1083,8 @@ function processEvents() {
         const enemy = !mineUid.has(ev.uid);
         Sound.play('skill');
         if (e) { anim(e.root, 'casting'); const bx = $('#battle').getBoundingClientRect(), r = e.root.getBoundingClientRect(); Scene.burst(r.left - bx.left + r.width / 2, r.top - bx.top + r.height / 2, enemy ? '#ff4a4a' : SKILL_COLORS[ev.id] || '#ffd85a'); }
-        $('#b-banner').innerHTML = `<div class="banner ${enemy ? 'enemy' : ''}"><img src="${img(ev.id)}" alt=""><div><div class="s">${heroText(ev.id).skill}</div><div class="n">${HERO_BY_ID[ev.id].name}</div></div></div>`;
+        const su = allUnits().find(x => x.uid === ev.uid), vs = su && su.skin, vt = vs && (T().villain || {})[vs.split(':')[1]];
+        $('#b-banner').innerHTML = `<div class="banner ${enemy ? 'enemy' : ''}"><img src="${img(vs || ev.id)}" alt=""><div><div class="s">${vt ? vt.skill : heroText(ev.id).skill}</div><div class="n">${esc(vs ? villainName(vs) : HERO_BY_ID[ev.id].name)}</div></div></div>`;
         flashScreen(enemy ? '#ff2a2a' : SKILL_COLORS[ev.id]);
         break;
       }

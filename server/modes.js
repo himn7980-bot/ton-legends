@@ -9,9 +9,10 @@ const E = require('../src/engine.js');
 const ECON = require('../src/economy.js');
 
 const CH_TRIES = 3, CH_MULT = 1.1, CH_PRIZES = [30, 20, 10], MOD_ORDER = ['glass', 'toxic', 'swift', 'noult'];
-const TW_MILESTONE = 10, TW_MILESTONE_GEMS = 10;
+const TW_MILESTONE = 10, TW_MILESTONE_GEMS = 10, STORY_MULT = 1.1;
 const towerStage = floor => Math.min(E.TOTAL_STAGES - 1, (floor - 1) * 2);
-const towerMult = floor => (floor > 100 ? Math.pow(1.08, floor - 100) : 1);
+// Story floors (every 10th) are a villain fight, a little stronger than the floors around them.
+const towerMult = floor => (floor > 100 ? Math.pow(1.08, floor - 100) : 1) * (E.villainAt(floor) ? STORY_MULT : 1);
 const dayNo = d => Math.floor(Date.parse(d) / 864e5);
 const seedOf = d => crypto.createHash('sha256').update('gl-challenge:' + d).digest().readUInt32BE(0);
 // Score of one attempt (higher is better).
@@ -53,7 +54,8 @@ module.exports = function createModes({ db, persist, credit, profileOut, ctxFor 
   function tower(u) { u.tower = u.tower || { run: null, best: 0, ms: 0 }; return u.tower; }
   function towerView(u) {
     const T = tower(u), all = Object.values(db.users).filter(x => x.tower && x.tower.best > 0).sort((a, b) => b.tower.best - a.tower.best);
-    return { run: T.run, best: T.best, next: T.run ? T.run.floor : 1, stage: towerStage(T.run ? T.run.floor : 1), mult: towerMult(T.run ? T.run.floor : 1),
+    const next = T.run ? T.run.floor : 1, story = Math.ceil(next / E.STORY_EVERY) * E.STORY_EVERY;
+    return { run: T.run, best: T.best, next, storyFloor: story, villain: E.villainAt(story), chapters: Math.floor(T.best / E.STORY_EVERY), stage: towerStage(T.run ? T.run.floor : 1), mult: towerMult(T.run ? T.run.floor : 1),
       milestone: TW_MILESTONE, milestoneGems: TW_MILESTONE_GEMS, rank: all.findIndex(x => x.id === u.id) + 1 || null,
       top: all.slice(0, 20).map(x => ({ name: x.name || 'Player', av: ECON.avatarOf(x.profile), best: x.tower.best, me: x.id === u.id })) };
   }
@@ -97,7 +99,7 @@ module.exports = function createModes({ db, persist, credit, profileOut, ctxFor 
       if (!T.run) T.run = { floor: 1, dead: [] };
       const team = p.team.filter(id => !T.run.dead.includes(id));
       if (!team.length) fail('tower_dead');
-      const floor = T.run.floor, b = battle(u, p, team), opts = { enemyMult: towerMult(floor), goblin: false };
+      const floor = T.run.floor, b = battle(u, p, team), opts = { enemyMult: towerMult(floor), goblin: false, ...(E.villainAt(floor) ? { villain: E.villainAt(floor) } : {}) };
       u.twPending = { floor, seed: crypto.randomInt(2 ** 32), stage: towerStage(floor), opts, ...b, at: Date.now() };
       persist();
       return { seed: u.twPending.seed, stage: u.twPending.stage, team, opts, market: b.market, perks: b.perks, floor };
@@ -119,7 +121,7 @@ module.exports = function createModes({ db, persist, credit, profileOut, ctxFor 
       } else { over = true; T.run = null; }
       p.coins += coins; p.gems += gems;
       persist();
-      return { result: r.result, floor: pd.floor, coins, gems, over, lost: r.lost, perfects: r.perfects, maxChain: r.maxChain, tower: towerView(u), profile: profileOut(u) };
+      return { result: r.result, floor: pd.floor, villain: pd.opts.villain || null, coins, gems, over, lost: r.lost, perfects: r.perfects, maxChain: r.maxChain, tower: towerView(u), profile: profileOut(u) };
     },
     'POST /api/tower/reset': (body, u) => { tower(u).run = null; persist(); return { tower: towerView(u) }; },
   };

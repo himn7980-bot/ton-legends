@@ -155,7 +155,23 @@ const CALIBRATED_FROM = 20;
 // Per-stage difficulty factor (worlds 3–20), calibrated by tools/calibrate.js against several reference teams so
 // the level a stage needs rises smoothly: a little easier at a world's start, a bump for the boss.
 const STAGE_K = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1.885, 2.112, 1.719, 1.39, 1.675, 1.008, 1.144, 1.295, 0.995, 1.273, 2.205, 1.726, 2.099, 1.826, 1.571, 1.417, 1.329, 1.335, 1.276, 1.528, 1.895, 2.173, 2.542, 1.399, 1.477, 1.275, 1.219, 1.14, 1.057, 1.249, 2.298, 2.724, 2.432, 1.536, 1.91, 1.609, 1.396, 1.421, 1.4, 1.304, 2.673, 2.922, 2.333, 2.024, 2.182, 1.582, 1.809, 1.745, 1.502, 1.533, 2.049, 2.078, 2.538, 1.927, 1.674, 1.704, 1.57, 1.589, 1.427, 1.547, 4.695, 4.214, 2.381, 2.246, 3.287, 1.742, 1.918, 1.974, 1.599, 2.362, 2.394, 2.006, 2.204, 1.714, 1.898, 1.453, 1.436, 1.449, 1.298, 1.329, 3.071, 2.497, 2.246, 2.118, 1.964, 1.515, 1.605, 1.647, 1.386, 1.87, 2.434, 2.52, 2.841, 2.088, 2.066, 2.03, 1.932, 1.759, 1.693, 1.735, 2.821, 2.307, 2.145, 2.043, 1.789, 1.338, 1.662, 1.586, 1.255, 1.835, 4.481, 2.778, 3.449, 3.574, 2.58, 2.288, 2.738, 2.187, 1.945, 2.687, 2.294, 3.454, 2.518, 1.851, 2.069, 1.635, 1.467, 1.634, 1.448, 1.652, 2.983, 3.439, 3.28, 2.208, 2.526, 1.786, 1.807, 1.971, 1.601, 1.782, 2.633, 3.005, 2.757, 2.365, 2.339, 2.006, 1.928, 2.043, 1.858, 1.754, 2.834, 2.741, 2.739, 2.133, 2.246, 2.023, 1.728, 1.859, 1.785, 1.856, 4.565, 4.237, 4.394, 3.61, 3.334, 2.668, 2.632, 2.739, 2.461, 2.821, 3.244, 3.056, 2.15, 2.106, 2.354, 1.725, 1.859, 1.833, 1.551, 1.907];
-function stageEnemies(idx) {
+// Tower story: every 10th floor is a villain of the Silo Empire (parody rivals of the free network). A villain fights
+// with a hero's skill set (base) under its own face (skin), flanked by two minions; its twist is a battle rule (mod).
+const VILLAINS = {
+  spam:    { base: 'virus',    weak: 'stun',   mod: null,     minion: 'egor',     icon: '🤖', mIcon: '📨', col: ['#1d2333', '#5d6b86'] },
+  gas:     { base: 'pinkbull', weak: 'freeze', mod: 'swift',  minion: 'dog',      icon: '⛽', mIcon: '🧾', col: ['#3a1a0a', '#b5651d'] },
+  rug:     { base: 'paws',     weak: 'slow',   mod: 'toxic',  minion: 'gramcat',  icon: '🐀', mIcon: '🪙', col: ['#2a1630', '#8a4fa8'] },
+  pump:    { base: 'volya',    weak: 'vuln',   mod: 'glass',  minion: 'memegram', icon: '📈', mIcon: '📣', col: ['#0f2a16', '#2fa84f'] },
+  bitcorn: { base: 'notcoin',  weak: 'poison', mod: null,     minion: 'egor',     icon: '🌽', mIcon: '⛏️', col: ['#3a2200', '#f7931a'] },
+  hydra:   { base: 'yoda',     weak: 'stun',   mod: 'toxic',  minion: 'virus',    icon: '🐉', mIcon: '💨', col: ['#14143a', '#6f7bd8'] },
+  bubble:  { base: 'teddy',    weak: 'vuln',   mod: 'noult',  minion: 'pengu',    icon: '💬', mIcon: '✔️', col: ['#06301e', '#25d366'] },
+  eye:     { base: 'pengu',    weak: 'poison', mod: 'swift',  minion: 'utya',     icon: '👁️', mIcon: '🍪', col: ['#101a33', '#3b82f6'] },
+  meta:    { base: 'noctis',   weak: 'freeze', mod: 'glass',  minion: 'paws',     icon: '🥽', mIcon: '🕶️', col: ['#0b1030', '#4f6cff'] },
+  silo:    { base: 'volya',    weak: 'slow',   mod: 'noult',  minion: 'notcoin',  icon: '🏛️', mIcon: '🔒', col: ['#1a1a1a', '#9a9a9a'] },
+};
+const TOWER_STORY = Object.keys(VILLAINS), STORY_EVERY = 10;
+const villainAt = floor => (floor > 0 && floor % STORY_EVERY === 0 ? TOWER_STORY[(floor / STORY_EVERY - 1) % TOWER_STORY.length] : null);
+function stageEnemies(idx, villain = null) {
   const w = WORLDS[Math.floor(idx / STAGES_PER_WORLD)], local = idx % STAGES_PER_WORLD;
   // Difficulty follows the level a team of five non-fusion cards needs: ~5 at stage 20, ~45 at stage 100, ~95 at stage 200.
   // The per-stage factor (tools/calibrate.js) evens out how strong each stage's line-up is.
@@ -168,6 +184,11 @@ function stageEnemies(idx) {
     return { id, role: HERO_BY_ID[id].role, name: HERO_BY_ID[id].name, boss: !!boss, weak: boss ? w.weak : null,
       hp: b.hp * ENEMY_HP * sc * hpM, atk: b.atk * ENEMY_ATK * sc * atkM * (r.spd / 1.3), spd: r.spd };
   };
+  const V = villain && VILLAINS[villain];
+  if (V) {
+    const boss = card(V.base, true), m = i => ({ ...card(V.minion), skin: 'v:' + villain + ':m', name: '' });
+    return [m(0), { ...boss, skin: 'v:' + villain, name: '', weak: V.weak }, m(1)];
+  }
   if (local === STAGES_PER_WORLD - 1) return [card(w.foes[0]), card(w.boss, true), card(w.foes[1])];
   const n = Math.min(5, 2 + Math.floor(local / 2.5));
   return Array.from({ length: n }, (_, i) => card(w.foes[(i + local) % w.foes.length]));
@@ -187,7 +208,7 @@ function mulberry32(a) {
 }
 function makeUnit(B, side, o) {
   return {
-    uid: B.nextUid++, side, id: o.id, name: o.name, role: o.role, boss: !!o.boss, weak: o.weak || null, row: o.row || 'front',
+    uid: B.nextUid++, side, id: o.id, skin: o.skin || null, name: o.name, role: o.role, boss: !!o.boss, weak: o.weak || null, row: o.row || 'front',
     maxHp: Math.round(o.hp), hp: Math.round(o.hp), atk: o.atk, spd: o.spd,
     timer: B.rng() * o.spd * 0.6, energy: side === 'hero' || B.pvp ? 20 : 0, shield: 0, fx: {}, alive: true,
     bossCd: 7, poisonNext: 0, shieldUntil: 0, skillK: 1,
@@ -271,8 +292,10 @@ function createBattle(team, levels, idx, seed = (Math.random() * 2 ** 32) >>> 0,
   B.idx = idx;
   B.heroes = teamUnits(B, 'hero', team, levels, faction, market, perks);
   const em = opts.enemyMult || 1;
-  B.enemies = stageEnemies(idx).map((e, i) => makeUnit(B, 'enemy', { ...e, hp: e.hp * em, atk: e.atk * em, row: rowOf(i) }));
-  if (opts.mod && MODS[opts.mod]) applyMod(B, opts.mod);
+  const V = opts.villain && VILLAINS[opts.villain] ? opts.villain : null;
+  B.enemies = stageEnemies(idx, V).map((e, i) => makeUnit(B, 'enemy', { ...e, hp: e.hp * em, atk: e.atk * em, row: rowOf(i) }));
+  const mod = opts.mod || (V && VILLAINS[V].mod);
+  if (mod && MODS[mod]) applyMod(B, mod);
   // The goblin uses its own dice so the fight itself stays the same with or without it.
   const g = mulberry32((seed ^ 0x9e3779b9) >>> 0);
   if (opts.goblin !== false && idx >= 1 && idx % STAGES_PER_WORLD !== STAGES_PER_WORLD - 1 && g() < GOBLIN_CHANCE) B.goblin = { at: +(6 + g() * 14).toFixed(2), dur: GOBLIN_FOR, gem: g() < 0.25, caught: false, shown: false };
@@ -552,5 +575,5 @@ function replayStage(team, levels, idx, seed, inputs, faction = null, market = n
 if (typeof module !== 'undefined') {
   module.exports = { RARITY, ROLES, HEROES, BASE_HEROES, FUSIONS, FUSION_RULES, fusionStartLevel, TEAM_MAX_FUSIONS, TEAM_MAX_TRIOS, teamError, duosWithin, ENRAGE_AT, LEGACY_FUSION_IDS, HERO_BY_ID, STARTERS, WORLDS, TOTAL_STAGES, STAGES_PER_WORLD, MAX_LEVEL, COIN_BONUS, TICK,
     PERFECT_FROM, PERFECT_TO, PERFECT_MULT, CHAIN_GAP, CHAIN_STEP, CHAIN_MAX, EXPOSE_EVERY, EXPOSE_AT, EXPOSE_FOR, EXPOSE_MULT, exposed, AIM_MULT, GOBLIN_CHANCE, goblinUp, MODS, RAID_ENRAGE_ATK,
-    RAID_TIME, FUSION_ADJ, createRaid, replayRaid, SYNERGIES, deckSynergies, STAGE_K, CALIBRATED_FROM, FACTION_BONUS, FACTION_FUSION_BONUS, factionMult, marketMult, BOSS_WEAK, WEAK_BY, heroStats, upgradeCost, stageReward, stageEnemies, createBattle, createPvpBattle, step, castSkill, castUlt, applyInput, replayStage };
+    RAID_TIME, FUSION_ADJ, VILLAINS, TOWER_STORY, STORY_EVERY, villainAt, createRaid, replayRaid, SYNERGIES, deckSynergies, STAGE_K, CALIBRATED_FROM, FACTION_BONUS, FACTION_FUSION_BONUS, factionMult, marketMult, BOSS_WEAK, WEAK_BY, heroStats, upgradeCost, stageReward, stageEnemies, createBattle, createPvpBattle, step, castSkill, castUlt, applyInput, replayStage };
 }
