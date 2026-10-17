@@ -16,10 +16,19 @@ services:
         sync: false
       - key: ADMIN_IDS
         sync: false
-      # Community Fund: share of Stars purchases recorded for each community's token buyback (only spent after an agreement)
+      # Partner Pool: after an official agreement with a community's project, BUYBACK_PCT% of the net revenue
+      # (FUND_NET_PCT% of the Stars, after store/Telegram fees) from that community's purchases goes into its pool
       - key: BUYBACK_PCT
         value: "40"
+      - key: FUND_NET_PCT
+        value: "70"
       - key: FUND_WALLET
+        sync: false
+      # Rewarded ads (Adsgram): block id, and the secret used in the reward URL set in the Adsgram dashboard:
+      #   https://<your-app>/api/ads/reward?userid=[userId]&secret=<ADS_SECRET>
+      - key: ADSGRAM_BLOCK_ID
+        sync: false
+      - key: ADS_SECRET
         sync: false
       # The game's own channel (@name). New players must join it first (welcome reward). The bot must be an admin there.
       - key: GAME_CHANNEL
@@ -30,7 +39,7 @@ services:
       # Save the database at most every N ms (whole-file JSON writes)
       - key: SAVE_MS
         value: "3000"
-      # Market mood: hero=coingecko-id:SYMBOL for heroes whose token price drives their card (others use community activity)
+      # Market mood: hero=coingecko-id:SYMBOL for heroes whose token price sets their mood/dip bonus (others use community activity)
       - key: MARKET_TOKENS
         value: notcoin=notcoin:NOT,dog=dogs-2:DOGS
       # Fusion art generation (/gen in the bot): API key from dev.runwayml.com

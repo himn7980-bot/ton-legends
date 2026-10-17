@@ -8,12 +8,15 @@
 //   captain      — last week's top member picks this week's battle cry (gold / might / rally)
 //   prediction   — guess the weekly winner during the first days; right guesses earn gems
 // When the week ends, members of the top communities who helped (MIN_POINTS+) claim a reward.
+// The weekly race is decided by the SCORE: points per active member (members with MIN_POINTS+ this week, counted
+// as at least ACTIVE_FLOOR), so a small, busy community can beat a huge one. Raw points still feed the all-time
+// milestones.
 const fs = require('fs'), path = require('path');
 const E = require('../src/engine.js');
 const ECON = require('../src/economy.js');
 
 const C = ECON.COMMUNITY;
-const MIN_POINTS = 10;
+const MIN_POINTS = 10, ACTIVE_FLOOR = 5;
 const REWARDS = [{ gems: 30, coins: 5000 }, { gems: 15, coins: 3000 }, { gems: 8, coins: 1500 }];
 const REWARD_REST = { gems: 3, coins: 500 };
 const FACTIONS = E.BASE_HEROES.map(h => h.id);
@@ -50,6 +53,15 @@ module.exports = function createWar({ db, persist, weekKey, shareDir, profileOut
 
   const today = () => ECON.day(Date.now());
   const sorted = pts => [...FACTIONS].sort((a, b) => (pts[b] || 0) - (pts[a] || 0));
+  // Active members per community this week (MIN_POINTS+), and the score = points / max(ACTIVE_FLOOR, active).
+  function activeNow() {
+    const out = {};
+    for (const u of Object.values(db.users)) if (u.war && u.war.week === W.week && u.war.f && u.war.pts >= MIN_POINTS) out[u.war.f] = (out[u.war.f] || 0) + 1;
+    return out;
+  }
+  let actCache = {}, actAt = 0;
+  const active = () => { if (Date.now() - actAt > 30e3) { actCache = activeNow(); actAt = Date.now(); } return actCache; };
+  const scoresOf = (pts, act) => Object.fromEntries(FACTIONS.map(f => [f, Math.round((pts[f] || 0) * 10 / Math.max(ACTIVE_FLOOR, act[f] || 0)) / 10]));
   // Live owner of each world: the community with the most points there (at least TERRITORY_MIN; ties hold nothing).
   function owners(terr = W.terr) {
     const out = {};
@@ -64,8 +76,8 @@ module.exports = function createWar({ db, persist, weekKey, shareDir, profileOut
   function roll() {
     const wk = weekKey();
     if (W.week === wk) return;
-    const pts = W.points || {}, rank = sorted(pts);
-    const derbyWinners = Object.entries(W.derby).filter(([a, b]) => (pts[a] || 0) > (pts[b] || 0)).map(([a]) => a);
+    const pts = W.points || {}, act = activeNow(), scores = scoresOf(pts, act), rank = sorted(scores);
+    const derbyWinners = Object.entries(W.derby).filter(([a, b]) => (scores[a] || 0) > (scores[b] || 0)).map(([a]) => a);
     // Next week's captains: each community's top member of the week that just ended.
     const captains = {};
     for (const u of Object.values(db.users)) {
@@ -73,7 +85,8 @@ module.exports = function createWar({ db, persist, weekKey, shareDir, profileOut
       if (!f || !u.war || u.war.week !== W.week || u.war.pts < MIN_POINTS) continue;
       if (!captains[f] || u.war.pts > captains[f].pts) captains[f] = { uid: u.id, name: u.name, pts: u.war.pts };
     }
-    W.last = { week: W.week, points: pts, rank, owners: owners(), derby: W.derby, derbyWinners };
+    W.last = { week: W.week, points: pts, scores, active: act, rank, owners: owners(), derby: W.derby, derbyWinners };
+    actAt = 0;
     W.week = wk; W.points = {}; W.terr = {}; W.cries = {}; W.captains = captains;
     W.derby = pairUp(rank);
     persist();
@@ -153,22 +166,22 @@ module.exports = function createWar({ db, persist, weekKey, shareDir, profileOut
     const reward = { gems: (eligible ? base.gems + (derbyWon ? C.DERBY_WIN_GEMS : 0) : 0) + (predictOk ? C.PREDICT_GEMS : 0), coins: eligible ? base.coins : 0 };
     return { week: last.week, place, myPts, eligible, derbyWon, rival: f && last.derby ? last.derby[f] : null, predictOk, predicted: u.pred && u.pred.week === last.week ? u.pred.f : null,
       reward, claimed: u.warClaimed === last.week, claimable: (eligible || predictOk) && u.warClaimed !== last.week,
-      top: last.rank.slice(0, 3).map(id => ({ id, pts: last.points[id] || 0 })) };
+      top: last.rank.slice(0, 3).map(id => ({ id, pts: last.points[id] || 0, score: last.scores ? last.scores[id] || 0 : last.points[id] || 0 })) };
   }
 
   function view(u) {
-    const p = u.profile, f = p && p.faction, w = p ? userWar(u) : { pts: 0 }, m = members(), pts = W.points, d = today();
+    const p = u.profile, f = p && p.faction, w = p ? userWar(u) : { pts: 0 }, m = members(), pts = W.points, d = today(), act = active(), sc = scoresOf(pts, act);
     const own = owners();
     const terr = {};
     for (let wi = 0; wi < WORLDS; wi++) { const t = W.terr[wi] || {}, r = sorted(t).filter(x => t[x]).slice(0, 2); terr[wi] = r.map(id => ({ id, pts: t[id] })); }
     const total = f ? W.total[f] || 0 : 0, tier = tierOf(total);
     const cap = f ? W.captains[f] || null : null;
     return {
-      week: W.week, endsAt: weekEnd(), min: MIN_POINTS, rewards: REWARDS, rest: REWARD_REST,
-      standings: sorted(pts).map(id => ({ id, pts: pts[id] || 0, members: m[id] || 0, worlds: Object.values(own).filter(x => x === id).length })),
+      week: W.week, endsAt: weekEnd(), min: MIN_POINTS, floor: ACTIVE_FLOOR, rewards: REWARDS, rest: REWARD_REST,
+      standings: sorted(sc).map(id => ({ id, score: sc[id], pts: pts[id] || 0, active: act[id] || 0, members: m[id] || 0, worlds: Object.values(own).filter(x => x === id).length })),
       mine: { pts: w.pts, double: !!(f && hasOwnCard(p)) },
       owners: own, terr,
-      derby: f ? { rival: W.derby[f], me: pts[f] || 0, them: pts[W.derby[f]] || 0 } : null,
+      derby: f ? { rival: W.derby[f], me: sc[f] || 0, them: sc[W.derby[f]] || 0 } : null,
       goal: f ? { target: goalTarget(f), progress: (W.goals[d] || {})[f] || 0, helped: u.goalDay === d, claimed: u.goalClaimed === d } : null,
       milestone: f ? { total, tier, next: C.MILESTONES[tier] || null } : null,
       captain: cap ? { name: cap.name, pts: cap.pts, me: cap.uid === u.id } : null, cry: cryOf(f), cryChosen: !!(f && W.cries[f]),

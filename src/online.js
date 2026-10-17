@@ -43,7 +43,7 @@ const Online = (() => {
     if (!tg()) return state;
     try {
       const h = await call('health');
-      state.server = !!h.ok; state.bot = h.bot || null; state.packs = h.packs || []; state.mint = h.mint || {}; state.art = new Map(Object.entries(h.art || {}).map(([k, v]) => [+k, v])); state.market = h.market || null; state.alliances = h.alliances || [];
+      state.server = !!h.ok; state.bot = h.bot || null; state.packs = h.packs || []; state.starter = h.starter || null; state.club = h.club || null; state.ads = h.ads || null; state.mint = h.mint || {}; state.art = new Map(Object.entries(h.art || {}).map(([k, v]) => [+k, v])); state.market = h.market || null; state.alliances = h.alliances || [];
     } catch (e) { state.server = false; }
     return state;
   }
@@ -60,7 +60,7 @@ const Online = (() => {
   async function leaderboard() { if (!state.server) return null; try { return await call('leaderboard', {}); } catch (e) { return null; } }
   async function claim() { if (!state.server) return { coins: 0 }; try { return await call('claim', {}); } catch (e) { return { coins: 0 }; } }
   // Server-authoritative economy: the server profile replaces the local one while online.
-  async function loadProfile(local) { const r = await call('profile', { local }); state.profile = true; state.notify = r.notify !== false; state.channel = r.channel || null; return r.profile; }
+  async function loadProfile(local) { const r = await call('profile', { local }); state.profile = true; state.notify = r.notify !== false; state.askNotify = !!r.askNotify; state.channel = r.channel || null; return r.profile; }
   const act = action => call('act', { action });
   // Arena (PvP): matchmaking/room calls, plus a live event stream for the duel.
   const pvp = (op, body) => call('pvp/' + op, body || {});

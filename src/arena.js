@@ -1,5 +1,5 @@
-// Gram Legends — PvP arena: pick a stake, find an opponent or challenge a friend, then fight live.
-// The server holds both stakes, runs the fight and pays the pot; this file only shows it and sends taps.
+// Gram Legends — PvP arena: pick an entry fee, find an opponent or challenge a friend, then fight live.
+// The server holds both entries, runs the fight and pays the prize; this file only shows it and sends taps.
 const STAKES = [100, 500, 1000, 5000, 10000];
 const PVP_STATUS = ['freeze', 'stun', 'slow', 'poison', 'vuln', 'weak', 'buff', 'dodge']; // same bit order as the server
 const ARENA_BG = 'radial-gradient(circle at 50% 35%, #3b1d6e 0, #120a2e 55%, #05040f 100%)';
@@ -26,24 +26,24 @@ function renderArena() {
       ${!isOpen('ai') ? lockNote('ai') : `<div class="ai-levels">${Object.keys(ECON.AI_LEVELS).map(lv => { const r = ECON.aiReward(S, lv);
         return `<button class="btn ${lv === 'hard' ? 'gem' : lv === 'normal' ? 'gold' : ''}" data-ai="${lv}" ${S.team.length ? '' : 'disabled'}>${t.aiLv[lv]}<small>🪙 ${n(r.coins)}${r.gems ? ` +💎${n(r.gems)}` : ''}</small></button>`; }).join('')}</div>`}</div>
     <div class="h2">${t.arenaTitle}</div>
-    <div id="lg-box"></div>
+    ${!isOpen('pvp') ? `<div class="panel">${lockNote('pvp')}<p class="muted small" style="margin:6px 0 0">${t.arenaNote}</p></div>` : `<div id="lg-box"></div>
     <p class="muted">${t.arenaNote} <b style="color:var(--gem)">+💎 ${n(2)}</b></p>
     <div class="panel">
-      <div class="row"><div class="t">${t.stake}</div><span class="tag gold">${t.pot(n(S.stake * 2))}</span></div>
+      <div class="row"><div class="t">${t.stake}</div><span class="tag gold">${t.pot(n(ECON.pvpPrize(S.stake)))}</span></div>
       <div class="stakes">${STAKES.map(v => `<button class="chip ${v === S.stake ? 'on' : ''}" data-stake="${v}" ${S.coins < v ? 'disabled' : ''}>🪙 ${n(v)}</button>`).join('')}</div>
       ${deckSwitcher()}
       <div class="row"><span class="muted">${t.yourTeam(n(teamPower(S.team)))}</span><button class="tag" id="pv-team">${t.editTeam}</button></div>
       <div class="mini-team">${[0, 1, 2, 3, 4].map(i => S.team[i] ? `<img src="${img(S.team[i])}" alt="">` : '<div class="empty"></div>').join('')}</div>
-      ${!isOpen('pvp') ? lockNote('pvp') : `<button class="btn wide gold" id="pv-find" ${S.coins < S.stake || !S.team.length ? 'disabled' : ''}>${t.findOpp}</button>
-      <button class="btn wide" id="pv-room" style="margin-top:12px" ${S.coins < S.stake || !S.team.length ? 'disabled' : ''}>${t.challenge}</button>`}
-    </div>
+      <button class="btn wide gold" id="pv-find" ${S.coins < S.stake || !S.team.length ? 'disabled' : ''}>${t.findOpp}</button>
+      <button class="btn wide" id="pv-room" style="margin-top:12px" ${S.coins < S.stake || !S.team.length ? 'disabled' : ''}>${t.challenge}</button>
+    </div>`}
     <div class="panel"><div class="t">${t.haveCode}</div>
       <div class="code-row"><input id="pv-code" maxlength="6" placeholder="${t.codePh}" autocomplete="off" autocapitalize="characters"><button class="btn" id="pv-join">${t.join}</button></div></div>
-    <p class="muted center">${t.record(n(S.stats.pvpWins || 0), n(S.stats.pvpLosses || 0))}</p>
-    <p class="muted small">${t.arenaRules}</p>`;
-  leaguePanel($('#lg-box'));
+    ${isOpen('pvp') ? `<p class="muted center">${t.record(n(S.stats.pvpWins || 0), n(S.stats.pvpLosses || 0))}</p>
+    <p class="muted small">${t.arenaRules}</p>` : ''}`;
+  if ($('#lg-box')) leaguePanel($('#lg-box'));
   document.querySelectorAll('[data-stake]').forEach(b => b.onclick = () => { S.stake = +b.dataset.stake; save(); renderArena(); });
-  $('#pv-team').onclick = () => show('heroes');
+  if ($('#pv-team')) $('#pv-team').onclick = () => show('heroes');
   document.querySelectorAll('[data-ai]').forEach(b => b.onclick = () => startAi(b.dataset.ai));
   if ($('#pv-find')) { $('#pv-find').onclick = () => arenaOpen('find'); $('#pv-room').onclick = () => arenaOpen('room'); }
   $('#pv-join').onclick = () => { const c = $('#pv-code').value.trim().toUpperCase(); if (c) arenaJoinPrompt(c); };
@@ -69,7 +69,7 @@ async function arenaJoinPrompt(code) {
   try { info = await Online.pvp('peek', { code }); } catch (e) { return toast(errText(e)); }
   openModal(`<div class="center"><div style="font-size:54px">⚔️</div>
     <div class="big" style="font-size:22px">${t.challengedBy(esc(info.host))}</div>
-    <p><span class="tag gold">${t.stake}: 🪙 ${n(info.stake)}</span> <span class="tag gold">${t.pot(n(info.stake * 2))}</span></p>
+    <p><span class="tag gold">${t.stake}: 🪙 ${n(info.stake)}</span> <span class="tag gold">${t.pot(n(ECON.pvpPrize(info.stake)))}</span></p>
     <p class="muted">${t.theirPower(n(info.power))} · ${t.yourTeam(n(teamPower(S.team)))}</p>
     <div class="btns"><button class="btn ghost" id="dj-no">${t.decline}</button><button class="btn gold" id="dj-yes" ${S.coins < info.stake ? 'disabled' : ''}>${t.accept}</button></div>
     ${S.coins < info.stake ? `<p class="muted">${t.err.no_coins}</p>` : ''}</div>`, box => {
@@ -109,7 +109,7 @@ function showWaiting() {
   openModal(`<div class="center">
     <div class="spinner"></div>
     <div class="big" style="font-size:22px">${PV.code ? t.waitingFriend : t.searching}</div>
-    <p><span class="tag gold">${t.stake}: 🪙 ${n(PV.stake)}</span> <span class="tag gold">${t.pot(n(PV.stake * 2))}</span></p>
+    <p><span class="tag gold">${t.stake}: 🪙 ${n(PV.stake)}</span> <span class="tag gold">${t.pot(n(ECON.pvpPrize(PV.stake)))}</span></p>
     ${PV.code || !isOpen('ai') ? '' : `<button class="btn wide gem" id="pv-ai" style="margin:8px 0" hidden>${t.aiInstead}</button>`}
     ${PV.code ? `<div class="muted">${t.inviteCode}</div><div class="duel-code">${PV.code}</div>
       <button class="btn wide gold" id="pv-share">${t.sendDuel}</button>` : ''}

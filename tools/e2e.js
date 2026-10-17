@@ -58,7 +58,7 @@ const tgScript = (user, startParam) => `
   }
   const ECON = require('../src/economy.js');
   const serverProfile = uid => srv.db.users[String(uid)].profile;
-  // help → community picker → daily reward (the last one appears ~0.4 s after the picker closes)
+  // help → daily reward (the community picker comes after the first win)
   const dismiss = async p => { for (let i = 0; i < 6; i++) { await p.waitForTimeout(500); if (await p.$('#modal:not([hidden])')) await p.click('#m-close'); } };
 
   // ---- player 1: profile, verified stage wins, purchase ----
@@ -72,7 +72,10 @@ const tgScript = (user, startParam) => `
   await p1.screenshot({ path: OUT + '/m1-ticker.png' });
   await p1.click('#ticker'); await p1.waitForSelector('#mk-ok'); await p1.screenshot({ path: OUT + '/m2-market.png' }); await p1.click('#mk-ok');
   await p1.evaluate(() => { S.auto = true; S.speed = 3; S.tutDone = true; save(); });
-  for (let i = 0; i < 2; i++) { await p1.click('#go'); await p1.waitForSelector('#r-map', { timeout: 60000 }); await p1.click('#r-map'); }
+  for (let i = 0; i < 2; i++) {
+    await p1.click('#go'); await p1.waitForSelector('#r-map', { timeout: 60000 }); await p1.click('#r-map'); await p1.waitForTimeout(300);
+    if (i === 0) { assert.ok(await p1.$('#fac-ok'), 'community picker after the first win'); await p1.click('#m-close'); await p1.waitForTimeout(300); } // chosen later from the war screen
+  }
   assert.equal(serverProfile(777).cleared, 2, 'server verified both stage wins (with the market boost)');
   assert.deepEqual(await p1.evaluate(() => BT === null), true);
   assert.equal(await p1.evaluate(() => S.coins), serverProfile(777).coins, 'client shows server coins');
@@ -115,7 +118,7 @@ const tgScript = (user, startParam) => `
   const s0 = serverProfile(777).coins;
   await p1.click('#pv-room'); await p1.waitForSelector('.duel-code');
   const code = await p1.textContent('.duel-code');
-  assert.equal(serverProfile(777).coins, s0 - 500, 'stake held');
+  assert.equal(serverProfile(777).coins, s0 - 500, 'entry held');
   await p1.click('#pv-share');
   assert.ok((await p1.evaluate(() => window.__shared)).includes(encodeURIComponent(`startapp=duel_${code}`)), 'invite link shared');
   await p1.screenshot({ path: OUT + '/a2-waiting.png' });
@@ -144,9 +147,10 @@ const tgScript = (user, startParam) => `
   await p1.screenshot({ path: OUT + '/a6-result-sara.png' });
   await p2.screenshot({ path: OUT + '/a6-result-omid.png' });
   const s1 = serverProfile(777).coins, o1 = serverProfile(888).coins;
-  assert.equal(s1 + o1, s0 + o0, 'pot conserved');
+  const draw = s1 === s0 && o1 === o0;
+  assert.equal(s1 + o1, s0 + o0 - (draw ? 0 : 1000 - ECON.pvpPrize(500)), 'winner gets the prize (entries minus the house share)');
   assert.equal(await p1.evaluate(() => S.coins), s1); assert.equal(await p2.evaluate(() => S.coins), o1);
-  console.log(`✓ duel finished: Sara ${s1 - s0 >= 0 ? '+' : ''}${s1 - s0}, Omid ${o1 - o0 >= 0 ? '+' : ''}${o1 - o0} (pot conserved, both screens match the server)`);
+  console.log(`✓ duel finished: Sara ${s1 - s0 >= 0 ? '+' : ''}${s1 - s0}, Omid ${o1 - o0 >= 0 ? '+' : ''}${o1 - o0} (prize = entries − 10%, both screens match the server)`);
   await p1.click('#pr-arena'); await p2.click('#pr-map');
   assert.equal(Object.keys(srv.db.escrow).length, 0);
 

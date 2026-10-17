@@ -55,7 +55,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   await new Promise(r => runwaySrv.listen(0, r));
   Object.assign(process.env, { LB_CACHE_MS: '0', SAVE_MS: '1000', GAME_CHANNEL: '@gl_news', REF_MIN_AGE_MS: '1', RAID_MIN_MS: '0', RUNWAY_API: `http://127.0.0.1:${runwaySrv.address().port}`, RUNWAYML_API_SECRET: 'rw_test', RUNWAY_POLL_MS: '50' });
   process.env.TL_EVENT = 'none'; // weekday events are tested explicitly below
-  Object.assign(process.env, { ADMIN_IDS: '111', ART_DIR: path.join(path.dirname(dataFile), 'art'), BOT_TOKEN: TOKEN, WEBAPP_URL: 'https://game.example', PORT: '0', DATA_FILE: dataFile, TELEGRAM_API: `http://127.0.0.1:${fake.address().port}` });
+  Object.assign(process.env, { ADSGRAM_BLOCK_ID: '1234', ADS_SECRET: 'adsecret', ADMIN_IDS: '111', ART_DIR: path.join(path.dirname(dataFile), 'art'), BOT_TOKEN: TOKEN, WEBAPP_URL: 'https://game.example', PORT: '0', DATA_FILE: dataFile, TELEGRAM_API: `http://127.0.0.1:${fake.address().port}` });
   const srv = require('./server.js');
   srv.server.listen(0);
   await new Promise(r => srv.server.once('listening', r));
@@ -71,7 +71,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   r = await fetch(base + '/..%2fserver%2fserver.js'); assert.notEqual(r.status, 200);
 
   // health
-  r = await fetch(base + '/api/health').then(x => x.json()); assert.equal(r.ok, true); assert.equal(r.packs.length, 3);
+  r = await fetch(base + '/api/health').then(x => x.json()); assert.equal(r.ok, true); assert.equal(r.packs.length, 6); assert.equal(r.starter.stars, 99); assert.equal(r.club.stars, 300);
 
   // auth
   r = await post('/api/hello', { initData: 'user=%7B%22id%22%3A1%7D&auth_date=1&hash=abc' }); assert.equal(r.status, 401);
@@ -95,6 +95,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert.equal(r.body.profile.coins, 5000, 'import happens only once');
   r = await post('/api/profile', { initData: initData(bob), local: { cleared: 999, coins: 3000 } });
   assert.equal(r.body.profile.cleared, 0); srv.db.users['222'].profile.cleared = 200;
+  // bot reminders are opt-in: new players are asked first
+  assert.equal(r.body.notify, false); assert.equal(r.body.askNotify, true);
+  for (const who of [alice, bob]) { r = await post('/api/notify', { initData: initData(who), on: true }); assert.equal(r.body.on, true); }
+  r = await post('/api/profile', { initData: initData(bob), local: null }); assert.equal(r.body.askNotify, false);
   r = await post('/api/leaderboard', { initData: initData(alice) });
   assert.deepEqual(r.body.top.map(x => [x.name, x.stage]), [['Bob <script>', 200], ['Alice', 12]]);
   assert.deepEqual(r.body.me, { rank: 2, stage: 12 });
@@ -251,7 +255,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   r = await post('/api/pvp/join', { initData: initData(bob), code }); assert.equal(r.status, 200, JSON.stringify(r.body)); const bT = r.body.ticket;
   const lb = listen(bT);
   const ma = await la.wait('match'), mb = await lb.wait('match');
-  assert.equal(ma.data.side, 'hero'); assert.equal(mb.data.side, 'enemy'); assert.equal(ma.data.pot, 1000); assert.equal(ma.data.opp.name, 'Bob <script>');
+  assert.equal(ma.data.side, 'hero'); assert.equal(mb.data.side, 'enemy'); assert.equal(ma.data.pot, 900, 'prize = both entries minus the house share'); assert.equal(ma.data.opp.name, 'Bob <script>');
   await la.wait('tick');
   r = await post('/api/pvp/input', { initData: initData(bob), ticket: bT, code: -1 }); assert.equal(r.body.ok, true);
   r = await post('/api/pvp/input', { initData: initData(alice), ticket: bT, code: -1 }); assert.equal(r.status, 400, 'cannot steer the other player');
@@ -260,8 +264,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const results = [ea.data.result, eb.data.result].sort().join(',');
   assert.ok(['lose,win', 'draw,draw'].includes(results), results);
   const a1 = await coinsOf(alice), b1 = await coinsOf(bob);
-  assert.equal(a1 + b1, a0 + b0, 'coins are conserved: the winner gets exactly the pot');
-  if (ea.data.result === 'win') assert.equal(a1, a0 + 500); else if (ea.data.result === 'lose') assert.equal(a1, a0 - 500);
+  assert.equal(a1 + b1, a0 + b0 - (results === 'draw,draw' ? 0 : 100), 'the winner gets the prize; the house share (10%) leaves the economy');
+  if (ea.data.result === 'win') assert.equal(a1, a0 + 400); else if (ea.data.result === 'lose') assert.equal(a1, a0 - 500);
   console.log('   arena duel:', ea.data.result, 'for Alice,', eb.data.result, 'for Bob');
 
   // quick match by stake, and cancelling a search refunds
@@ -278,7 +282,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   lc.close(); // Carol leaves mid-fight: her cards keep fighting on auto and the duel still ends
   const ed = await ld.wait('end'); ld.close();
   const c1 = await coinsOf(carol), d1 = await coinsOf(dan);
-  assert.equal(c1 + d1, 600);
+  assert.equal(c1 + d1, 600 - (ed.data.result === 'draw' ? 0 : 20), 'prize = entries minus 10%');
   console.log('   quick match:', ed.data.result, 'for Dan; Carol left early and was notified by the bot:',
     calls.some(c => c.method === 'sendMessage' && c.data.chat_id === 555));
   assert.equal(Object.keys(srv.db.escrow).length, 0, 'no stakes left in escrow');
@@ -294,6 +298,23 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   r = await post('/api/league/claim', { initData: initData(dan) }); assert.equal(r.body.gems, 250); assert.ok(r.body.profile.cos.own.includes('legend'));
   r = await post('/api/league/claim', { initData: initData(dan) }); assert.equal(r.body.error, 'not_ready');
   console.log('   league: Elo from quick matches, season reset, Legend reward + frame');
+  // fair matching: decks far apart in power never meet; the same pair has a daily duel limit
+  {
+    const ev = { id: 7101, first_name: 'Eve' }, fr = { id: 7102, first_name: 'Fred' };
+    await post('/api/profile', { initData: initData(ev), local: {} }); await post('/api/profile', { initData: initData(fr), local: {} });
+    for (const id of ['7101', '7102']) Object.assign(srv.db.users[id].profile, { cleared: 20, coins: 5000 });
+    srv.db.users['7102'].profile.owned = Object.fromEntries(E.STARTERS.map(x => [x, 60]));
+    r = await post('/api/pvp/find', { initData: initData(ev), stake: 100 }); const eT = r.body.ticket;
+    r = await post('/api/pvp/find', { initData: initData(fr), stake: 100 }); const fT = r.body.ticket;
+    r = await post('/api/pvp/state', { initData: initData(fr) }); assert.equal(r.body.status, 'waiting', 'a much stronger deck is not matched');
+    await post('/api/pvp/cancel', { initData: initData(ev), ticket: eT }); await post('/api/pvp/cancel', { initData: initData(fr), ticket: fT });
+    srv.db.pvpPairs = { day: ECON.day(Date.now()), n: { '7101|7102': ECON.PVP_PAIR_DAILY } };
+    r = await post('/api/pvp/room', { initData: initData(ev), stake: 100 }); const rc = r.body.code, rT = r.body.ticket;
+    r = await post('/api/pvp/join', { initData: initData(fr), code: rc }); assert.equal(r.body.error, 'pair_limit');
+    await post('/api/pvp/cancel', { initData: initData(ev), ticket: rT });
+    assert.equal(srv.db.users['7101'].profile.coins, 5000, 'cancelled entries refunded');
+  }
+  console.log('   arena fairness: power-gap matching, daily pair limit');
 
   // ---------- AI rival: no stake, daily reward ----------
   srv.db.users['555'].profile.cleared = 10;
@@ -366,7 +387,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   for (let i = 0; i < 3; i++) srv.war.onWin('111', 'stage', { stage: 12 }); // territory: notcoin 5 → holds world 2
   r = await post('/api/war/me', { initData: initData(alice) });
   assert.equal(r.body.mine.pts, 39); assert.equal(r.body.standings[0].id, 'notcoin'); assert.equal(r.body.mine.double, true);
-  assert.equal(r.body.owners[1], 'notcoin', 'holds world 2'); assert.equal(r.body.derby.rival, 'dog'); assert.equal(r.body.derby.me, 39);
+  assert.equal(r.body.owners[1], 'notcoin', 'holds world 2'); assert.equal(r.body.derby.rival, 'dog'); assert.equal(r.body.derby.me, 7.8, 'derby compares scores'); assert.equal(r.body.standings[0].pts, 39); assert.equal(r.body.standings[0].score, 7.8, 'score = points / max(5, active members)');
   assert.equal(r.body.goal.progress, 6); assert.equal(r.body.goal.target, 30); assert.equal(r.body.milestone.total, 39);
   // territory bonus is frozen into the stage: +15% coins in world 2
   srv.db.users['111'].profile.cleared = Math.max(srv.db.users['111'].profile.cleared, 15);
@@ -438,11 +459,11 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   r = await fetch(base + '/api/health').then(x => x.json());
   assert.equal(r.market.moods.notcoin.change, 12.3); assert.equal(r.market.moods.notcoin.sym, 'NOT'); assert.equal(r.market.moods.dog.src, 'token');
   assert.equal(r.market.moods.pengu.src, 'activity');
-  // Alice's team has Notcoin (moon: +10% power) and telegram.dog (bear: +20% coins)
+  // Alice's team has Notcoin (moon: no power change any more) and telegram.dog (bear: +20% coins)
   Object.assign(srv.db.users['111'].profile.owned, { dog: 5 });
   srv.db.users['111'].profile.team = ['notcoin', 'dog', 'pinkbull'];
   r = await post('/api/act', { initData: initData(alice), action: { type: 'stageStart', stage: 0 } });
-  assert.deepEqual(r.body.result.market, { notcoin: 1.155 }, 'moon x1.1 and the captain cry might x1.05'); assert.equal(r.body.result.dip, 0.2);
+  assert.deepEqual(r.body.result.market, { notcoin: 1.05 }, 'only the captain cry might x1.05: token prices never change power'); assert.equal(r.body.result.dip, 0.2);
   assert.equal(srv.db.users['111'].profile.pending.dip, 0.2);
   // community activity drives heroes without a token: yesterday 300 points vs 100 the day before → +200% (capped at +50)
   const ECONm = require('../src/economy.js');
@@ -450,7 +471,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   srv.market.compute();
   assert.equal(srv.market.moods().pengu.change, 50); assert.equal(ECONm.moodOf(50).key, 'moon');
   assert.deepEqual(require('./market.js').parseTokens('paws=paws-x:PAWS, nope=x, f1=y'), { paws: { cg: 'paws-x', sym: 'PAWS' } });
-  console.log('   market mood: token prices + community activity → battle boosts and dip bonus');
+  console.log('   market mood: token prices + community activity → dip bonus only (no power)');
   cg.close();
 
   // ---------- collection sets + weekly events ----------
@@ -497,7 +518,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   queue.push({ update_id: 9101, message: { chat: { id: 111 }, from: alice, successful_payment: { telegram_payment_charge_id: 'chpass', total_amount: ECONp.PASS.PRICE_STARS, invoice_payload: '111:pass' } } });
   await sleep(1200);
   r = await post('/api/claim', { initData: initData(alice) }); assert.equal(r.body.pass, true); assert.equal(r.body.profile.pass.prem, true);
-  r = await post('/api/act', { initData: initData(alice), action: { type: 'pass', tier: 1, track: 'prem' } }); assert.equal(r.body.result.gems, 5);
+  r = await post('/api/act', { initData: initData(alice), action: { type: 'pass', tier: 1, track: 'prem' } }); assert.equal(r.body.result.gems, 10); assert.equal(r.body.result.coins, 650);
   r = await post('/api/invoice', { initData: initData(alice), pack: 'pass' }); assert.equal(r.body.error, 'claimed', 'one premium pass per season');
   ECONp.passOf(pa(), Date.now()).xp = 10 * ECONp.PASS.XP_PER_TIER;
   r = await post('/api/act', { initData: initData(alice), action: { type: 'pass', tier: 10, track: 'prem' } }); assert.ok(r.body.result.chestResult, 'tier 10 premium: Gem Chest');
@@ -558,7 +579,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   r = await post('/api/act', { initData: initData(alice), action: { type: 'cosmetic', id: 'neon' } }); assert.equal(r.body.profile.cos.on, 'neon');
   r = await post('/api/act', { initData: initData(alice), action: { type: 'cosmetic', id: 'gold' } }); assert.equal(r.body.error, 'locked', 'Stars frames are bought with Stars');
   r = await post('/api/invoice', { initData: initData(alice), pack: 'cos_gold' }); assert.ok(r.body.link);
-  queue.push({ update_id: 9204, message: { chat: { id: 111 }, from: alice, successful_payment: { telegram_payment_charge_id: 'chCos', total_amount: 150, invoice_payload: '111:cos_gold' } } });
+  queue.push({ update_id: 9204, message: { chat: { id: 111 }, from: alice, successful_payment: { telegram_payment_charge_id: 'chCos', total_amount: 100, invoice_payload: '111:cos_gold' } } });
   await sleep(900);
   assert.ok(srv.db.users['111'].profile.cos.own.includes('gold'));
   r = await post('/api/act', { initData: initData(alice), action: { type: 'cosmetic', id: 'gold' } }); assert.equal(r.body.profile.cos.on, 'gold');
@@ -579,7 +600,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   // Community Fund: every Stars purchase recorded for the buyer's community; buybacks only after an agreement
   r = await post('/api/fund', { initData: initData(alice) });
   const facA = srv.db.users['111'].profile.faction, fundA = r.body.fund.coms.find(c => c.id === facA);
-  assert.ok(fundA && fundA.stars >= 150, 'the frame purchase was recorded for Alice\'s community'); assert.equal(r.body.fund.pct, 40); assert.equal(fundA.share, Math.floor(fundA.stars * 0.4));
+  assert.ok(fundA && fundA.stars >= 100, 'the frame purchase was recorded for Alice\'s community'); assert.equal(r.body.fund.pct, 40); assert.equal(fundA.share, 0, 'nothing in the pool before an agreement');
   const fq = calls.length;
   queue.push({ update_id: 9206, message: { chat: { id: 111 }, from: alice, text: `/fund buyback ${facA} 10 TON https://tonviewer.com/tx/abc` } });
   await sleep(700);
@@ -590,7 +611,59 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   await sleep(700);
   r = await post('/api/fund', { initData: initData(alice) });
   assert.equal(r.body.fund.coms.find(c => c.id === facA).agreed, true); assert.equal(r.body.fund.buybacks[0].amount, 10);
+  // the pool counts only purchases after the agreement: BUYBACK_PCT% of the net (FUND_NET_PCT% of the Stars)
+  srv.fund.onPayment(srv.db.users['111'], 1000);
+  r = await post('/api/fund', { initData: initData(alice) }); const fa2 = r.body.fund.coms.find(c => c.id === facA);
+  assert.equal(fa2.since, 1000); assert.equal(fa2.share, Math.floor(1000 * 0.7 * 0.4)); assert.equal(fa2.stars, fundA.stars + 1000);
   console.log('   partner quests (verified + open-to-claim), frames (gems + Stars), /backup document, wallet + NFT request');
+  // payment support: /paysupport lists purchases and tells the admins; /refund reverses one; /terms and /privacy
+  {
+    const [chargeId, pay] = Object.entries(srv.db.payments).find(([, p]) => p.uid === '111' && p.gems) || [];
+    assert.ok(chargeId, 'a gem purchase to refund');
+    const ps = calls.length, gBefore = srv.db.users['111'].profile.gems;
+    queue.push({ update_id: 9401, message: { chat: { id: 111, type: 'private' }, from: alice, text: '/paysupport' } });
+    queue.push({ update_id: 9402, message: { chat: { id: 111, type: 'private' }, from: alice, text: '/terms' } });
+    await sleep(700);
+    assert.ok(calls.slice(ps).some(c => c.method === 'sendMessage' && c.data.text.includes(chargeId)), '/paysupport lists the purchase id');
+    assert.ok(calls.slice(ps).some(c => c.method === 'sendMessage' && /Virtual items/.test(c.data.text)), '/terms answered');
+    queue.push({ update_id: 9403, message: { chat: { id: 222, type: 'private' }, from: bob, text: '/refund ' + chargeId } });
+    queue.push({ update_id: 9404, message: { chat: { id: 111, type: 'private' }, from: alice, text: '/refund ' + chargeId } });
+    await sleep(700);
+    assert.ok(calls.slice(ps).some(c => c.method === 'refundStarPayment' && c.data.telegram_payment_charge_id === chargeId && c.data.user_id === 111), 'Stars refunded');
+    assert.equal(calls.slice(ps).filter(c => c.method === 'refundStarPayment').length, 1, 'only admins refund');
+    assert.equal(srv.db.users['111'].profile.gems, Math.max(0, gBefore - pay.gems), 'refunded gems taken back'); assert.ok(srv.db.payments[chargeId].refunded);
+    r = await fetch(base + '/terms'); assert.equal(r.status, 200); assert.match(await r.text(), /Terms of Service/);
+    r = await fetch(base + '/privacy'); assert.match(await r.text(), /Privacy Policy/);
+  }
+  console.log('   payment support: /paysupport, admin /refund (refundStarPayment), /terms, /privacy');
+  // starter pack (once) and the Gram Club subscription
+  {
+    r = await post('/api/invoice', { initData: initData(alice), pack: 'starter' }); assert.ok(r.body.link);
+    const c0 = srv.db.users['111'].profile.coins, g0 = srv.db.users['111'].profile.gems;
+    queue.push({ update_id: 9501, message: { chat: { id: 111 }, from: alice, successful_payment: { telegram_payment_charge_id: 'chStart', total_amount: 99, invoice_payload: '111:starter' } } });
+    await sleep(700);
+    assert.equal(srv.db.users['111'].profile.coins, c0 + ECON.STARTER.coins); assert.equal(srv.db.users['111'].profile.gems, g0 + ECON.STARTER.gems); assert.equal(srv.db.users['111'].profile.starter, true);
+    r = await post('/api/invoice', { initData: initData(alice), pack: 'starter' }); assert.equal(r.body.error, 'claimed', 'starter pack only once');
+    const ci = calls.length; r = await post('/api/invoice', { initData: initData(alice), pack: 'club' }); assert.ok(r.body.link);
+    assert.equal(calls.slice(ci).find(c => c.method === 'createInvoiceLink').data.subscription_period, 30 * 86400, 'monthly Stars subscription');
+    const until = Math.floor(Date.now() / 1000) + 30 * 86400;
+    queue.push({ update_id: 9502, message: { chat: { id: 111 }, from: alice, successful_payment: { telegram_payment_charge_id: 'chClub', total_amount: 300, invoice_payload: '111:club', subscription_expiration_date: until, is_recurring: true, is_first_recurring: true } } });
+    await sleep(700);
+    assert.equal(srv.db.users['111'].profile.club.until, until * 1000);
+    r = await post('/api/act', { initData: initData(alice), action: { type: 'club' } }); assert.equal(r.body.result.gems, ECON.CLUB.gems);
+    r = await post('/api/act', { initData: initData(alice), action: { type: 'club' } }); assert.equal(r.body.error, 'claimed', 'club gems once a day');
+    assert.equal(ECON.afkCap(srv.db.users['111'].profile), ECON.CLUB.afkH, 'club: bigger idle chest');
+  }
+  // rewarded ads: only the ad network's callback (with the secret) pays, ADS.daily times a day
+  {
+    r = await fetch(base + '/api/health').then(x => x.json()); assert.deepEqual(r.ads, { block: '1234', daily: ECON.ADS.daily, hours: ECON.ADS.hours });
+    assert.equal((await fetch(base + '/api/ads/reward?userid=111&secret=nope')).status, 403);
+    const c0 = srv.db.users['111'].profile.coins;
+    for (let i = 0; i < ECON.ADS.daily + 1; i++) await fetch(base + '/api/ads/reward?userid=111&secret=adsecret');
+    assert.equal(srv.db.users['111'].profile.coins, c0 + ECON.ADS.daily * ECON.afkRate(srv.db.users['111'].profile) * ECON.ADS.hours, 'capped per day');
+    const st = srv.analytics.text(); assert.match(st, /Payers \d/); assert.match(st, /ads watched \(7d\) 5/); assert.match(st, /Sources/);
+  }
+  console.log('   starter pack once; Gram Club subscription: daily gems, 12h idle chest');
 
   // ---------- world boss ----------
   r = await post('/api/raid/me', { initData: initData(alice) });
@@ -704,6 +777,55 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   await Promise.all(Array.from({ length: 8 }, () => post('/api/partners/claim', { initData: initData(alice), id: 77 })));
   assert.equal(srv.db.users['111'].profile.gems, gR + 10, 'one payout for parallel claims');
   console.log('   hardening: malformed URLs, prototype keys, clan ids, parallel quest claims');
+
+  // ---------- review fixes: economy ----------
+  {
+    const now = Date.now(), rnd = seed => () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const P = ECON.newProfile(now);
+    P.cleared = 9; const before = ECON.afkRate(P), aiBefore = ECON.aiReward(P, 'normal', now).coins;
+    P.cleared = 10; assert.ok(ECON.afkRate(P) > before && ECON.aiReward(P, 'normal', now).coins >= aiBefore, 'idle/AI income never drops after a boss');
+    // first chest: always a new hero
+    for (let sd = 1; sd < 60; sd++) { const q = ECON.newProfile(now); const r0 = ECON.act(q, { type: 'chest', key: 'basic' }, { now, rng: rnd(sd) }); assert.equal(r0.outcome, 'new', 'first chest is new (seed ' + sd + ')'); }
+    // duplicates → shards; shards pay for upgrades and level up low cards on the spot
+    const q = ECON.newProfile(now); q.coins = 1e7; q.stats.chests = 5; q.owned = Object.fromEntries(E.BASE_HEROES.map(h => [h.id, 40]));
+    const r1 = ECON.act(q, { type: 'chest', key: 'basic' }, { now, rng: rnd(7) });
+    assert.equal(r1.outcome, 'dupe'); assert.equal(r1.level, 40, 'a high-level duplicate does not add a level'); assert.ok(r1.shards > 0 && q.shards[r1.id] === r1.shards);
+    const price = ECON.upgradePrice(q, r1.id, 40, now), c1 = q.coins;
+    ECON.act(q, { type: 'upgrade', id: r1.id }, { now, rng: Math.random });
+    assert.equal(c1 - q.coins, price - r1.shards, 'shards pay part of the upgrade'); assert.ok(!q.shards[r1.id]);
+    const low = ECON.newProfile(now); low.stats.chests = 5; low.coins = 1e5; low.owned = Object.fromEntries(E.BASE_HEROES.map(h => [h.id, 1]));
+    const r2 = ECON.act(low, { type: 'chest', key: 'basic' }, { now, rng: rnd(3) }); assert.ok(r2.levels >= 1, 'a level-1 duplicate still levels up');
+    // gem chest pity
+    const g = ECON.newProfile(now); g.cleared = 200; g.stats.chests = 5; g.gems = 1e5; let streak = 0, worst = 0;
+    for (let i = 0; i < 300; i++) { const r3 = ECON.act(g, { type: 'chest', key: 'gem' }, { now, rng: () => 0.5 }); streak = r3.rarity === 'L' ? 0 : streak + 1; worst = Math.max(worst, streak); }
+    assert.ok(worst <= ECON.GEM_PITY - 1, 'a Legendary at least every ' + ECON.GEM_PITY + ' gem chests');
+  }
+  {
+    // community war: points per active member decide the week (a small busy community beats a big one)
+    const wdb = { users: {} }; let wk = 'W1';
+    const war2 = require('./war.js')({ db: wdb, persist() {}, weekKey: () => wk, shareDir: os.tmpdir() });
+    const add = (id, f, pts) => { wdb.users[id] = { id, name: id, profile: { faction: f, team: [] }, war: { week: 'W1', pts, f } }; wdb.war.points[f] = (wdb.war.points[f] || 0) + pts; };
+    for (let i = 0; i < 20; i++) add('b' + i, 'dog', 12);
+    add('s1', 'pengu', 60); add('s2', 'pengu', 60);
+    wk = 'W2'; war2.roll();
+    assert.equal(wdb.war.last.rank[0], 'pengu', 'score = points / max(5, active members)'); assert.equal(wdb.war.last.scores.pengu, 24); assert.equal(wdb.war.last.scores.dog, 12);
+  }
+  {
+    // streak freeze: one missed day a week keeps the streak; manual play pays a bonus
+    const now = Date.now(), q = ECON.newProfile(now);
+    q.daily = { last: ECON.day(now, -2), streak: 4 };
+    let r5 = ECON.act(q, { type: 'daily' }, { now, rng: Math.random }); assert.equal(r5.day, 5); assert.equal(r5.frozen, true);
+    q.daily.last = ECON.day(now, -2); r5 = ECON.act(q, { type: 'daily' }, { now: now, rng: Math.random });
+    assert.ok(!r5.frozen, 'only one freeze per week');
+    const m = ECON.newProfile(now); m.owned = Object.fromEntries(E.STARTERS.map(x => [x, 4])); m.team = [...E.STARTERS]; m.cleared = 8;
+    const play = auto => { ECON.act(m, { type: 'stageStart', stage: 4 }, { now, rng: () => 0.42 }); const seed = m.pending.seed;
+      const B = E.createBattle(m.team, m.pending.levels, 4, seed); const inputs = auto ? [[0, -1]] : []; if (auto) E.applyInput(B, -1);
+      while (!B.over) { if (!auto) for (const h of B.heroes) if (h.alive && h.energy >= 100) { inputs.push([B.tick, h.uid]); E.applyInput(B, h.uid); } E.step(B); B.events.length = 0; }
+      return ECON.act(m, { type: 'stageEnd', inputs }, { now, rng: Math.random }); };
+    const man = play(false); assert.equal(man.result, 'win'); assert.equal(man.manual, true);
+    const au = play(true); assert.equal(au.manual, false);
+  }
+  console.log('   review fixes: idle/AI income after bosses, first chest new, shards, gem pity');
 
   r = await fetch(base + '/api/status').then(x => x.json());
   assert.equal(r.webappUrlOk, true); assert.ok(r.updatesHandled >= 6); assert.equal(r.lastHandleError, null);

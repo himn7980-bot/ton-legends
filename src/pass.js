@@ -16,8 +16,9 @@ function passClaimable() {
   }
   return out;
 }
-const passIcon = r => (r.chest === 'gem' ? '💎🎁' : r.chest ? '👑' : r.gems ? `💎 ${n(r.gems)}` : `🪙 ${n(r.coins)}`);
+const passIcon = r => (r.chest === 'gem' ? `💎🎁${r.gems ? `<br>+💎${n(r.gems)}` : ''}` : r.chest ? '👑' : r.gems ? `💎 ${n(r.gems)}${r.coins ? `<br>🪙 ${n(r.coins)}` : ''}` : `🪙 ${n(r.coins)}`);
 function renderPass() {
+  if (!isOpen('pass')) { $('#screen').innerHTML = `<div class="h2">🎫 ${T().passTitle}</div><div class="panel center"><div style="font-size:54px">🎫</div>${lockNote('pass')}</div>`; return; }
   const t = T(), now = Date.now(), P = ECON.PASS, ps = ECON.passOf(S, now), tier = ECON.passTier(S, now);
   const days = Math.max(0, Math.ceil((ECON.seasonEnds(now) - now) / 864e5)), ready = passClaimable();
   const cell = (i, track) => {

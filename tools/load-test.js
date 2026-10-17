@@ -36,6 +36,8 @@ const initData = user => { const p = new URLSearchParams({ auth_date: String(Mat
   console.log(`event-loop delay: p50 ${(lag.percentile(50) / 1e6).toFixed(1)} ms, p99 ${(lag.percentile(99) / 1e6).toFixed(1)} ms, max ${(lag.max / 1e6).toFixed(0)} ms`);
   console.log(`memory (RSS, incl. test clients): ${(process.memoryUsage().rss / 1048576).toFixed(0)} MB (at start of duels ${(mem0 / 1048576).toFixed(0)} MB)`);
   const total = users.reduce((s, u) => s + srv.db.users[u.id].profile.coins, 0);
-  console.log(`coins conserved: ${total === users.length * 5000} · escrow left: ${Object.keys(srv.db.escrow).length}`);
+  // every decided duel removes the house share (2 entries − prize); draws refund both
+  const wins = users.filter(u => srv.db.users[u.id].profile.coins > 5000).length;
+  console.log(`coins accounted for (prizes minus house share): ${total === users.length * 5000 - wins * (200 - ECON.pvpPrize(100))} · escrow left: ${Object.keys(srv.db.escrow).length}`);
   srv.stop(); fake.close(); process.exit(0);
 })();

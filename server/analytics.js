@@ -21,6 +21,7 @@ module.exports = function createAnalytics({ db, persist }) {
   }
   const battle = win => { const t = today(); t.battles++; if (win) t.wins++; };
   const payment = stars => { const t = today(); t.stars += stars; t.payers++; };
+  const count = key => { const t = today(); t[key] = (t[key] || 0) + 1; };
 
   function report(now = Date.now()) {
     const users = Object.values(db.users), players = users.filter(u => u.profile);
@@ -42,10 +43,23 @@ module.exports = function createAnalytics({ db, persist }) {
     const last = n => Array.from({ length: n }, (_, i) => db.stats.days[day(now - i * DAY)] || {});
     const sum = (arr, k) => arr.reduce((a, d) => a + (d[k] || 0), 0);
     const week = last(7), t0 = last(1)[0], t1 = last(2)[1];
-    const starsAll = Object.values(db.payments || {}).reduce((a, p) => a + (p.stars || 0), 0);
+    const pays = Object.values(db.payments || {}).filter(p => !p.refunded);
+    const starsAll = pays.reduce((a, p) => a + (p.stars || 0), 0);
+    // Money: payers, conversion, average per payer / per daily player, what sells, refunds, subscriptions.
+    const payerIds = new Set(pays.map(p => p.uid)), byPack = {};
+    for (const p of pays) { const k = String(p.pack || '?').replace(/^cos_.*/, 'frames'); byPack[k] = (byPack[k] || 0) + (p.stars || 0); }
+    const stars7 = sum(week, 'stars'), dau7 = sum(week, 'active') / 7;
+    const money = { payers: payerIds.size, conv: pct(payerIds.size, players.length), arppu: payerIds.size ? Math.round(starsAll / payerIds.size) : 0,
+      arpdau: dau7 ? +(stars7 / 7 / dau7).toFixed(2) : 0, top: Object.entries(byPack).sort((a, b) => b[1] - a[1]).slice(0, 5),
+      refunds: Object.values(db.payments || {}).filter(p => p.refunded).length, club: players.filter(u => u.profile.club && u.profile.club.until > now).length,
+      starter: players.filter(u => u.profile.starter).length, ads: sum(week, 'ads') };
+    // Attribution: players per source with day-7 retention and payers.
+    const src = {};
+    for (const u of players) { const k = u.src || 'unknown', x = src[k] || (src[k] = { n: 0, c7: 0, r7: 0, pay: 0 }); x.n++; if (u.created && now - u.created >= 7 * DAY) { x.c7++; if ((u.seen || 0) - u.created >= 7 * DAY) x.r7++; } if (payerIds.has(u.id)) x.pay++; }
+    const sources = Object.entries(src).sort((a, b) => b[1].n - a[1].n).slice(0, 6).map(([k, x]) => [k, x.n, pct(x.r7, x.c7), x.pay]);
     return { users: users.length, players: players.length, today: t0, yesterday: t1,
-      week: { active: Math.round(sum(week, 'active') / 7), new: sum(week, 'new'), battles: sum(week, 'battles'), stars: sum(week, 'stars') },
-      d1: ret(1), d7: ret(7), d30: ret(30), funnel, gone: gone.length, quitTop, starsAll };
+      week: { active: Math.round(sum(week, 'active') / 7), new: sum(week, 'new'), battles: sum(week, 'battles'), stars: stars7 },
+      d1: ret(1), d7: ret(7), d30: ret(30), funnel, gone: gone.length, quitTop, starsAll, money, sources };
   }
 
   function text(r = report()) {
@@ -65,7 +79,12 @@ module.exports = function createAnalytics({ db, persist }) {
       '',
       `🚪 Inactive 3+ days: ${n(r.gone)}` + (r.quitTop.length ? ` — stuck at: ${r.quitTop.map(([s, c]) => `stage ${s} (${n(c)})`).join(', ')}` : ''),
       `⭐ Stars all time: ${n(r.starsAll)}`,
-    ].join('\n');
+      `💳 Payers ${n(r.money.payers)} (${r.money.conv} of players) · per payer ⭐ ${n(r.money.arppu)} · per daily player ⭐ ${r.money.arpdau} · refunds ${n(r.money.refunds)}`,
+      `👑 Club members ${n(r.money.club)} · starter packs ${n(r.money.starter)} · ads watched (7d) ${n(r.money.ads)}`,
+      r.money.top.length ? '🛒 Best sellers: ' + r.money.top.map(([k, v]) => `${k} ⭐ ${n(v)}`).join(' · ') : '',
+      '',
+      r.sources.length ? '📣 Sources (players · back after 7d · payers): ' + r.sources.map(([k, c, r7, p]) => `${k} ${n(c)} · ${r7} · ${n(p)}`).join(' | ') : '',
+    ].filter((x, i, a) => x !== '' || a[i - 1] !== '').join('\n');
   }
-  return { seen, battle, payment, report, text };
+  return { seen, battle, payment, count, report, text };
 };

@@ -46,6 +46,7 @@ module.exports = function createRaid({ db, persist, weekKey, credit, profileOut,
     'POST /api/raid/me': (body, u) => ({ raid: view(u) }),
     'POST /api/raid/start': (body, u) => {
       const p = u.profile; if (!p) fail('no_profile');
+      if (!ECON.unlocked(p, 'raid')) fail('locked_feature');
       if (!p.team.length) fail('bad_team');
       if (triesLeft(u) <= 0) {
         if (!body.buy || u.raidDay.extra >= MAX_EXTRA) fail('no_tries');
@@ -68,7 +69,7 @@ module.exports = function createRaid({ db, persist, weekKey, credit, profileOut,
       const R = roll();
       // The fight counts against the boss that is up now (if it fell meanwhile, the damage goes to the next one).
       // Coins scale with the player's progress (about one stage reward per fight, up to 1.5× for big damage).
-      const dmg = r.dmg, coins = Math.max(50, Math.round(E.stageReward(Math.min(E.TOTAL_STAGES - 1, u.profile.cleared)) * Math.max(0.5, Math.min(1.5, Math.sqrt(dmg) / 200))));
+      const dmg = r.dmg, coins = Math.max(50, Math.round(ECON.progressReward(u.profile) * Math.max(0.5, Math.min(1.5, Math.sqrt(dmg) / 200))));
       u.profile.coins += coins; u.profile.stats.raidDmg = (u.profile.stats.raidDmg || 0) + dmg;
       R.dmg[u.id] = (R.dmg[u.id] || 0) + dmg; R.total[u.id] = (R.total[u.id] || 0) + dmg;
       if (u.profile.faction) R.coms[u.profile.faction] = (R.coms[u.profile.faction] || 0) + dmg;

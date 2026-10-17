@@ -1,6 +1,7 @@
-// Gram Legends — online 1v1 arena with coin stakes.
-// The server holds both stakes, runs the battle itself (so neither client can cheat), streams it to both
-// players over Server-Sent Events, accepts their skill taps, and pays the whole pot to the winner.
+// Gram Legends — online 1v1 arena with a coin entry fee.
+// The server holds both entries, runs the battle itself (so neither client can cheat), streams it to both
+// players over Server-Sent Events, accepts their skill taps, and pays the prize (both entries minus the house
+// share, ECON.PVP_CUT) to the winner.
 const crypto = require('crypto');
 const E = require('../src/engine.js');
 const ECON = require('../src/economy.js');
@@ -23,6 +24,10 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
   const queues = new Map();    // stake -> waiting tickets
   const rooms = new Map();     // invite code -> waiting host ticket
   db.escrow = db.escrow || {};
+  // Coin duels per pair of players today: { day, n: { 'a|b': count } }.
+  const pairKey = (a, b) => [String(a), String(b)].sort().join('|');
+  const pairs = () => { const d = ECON.day(now()); if (!db.pvpPairs || db.pvpPairs.day !== d) db.pvpPairs = { day: d, n: {} }; return db.pvpPairs.n; };
+  const pairFull = (a, b) => (pairs()[pairKey(a, b)] || 0) >= ECON.PVP_PAIR_DAILY;
 
   // Matches live in memory; if the server restarted mid-match, give everyone their stake back.
   for (const [id, e] of Object.entries(db.escrow)) {
@@ -81,7 +86,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
   }
   function matchInfo(m, t) {
     const opp = t === m.a ? m.b : m.a;
-    return { side: t.side, ai: m.ai, stake: m.stake, pot: m.stake * 2, startIn: Math.max(0, m.startAt - now()),
+    return { side: t.side, ai: m.ai, stake: m.stake, pot: ECON.pvpPrize(m.stake), startIn: Math.max(0, m.startAt - now()),
       you: { name: t.name, power: t.power, av: ECON.avatarOf((db.users[t.uid] || {}).profile) }, opp: { name: opp.name, power: opp.power, av: opp.ai ? (opp.team || [])[0] : ECON.avatarOf((db.users[opp.uid] || {}).profile) },
       units: [...m.B.heroes, ...m.B.enemies].map(u => ({ uid: u.uid, side: u.side, id: u.id, name: u.name, maxHp: u.maxHp, row: u.row })) };
   }
@@ -90,6 +95,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
     unlist(a); unlist(b);
     const B = E.createPvpBattle(a.team, a.levels, b.team, b.levels, crypto.randomInt(2 ** 32), a.faction || null, b.faction || null, market(), a.perks || null, b.perks || null);
     const m = { id: rid(8), ai: a.aiLevel || null, a, b, B, stake: a.stake, startAt: now() + COUNTDOWN_MS, inputs: [], ev: [], timer: null };
+    if (!m.ai) { const k = pairKey(a.uid, b.uid), P = pairs(); P[k] = (P[k] || 0) + 1; }
     a.side = 'hero'; b.side = 'enemy';
     for (const t of [a, b]) { t.match = m; t.status = 'playing'; send(t, 'match', matchInfo(m, t)); }
     setTimeout(() => { m.timer = setInterval(() => tick(m), E.TICK * 1000); }, COUNTDOWN_MS);
@@ -120,7 +126,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
     clearInterval(m.timer);
     const winner = m.B.over === 'win' ? m.a : m.B.over === 'lose' ? m.b : null;
     if (m.ai) return finishAi(m, winner);
-    const pot = m.stake * 2;
+    const pot = ECON.pvpPrize(m.stake);
     // Ranked: quick-match duels move both players' league rating.
     const ranked = league && m.a.mode === 'queue' && m.b.mode === 'queue' ? league.result(m.a.uid, m.b.uid, winner === m.a ? 1 : winner === m.b ? 0 : 0.5) : {};
     for (const t of [m.a, m.b]) {
@@ -194,7 +200,9 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
     'POST /api/pvp/find': (body, u) => {
       if (u.profile && !ECON.unlocked(u.profile, 'pvp')) fail('locked_feature');
       const t = open(u, body.stake, 'queue');
-      const q = (queues.get(t.stake) || []).filter(x => x.status === 'waiting' && x.uid !== u.id);
+      // Only decks of similar power meet (the limit widens a little once someone has waited a while).
+      const fits = x => { const r = Math.max(x.power, t.power) / Math.max(1, Math.min(x.power, t.power)); return r <= (now() - x.created >= ECON.PVP_WAIT_MS ? ECON.PVP_GAP_LATE : ECON.PVP_GAP); };
+      const q = (queues.get(t.stake) || []).filter(x => x.status === 'waiting' && x.uid !== u.id && fits(x) && !pairFull(x.uid, u.id));
       if (q.length) {
         // Closest league rating first (then closest deck power).
         const gap = x => Math.abs((x.rating || 0) - (t.rating || 0)) * 10 + Math.abs(x.power - t.power) / Math.max(1, t.power) * 100;
@@ -219,6 +227,7 @@ module.exports = function createArena({ db, persist, notify = () => {}, onPoints
       const host = rooms.get(String(body.code || '').toUpperCase());
       if (!host || host.status !== 'waiting') fail('room_gone');
       if (host.uid === u.id) fail('own_room');
+      if (pairFull(host.uid, u.id)) fail('pair_limit');
       const t = open(u, host.stake, 'join');
       startMatch(host, t);
       return { ticket: t.id, coins: u.profile.coins };

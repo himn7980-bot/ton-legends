@@ -64,19 +64,19 @@ function channelGate() {
 async function renderFund() {
   const t = T();
   if (!Online.state.profile) { $('#screen').innerHTML = onlineOnly(t.fundTitle); return; }
-  $('#screen').innerHTML = `<div class="h2">💰 ${t.fundTitle}</div><p class="muted center">${t.loading}</p>`;
+  $('#screen').innerHTML = `<div class="h2">🤝 ${t.fundTitle}</div><p class="muted center">${t.loading}</p>`;
   let r; try { r = await Online.api('fund'); } catch (e) { toast(errText(e)); return; }
   if (S.tab !== 'fund') return;
   const F = r.fund, max = Math.max(1, ...F.coms.map(c => c.stars));
-  $('#screen').innerHTML = `<div class="h2">💰 ${t.fundTitle}</div>
+  $('#screen').innerHTML = `<div class="h2">🤝 ${t.fundTitle}</div>
     <div class="panel fund-hero"><p style="margin:0 0 8px">${t.fundNote(n(F.pct))}</p>
       <div class="ref-nums"><div><b>⭐ ${n(F.total)}</b><small>${t.fundTotal}</small></div><div><b>⭐ ${n(F.totalShare)}</b><small>${t.fundShare(n(F.pct))}</small></div><div><b>${n(F.coms.filter(c => c.agreed).length)}/${n(F.coms.length)}</b><small>${t.fundAgreedN}</small></div></div></div>
     <div class="h2">${t.fundComs}</div>
     <div class="panel">${F.coms.map(c => `<div class="fund-row ${c.id === S.faction ? 'me' : ''}">
       <img class="mini-av" src="${img(c.id)}" alt=""><div class="fr-main"><div class="row"><b>${factionName(c.id)}${c.id === S.faction ? ` <span class="muted small">(${t.you})</span>` : ''}</b><span class="tag ${c.agreed ? 'gold' : ''}">${c.agreed ? '🤝 ' + t.fundAgreed : '⏳ ' + t.fundPending}</span></div>
-      <div class="fund-bar"><i style="width:${c.stars / max * 100}%"></i></div><div class="muted small">⭐ ${n(c.stars)} · ${t.fundShare(n(F.pct))}: ⭐ ${n(c.share)}${c.buybacks ? ' · 🔥 ' + n(c.buybacks) : ''}</div></div></div>`).join('')}
+      <div class="fund-bar"><i style="width:${c.stars / max * 100}%"></i></div><div class="muted small">⭐ ${n(c.stars)} ${t.fundTotal}${c.agreed ? ` · ${t.fundShare(n(F.pct))}: ⭐ ${n(c.share)}` : ''}${c.buybacks ? ' · ✅ ' + n(c.buybacks) : ''}</div></div></div>`).join('')}
       ${F.none ? `<div class="muted small" style="padding-top:8px">${t.fundNone}: ⭐ ${n(F.none)}</div>` : ''}</div>
-    ${F.buybacks.length ? `<div class="h2">🔥 ${t.fundHistory}</div><div class="panel">${F.buybacks.map(b => `<div class="row lb-row"><span>${factionName(b.f)} · ${n(b.amount)} ${esc(b.asset)}</span><a href="${esc(b.link)}" target="_blank" rel="noopener">${t.fundProof} ↗</a></div>`).join('')}</div>` : ''}
+    ${F.buybacks.length ? `<div class="h2">✅ ${t.fundHistory}</div><div class="panel">${F.buybacks.map(b => `<div class="row lb-row"><span>${factionName(b.f)} · ${n(b.amount)} ${esc(b.asset)}</span><a href="${esc(b.link)}" target="_blank" rel="noopener">${t.fundProof} ↗</a></div>`).join('')}</div>` : ''}
     ${F.wallet ? `<p class="muted small">${t.fundWallet}: <code>${esc(F.wallet)}</code></p>` : ''}
     <p class="muted small">${t.fundDisclaimer}</p>`;
 }
@@ -115,6 +115,7 @@ let RAID = null;
 async function renderRaid() {
   const t = T();
   if (!Online.state.profile) { $('#screen').innerHTML = onlineOnly(t.raidTitle); return; }
+  if (!isOpen('raid')) { $('#screen').innerHTML = `<div class="h2">${t.raidTitle}</div><div class="panel center"><div style="font-size:54px">👹</div>${lockNote('raid')}</div>`; return; }
   if (!RAID) $('#screen').innerHTML = `<div class="h2">${t.raidTitle}</div><p class="muted center">${t.loading}</p>`;
   const r = await tryApi('raid/me'); if (!r || S.tab !== 'raid') return;
   RAID = r.raid;
@@ -298,4 +299,34 @@ async function requestNft(id) {
   const t = T();
   try { await Online.api('nft/request', { id }); toast('✅ ' + t.nftRequested); closeModal(); }
   catch (e) { if (e.message === 'no_wallet') walletModal(); else toast(errText(e)); }
+}
+
+// ---------- rewarded ads (Adsgram) ----------
+// The ad network calls the server when an ad was watched to the end; the server pays (ECON.ADS) and the game reloads.
+let ADS_SDK = null;
+const loadAds = () => ADS_SDK || (ADS_SDK = new Promise((res, rej) => {
+  const s = document.createElement('script'); s.src = 'https://sad.adsgram.ai/js/sad.min.js';
+  s.onload = () => (window.Adsgram ? res(window.Adsgram) : rej(new Error('ads'))); s.onerror = () => { ADS_SDK = null; rej(new Error('ads')); };
+  document.head.appendChild(s);
+}));
+function adsHtml() {
+  const A = Online.state.ads;
+  if (!A || !Online.state.profile || !Online.tg()) return '';
+  const left = ECON.adsLeft(S, Date.now());
+  return `<div class="panel"><div class="row"><div class="t">📺 ${T().adsTitle}</div><span class="muted small">${n(left)}/${n(A.daily)}</span></div>
+    <button class="btn wide" id="ad-watch" ${left ? '' : 'disabled'}>${left ? T().adsBtn(n(ECON.afkRate(S) * A.hours)) : T().comeBack}</button></div>`;
+}
+function bindAds() {
+  const b = $('#ad-watch'); if (!b) return;
+  b.onclick = async () => {
+    b.disabled = true;
+    const before = S.coins;
+    try {
+      const Ads = await loadAds();
+      await Ads.init({ blockId: String(Online.state.ads.block) }).show();
+      for (let i = 0; i < 6 && S.coins === before; i++) { await new Promise(r => setTimeout(r, 1000)); await syncServerProfile(); }
+      if (S.coins > before) { Sound.play('coin'); toast(`📺 +🪙 ${n(S.coins - before)}`); }
+    } catch (e) { toast(T().adsNone); }
+    if (S.tab === 'chest') renderChest();
+  };
 }

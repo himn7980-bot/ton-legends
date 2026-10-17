@@ -20,9 +20,9 @@ function factionPicker(opts = {}) {
       <p class="muted center small">${t.pickNote}</p>
       ${opts.suggest && !switching ? `<p class="center friend-in">🤝 ${t.friendIn(factionName(opts.suggest))}</p>` : ''}
       <div class="fac-grid">${BASE_HEROES.map(h => `<button class="fac ${h.id === pick ? 'on' : ''}" data-fac="${h.id}" style="--rc:${RARITY[h.rarity].color}">
-        <img src="${img(h.id)}" alt=""><span>${h.name}</span>${WAR ? `<small>${n((WAR.standings.find(x => x.id === h.id) || {}).members || 0)} 👤</small>` : ''}</button>`).join('')}</div>
+        <img src="${img(h.id)}" alt="">${S.owned[h.id] ? `<i class="fac-own">✓ ${t.ownedShort}</i>` : ''}<span>${h.name}</span>${WAR ? `<small>${n((WAR.standings.find(x => x.id === h.id) || {}).members || 0)} 👤</small>` : ''}</button>`).join('')}</div>
       <div class="perks">${t.perks.map(x => `<div>${x}</div>`).join('')}</div>
-      ${switching ? `<p class="muted small center">${t.changeNote(n(ECON.FACTION_SWITCH_DAYS))}</p>` : ''}
+      <p class="muted small center">${switching ? t.changeNote(n(ECON.FACTION_SWITCH_DAYS)) : t.pickCost(n(ECON.FACTION_SWITCH_GEMS), n(ECON.FACTION_SWITCH_DAYS))}</p>
       <button class="btn wide gold" id="fac-ok" ${pick && pick !== S.faction ? '' : 'disabled'}>${pick ? (switching ? t.changeFaction(n(ECON.FACTION_SWITCH_GEMS)) : t.joinFaction(factionName(pick))) : t.pickTitle}</button>`;
     box.querySelectorAll('[data-fac]').forEach(b => b.onclick = () => { pick = b.dataset.fac; draw(box); });
     box.querySelector('#fac-ok').onclick = async () => {
@@ -62,7 +62,7 @@ function drawWar() {
       <div style="flex:1;min-width:0">
         <div class="muted small">${t.yourCommunity}</div>
         <div class="big" style="font-size:22px">${t.army(h.name)}</div>
-        ${W ? `<div class="tag gold">${medal(rank)} · ${t.weekPts(n(W.standings[rank - 1].pts))}${W.standings[rank - 1].worlds ? ` · 🏰 ${n(W.standings[rank - 1].worlds)}` : ''}</div>` : ''}
+        ${W ? `<div class="tag gold">${medal(rank)} · ⭐ ${n1(W.standings[rank - 1].score)}${W.standings[rank - 1].worlds ? ` · 🏰 ${n(W.standings[rank - 1].worlds)}` : ''}</div>` : ''}
         <div class="muted small" style="margin-top:6px">${t.factionPerkShort}</div>
       </div></div>`;
   let body = '';
@@ -95,8 +95,8 @@ function weekTab(t, W) {
         : g.progress >= g.target && g.helped ? `<button class="btn wide gem" id="w-goal">${t.goalClaim(n(C.GOAL.gems), n(C.GOAL.coins))}</button>`
           : `<p class="muted small" style="margin:0">${t.goalNote(n(C.GOAL.gems), n(C.GOAL.coins))}</p>`}</div>` : ''}
     ${dv ? `<div class="panel derby"><div class="t">⚔️ ${t.derbyTitle}</div>
-      <div class="derby-row"><div class="dside">${mini(S.faction)}<b>${factionName(S.faction)}</b><span>${n(dv.me)}</span></div><div class="dvs">VS</div>
-        <div class="dside">${mini(dv.rival)}<b>${factionName(dv.rival)}</b><span>${n(dv.them)}</span></div></div>
+      <div class="derby-row"><div class="dside">${mini(S.faction)}<b>${factionName(S.faction)}</b><span>⭐ ${n1(dv.me)}</span></div><div class="dvs">VS</div>
+        <div class="dside">${mini(dv.rival)}<b>${factionName(dv.rival)}</b><span>⭐ ${n1(dv.them)}</span></div></div>
       <div class="dbar"><i style="width:${dv.me + dv.them ? dv.me / (dv.me + dv.them) * 100 : 50}%"></i></div>
       <p class="muted small" style="margin:8px 0">${t.derbyNote(factionName(dv.rival), n(C.DERBY_MULT), n(C.DERBY_WIN_GEMS))}</p>
       <button class="btn wide" id="w-taunt">${t.taunt}</button></div>` : ''}
@@ -121,14 +121,16 @@ function mapTab(t, W) {
         <span class="tn">${c[0] ? `${n(c[0].pts)}${c[1] ? ' · ' + n(c[1].pts) : ''}` : '—'}</span></button>`; }).join('')}</div>`;
 }
 
+// Scores with one decimal (points per active member).
+const n1 = x => (Math.round(x * 10) / 10).toLocaleString(L().locale, { maximumFractionDigits: 1 });
 function ranksTab(t, W) {
-  const top = Math.max(1, ...W.standings.map(x => x.pts)), rewardOf = p => (W.rewards[p] || W.rest), f = S.faction;
-  return `<p class="muted small">${t.warNote}</p>
+  const top = Math.max(1, ...W.standings.map(x => x.score)), rewardOf = p => (W.rewards[p] || W.rest), f = S.faction;
+  return `<p class="muted small">${t.warNote}</p><p class="muted small">${t.warScoreNote(n(W.min), n(W.floor))}</p>
     <div class="panel board">${W.standings.map((x, i) => `<div class="wrow ${x.id === f ? 'me' : ''}">
         <span class="rk">${medal(i + 1)}</span><img src="${img(x.id)}" alt="">
-        <div class="wb"><div class="wn">${factionName(x.id)} <span class="muted small">👤 ${n(x.members)}${x.worlds ? ` · 🏰 ${n(x.worlds)}` : ''}</span></div>
-          <div class="bar xp"><i style="width:${x.pts / top * 100}%"></i></div></div>
-        <span class="wp">${n(x.pts)}</span></div>`).join('')}</div>
+        <div class="wb"><div class="wn">${factionName(x.id)} <span class="muted small">👤 ${n(x.active)}/${n(x.members)} · 🎯 ${n(x.pts)}${x.worlds ? ` · 🏰 ${n(x.worlds)}` : ''}</span></div>
+          <div class="bar xp"><i style="width:${x.score / top * 100}%"></i></div></div>
+        <span class="wp">⭐ ${n1(x.score)}</span></div>`).join('')}</div>
     <div class="panel"><div class="t">${t.rewardsTitle}</div><div class="tiers">
       ${[0, 1, 2].map(i => `<span>${['🥇', '🥈', '🥉'][i]} #${n(i + 1)}</span><span>💎 ${n(rewardOf(i).gems)} + 🪙 ${n(rewardOf(i).coins)}</span>`).join('')}
       <span>#${n(4)}–${n(16)}</span><span>💎 ${n(W.rest.gems)} + 🪙 ${n(W.rest.coins)}</span>
@@ -171,9 +173,10 @@ function bindWar(t) {
 // Small banner on the map: your community and its place this week.
 function warBanner() {
   const t = T();
-  if (!S.faction) return `<button class="war-banner" id="to-war">🚩 ${t.pickTitle} →</button>`;
+  if (!isOpen('war')) return '';
+  if (!S.faction) return `<button class="chip gold" id="to-war">🚩 ${t.pickTitle}</button>`;
   const r = myRank();
-  return `<button class="war-banner" id="to-war"><img src="${img(S.faction)}" alt=""><span>${t.army(factionName(S.faction))}${r ? ` · ${r <= 3 ? ['🥇', '🥈', '🥉'][r - 1] : '#' + n(r)}` : ''}</span><b>${t.warOpen}</b></button>`;
+  return `<button class="chip war-chip" id="to-war"><img src="${img(S.faction)}" alt="">⚔️ ${t.warChip}${r ? ` ${r <= 3 ? ['🥇', '🥈', '🥉'][r - 1] : '#' + n(r)}` : ''}</button>`;
 }
 
 // ---------- share cards (Telegram story with the invite link, or a plain link share) ----------
@@ -194,7 +197,7 @@ async function drawShareCard(kind, id) {
   g.fillStyle = col; g.font = `900 ${title.length > 22 ? 40 : 54}px Vazirmatn, sans-serif`; g.fillText(title, W / 2, 1050, W - 40);
   g.fillStyle = '#ffc531'; g.font = '700 36px Vazirmatn, sans-serif';
   g.fillText(kind === 'war' ? t.storyJoin : kind === 'derby' && WAR && WAR.derby ? t.storyDerby(factionName(WAR.derby.rival)) : t.storyFusion, W / 2, 1120, W - 40);
-  if ((kind === 'war' || kind === 'derby') && WAR) { const r = myRank(); g.fillStyle = '#eef2ff'; g.font = '700 32px Vazirmatn, sans-serif'; g.fillText(`#${r} · ${t.weekPts(n(WAR.standings[r - 1].pts))}`, W / 2, 1180); }
+  if ((kind === 'war' || kind === 'derby') && WAR) { const r = myRank(); g.fillStyle = '#eef2ff'; g.font = '700 32px Vazirmatn, sans-serif'; g.fillText(`#${r} · ⭐ ${n1(WAR.standings[r - 1].score)}`, W / 2, 1180); }
   return c.toDataURL('image/jpeg', 0.82);
 }
 async function shareCard(kind, id = S.faction) {
@@ -233,14 +236,14 @@ function moodBadge(id) {
   const ids = h && h.fusion ? h.parts : [id];
   const hits = ids.map(x => ({ x, md: ECON.moodOf(m[x] && m[x].change) })).filter(o => o.md.key !== 'calm' && m[o.x]);
   if (!hits.length) return '';
-  return hits.map(({ x, md }) => `<div class="mood-badge ${md.key}">${MOOD_ICON[md.key]} ${t.mood[md.key]}${ids.length > 1 ? ` (${factionName(x)})` : ''} · ${fmtChange(m[x].change)} · ${t.moodFx[md.key]}</div>`).join('');
+  return hits.map(({ x, md }) => `<div class="mood-badge ${md.key}">${MOOD_ICON[md.key]} ${t.mood[md.key]}${ids.length > 1 ? ` (${factionName(x)})` : ''} · ${fmtChange(m[x].change)}${t.moodFx[md.key] ? ' · ' + t.moodFx[md.key] : ''}</div>`).join('');
 }
 async function marketModal() {
   const t = T(), m = moods(), at = Online.state.market && Online.state.market.at;
   const ids = BASE_HEROES.map(h => h.id).sort((a, b) => ((m[b] || {}).change || 0) - ((m[a] || {}).change || 0));
   openModal(`<div class="big center" style="font-size:22px">${t.marketTitle}</div>
     <p class="muted small center">${t.marketNote}</p>
-    <div class="mood-legend">${ECON.MOODS.map(md => `<div class="mood-badge ${md.key}">${MOOD_ICON[md.key]} ${t.mood[md.key]} · ${t.moodFx[md.key]}</div>`).join('')}</div>
+    <div class="mood-legend">${ECON.MOODS.map(md => `<div class="mood-badge ${md.key}">${MOOD_ICON[md.key]} ${t.mood[md.key]}${t.moodFx[md.key] ? ' · ' + t.moodFx[md.key] : ''}</div>`).join('')}</div>
     <div class="panel board" style="margin-top:10px">${ids.map(id => { const x = m[id] || { change: 0, src: 'activity' }, md = ECON.moodOf(x.change);
       return `<div class="wrow"><img src="${img(id)}" alt=""><div class="wb"><div class="wn">${factionName(id)}${x.sym ? ` <span class="muted small">$${x.sym}</span>` : ''}</div>
         <div class="muted small">${x.src === 'token' ? t.srcToken(x.sym) : t.srcActivity}</div></div>

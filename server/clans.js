@@ -1,5 +1,6 @@
 // Gram Legends — clans: create/join/leave, weekly shared points, weekly clan chest, top clans.
-// Points: new stage +2, AI win +1, arena win +5 (added via addPoints from the game server).
+// Points: the community-war points members earn (new stage, AI and arena wins, world boss — see war.js),
+// added via addPoints from the game server.
 const crypto = require('crypto');
 const ECON = require('../src/economy.js');
 

@@ -11,7 +11,9 @@ const assert = require('assert');
   await p.goto('file://' + file); await p.waitForTimeout(500);
   assert.equal(await p.evaluate(() => LANG), 'ru', 'auto-detected phone language');
   console.log('✓ language auto-detected from the device (ru)');
-  for (let i = 0; i < 4; i++) { await p.waitForTimeout(600); if (await p.$('#modal:not([hidden])')) await p.click('#m-close'); } // help → community picker → daily reward
+  for (let i = 0; i < 4; i++) { await p.waitForTimeout(600); if (await p.$('#modal:not([hidden])')) await p.click('#m-close'); } // help → daily reward
+  assert.equal(await p.evaluate(() => S.faction), null, 'no community picker before the first battle');
+  await p.evaluate(() => { PICK_ASKED = true; }); // (the picker after the first win is tested below)
   // fusion: pick any heroes you own and pay coins — no level rules, heroes are kept
   await p.evaluate(() => { Object.assign(S.owned, { notcoin: 12, pinkbull: 4, egor: 3, memegram: 5, yoda: 1 }); S.coins = 50000; S.holo.pinkbull = true; save(); showCoins(); });
   await p.click('[data-tab=heroes]'); await p.waitForTimeout(200);
@@ -97,6 +99,51 @@ const assert = require('assert');
   await p.click('#m-close');
   await p.click('.card[data-id=pinkbull]'); await p.waitForTimeout(200);
   await p.screenshot({ path: out + '/l6-holo.png' }); await p.click('#m-close');
+  // ---------- review fixes ----------
+  // community picker after the first win: owned cards marked, switch cost stated
+  await p.evaluate(() => { S.faction = null; PICK_ASKED = false; closeModal(); showStageResult(0, { result: 'win', coins: 10, first: false, unlocked: [] }); });
+  await p.click('#r-map'); await p.waitForSelector('#fac-ok');
+  assert.ok(await p.$('.fac-own'), 'owned community cards marked'); assert.match(await p.textContent('.modal-box'), /💎 100/);
+  await p.screenshot({ path: out + '/r1-picker.png' });
+  await p.click('#m-close'); await p.waitForTimeout(200);
+  console.log('✓ community picker after the first win (owned marked, switch cost shown)');
+  // hero card: upgrade/deck actions at the top, removing shows its power cost on the button
+  await p.evaluate(() => { closeModal(); show('heroes'); }); await p.click(`.card[data-id=${await p.evaluate(() => S.team[0])}]`); await p.waitForSelector('.hero-actions');
+  assert.ok(await p.evaluate(() => { const a = document.querySelector('.hero-actions'), st = document.querySelector('.modal-box .stats'); return a.compareDocumentPosition(st) & Node.DOCUMENT_POSITION_FOLLOWING; }), 'actions above the stats');
+  assert.ok(await p.$('#tm .lose'), 'remove button shows the power it costs'); assert.equal(await p.$('.modal-box .pdelta'), null, 'no red preview under the stats');
+  await p.screenshot({ path: out + '/r2-hero-actions.png' }); await p.click('#m-close');
+  // shards: a high-level duplicate becomes shards that pay for the next upgrade
+  const sh = await p.evaluate(() => { const id = S.team[0]; S.shards[id] = 100; save(); return { coins: ECON.upgradeCoins(S, id, S.owned[id]), price: ECON.upgradePrice(S, id, S.owned[id]) }; });
+  assert.equal(sh.coins, sh.price - 100, 'shards lower the coin cost');
+  // defeat: ways to get coins
+  await p.evaluate(() => { S.dq.p.wins = 99; S.afkSince = Date.now() - 5 * 3600e3; save(); showStageResult(5, { result: 'lose', stage: 5, unlocked: [] }); });
+  await p.waitForSelector('.get-coins'); assert.ok((await p.$$('.gc-row')).length >= 2, 'several ways to get coins');
+  await p.screenshot({ path: out + '/r3-defeat-coins.png' });
+  await p.click('#gc-afk'); await p.waitForTimeout(300); assert.match(await p.textContent('#gc-afk'), /✓/);
+  await p.click('#r-heroes'); await p.waitForTimeout(200);
+  console.log('✓ hero actions on top, shards, defeat → get coins');
+  // quests: claim all + badge count; achievements folded
+  await p.evaluate(() => { S.dq.p = { wins: 99, skills: 99, upgrades: 99, chests: 99 }; S.dq.c = {}; S.afkSince = Date.now() - 5 * 3600e3; save(); show('quests'); });
+  assert.match(await p.getAttribute('#nav [data-tab=quests]', 'data-n'), /^\d|9\+/);
+  await p.waitForSelector('#claim-all'); const c0 = await p.evaluate(() => S.coins);
+  assert.ok(await p.$('#ach-more'), 'achievements folded behind "show all"');
+  await p.click('#claim-all'); await p.waitForSelector('#gm-ok'); assert.ok(await p.evaluate(c => S.coins > c, c0), 'claim all paid');
+  await p.screenshot({ path: out + '/r4-claim-all.png' }); await p.click('#gm-ok');
+  console.log('✓ quests: claim all, badge count, folded achievements');
+  // map: Fight stays reachable; one goal banner; features open step by step
+  await p.evaluate(() => { S.cleared = 3; S.world = 0; S.sel = 3; save(); show('map'); });
+  assert.ok(await p.$('.fight-bar #go')); assert.ok((await p.$$('.goal-banner, .next-unlock, .rookie-banner')).length <= 1, 'one goal banner');
+  assert.equal(await p.$('.deck-switch'), null, 'saved decks open in world 3'); assert.equal(await p.$('#to-raid'), null, 'world boss locked');
+  await p.screenshot({ path: out + '/r5-map-early.png' });
+  await p.evaluate(() => show('quests')); assert.equal(await p.$('#to-pass'), null, 'season pass opens after 5 stages'); assert.ok(await p.$('.lock-note'), 'achievements locked note');
+  await p.evaluate(() => { S.cleared = 70; save(); show('map'); });
+  console.log('✓ map: sticky Fight, single goal banner, step-by-step unlocks');
+  // Persian: the "·" separator is shown as "•" (Persian zero looks like a dot)
+  await p.click('#settings'); await p.click('#s-lang'); await p.click('[data-lang=fa]'); await p.waitForTimeout(150); await p.click('#m-close');
+  await p.evaluate(() => show('chest')); await p.waitForTimeout(100);
+  assert.ok(!(await p.textContent('#screen')).includes('·'), 'no "·" in Persian');
+  await p.screenshot({ path: out + '/r6-fa-chest.png', fullPage: true });
+  console.log('✓ Persian separator');
   // languages
   for (const code of ['ar', 'zh', 'hi', 'en']) {
     await p.click('#settings'); await p.click('#s-lang'); await p.click(`[data-lang=${code}]`); await p.waitForTimeout(150);

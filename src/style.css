@@ -80,7 +80,7 @@ button:disabled { opacity: .45; cursor: default; }
 .card .nm { font-weight: 900; font-size: 13px; text-align: start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card .lv { position: absolute; top: 5px; right: 5px; background: rgba(0,0,0,.7); border-radius: 8px; padding: 1px 6px; font-size: 12px; font-weight: 700; }
 .card .rl { position: absolute; top: 5px; left: 5px; font-size: 16px; filter: drop-shadow(0 1px 2px #000); }
-.card .in-team { display: inline-block; background: var(--ton); border-radius: 6px; padding: 0 5px; font-size: 10px; font-weight: 700; margin-bottom: 2px; }
+.card .in-team { display: inline-block; background: var(--ton); border-radius: 6px; padding: 0 5px; font-size: 11px; font-weight: 700; margin-bottom: 2px; }
 .card.locked img { filter: grayscale(1) brightness(.3); }
 .card.locked .lock { position: absolute; inset: 0; display: grid; place-items: center; font-size: 30px; }
 .card .up { position: absolute; top: 5px; left: 28px; font-size: 13px; animation: hop 1s infinite; }
@@ -179,7 +179,7 @@ button:disabled { opacity: .45; cursor: default; }
 /* daily */
 .days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; margin: 12px 0; }
 .day { background: var(--panel2); border-radius: 10px; padding: 6px 2px; text-align: center; display: flex; flex-direction: column; gap: 2px; border: 2px solid transparent; }
-.day small { font-size: 9px; color: var(--muted); }
+.day small { font-size: 11px; color: var(--muted); }
 .day b { font-size: 18px; }
 .day.got { opacity: .45; }
 .day.got b::after { content: '✓'; color: var(--green); font-size: 12px; }
@@ -294,7 +294,7 @@ button:disabled { opacity: .45; cursor: default; }
 .fp { position: relative; }
 .fp img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; object-position: 50% 20%; border: 2px solid var(--red); display: block; }
 .fp.ok img { border-color: var(--green); }
-.fp b { position: absolute; bottom: -4px; inset-inline-end: -4px; background: #000; border-radius: 8px; font-size: 10px; padding: 0 4px; }
+.fp b { position: absolute; bottom: -4px; inset-inline-end: -4px; background: #000; border-radius: 8px; font-size: 11px; padding: 0 4px; }
 .fneed { font-size: 11px; text-align: center; }
 .fsupply { font-size: 11px; text-align: center; color: var(--gold); font-weight: 700; }
 .fsupply.out { color: var(--red); }
@@ -338,7 +338,7 @@ button:disabled { opacity: .45; cursor: default; }
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--muted); }
 .altar-slot.opt { opacity: .7; }
 .altar-slot .plus { font-size: 32px; font-weight: 900; color: var(--ton); }
-.altar-slot small { font-size: 10px; padding: 0 4px; }
+.altar-slot small { font-size: 11px; padding: 0 4px; }
 .altar-slot.filled { border-style: solid; border-color: var(--green); }
 .altar-slot.filled.low { border-color: var(--red); }
 .altar-slot.filled img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 20%; }
@@ -397,7 +397,7 @@ button:disabled { opacity: .45; cursor: default; }
 .fac { position: relative; background: var(--panel2); border: 2px solid var(--line); border-radius: 12px; padding: 4px; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
 .fac img { width: 100%; aspect-ratio: 3/4; object-fit: cover; object-position: 50% 20%; border-radius: 8px; display: block; }
 .fac span { font-size: 11px; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fac small { font-size: 10px; color: var(--muted); }
+.fac small { font-size: 11px; color: var(--muted); }
 .fac.on { border-color: var(--gold); box-shadow: 0 0 16px -2px var(--gold); background: #3a3000; }
 .perks { display: grid; gap: 6px; font-size: 13px; background: rgba(255,255,255,.04); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }
 .friend-in { color: var(--green); font-weight: 700; margin: 4px 0; }
@@ -442,7 +442,7 @@ button:disabled { opacity: .45; cursor: default; }
 .cry-now { margin-top: 8px; padding: 8px 12px; border-radius: 12px; background: rgba(255,197,49,.1); border: 1px solid rgba(255,197,49,.3); font-size: 13px; }
 .cries { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .cries .btn { padding: 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 13px; }
-.cries .btn small { font-size: 10px; font-weight: 700; opacity: .85; line-height: 1.2; }
+.cries .btn small { font-size: 11px; font-weight: 700; opacity: .85; line-height: 1.2; }
 .derby-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
 .dside { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .dside b { font-size: 13px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -458,14 +458,14 @@ img.mini.big { width: 84px; height: 84px; border-width: 3px; border-color: var(-
 .frames { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 4px; }
 .fr { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; font-weight: 700; color: var(--muted); opacity: .55; }
 .fr.got { opacity: 1; color: var(--text); }
-.fr small { font-size: 10px; color: var(--muted); }
+.fr small { font-size: 11px; color: var(--muted); }
 .fdot { width: 26px; height: 26px; border-radius: 8px; background: var(--panel2); border: 3px solid var(--fc, var(--line)); }
 .terr-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
 .terr { position: relative; background: var(--panel); border: 2px solid var(--line); border-radius: 12px; padding: 6px 2px 4px; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
-.terr small { font-size: 10px; color: var(--muted); font-weight: 700; }
+.terr small { font-size: 11px; color: var(--muted); font-weight: 700; }
 .terr img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; object-position: 50% 20%; }
 .terr .none { font-size: 24px; line-height: 40px; }
-.terr .tn { font-size: 10px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.terr .tn { font-size: 11px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .terr.held { border-color: #e0475a; }
 .terr.mine { border-color: var(--gold); box-shadow: 0 0 14px -4px var(--gold); background: #2a2400; }
 .world-owner { margin-top: 4px; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; background: rgba(0,0,0,.35); border-radius: 99px; padding: 2px 10px 2px 4px; }
@@ -490,7 +490,7 @@ img.mini.big { width: 84px; height: 84px; border-width: 3px; border-color: var(-
 #battle.has-emotes .b-hint { display: none; }
 /* card names: long (fusion) names wrap to two lines; every name box has the same height so the bars line up */
 .hcard .hc-name { min-height: 25px; display: flex; align-items: center; justify-content: center; line-height: 1.1; }
-.hcard .hc-name.long { white-space: normal; font-size: 9px; letter-spacing: -.2px; overflow-wrap: anywhere; }
+.hcard .hc-name.long { white-space: normal; font-size: 11px; letter-spacing: -.2px; overflow-wrap: anywhere; }
 .tall-names .hcard .hc-name { min-height: 34px; }
 /* v2 fusion lab */
 .altar-slot.locked { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: .5; border-style: dashed; }
@@ -499,7 +499,7 @@ img.mini.big { width: 84px; height: 84px; border-width: 3px; border-color: var(-
 .craft { position: relative; background: var(--panel); border: 2px solid var(--rc); border-radius: 12px; padding: 4px 4px 6px; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
 .craft img { width: 100%; aspect-ratio: 3/4; object-fit: cover; object-position: 50% 20%; border-radius: 8px; }
 .craft .cn { font-size: 11px; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.craft small { font-size: 10px; color: var(--muted); }
+.craft small { font-size: 11px; color: var(--muted); }
 .card.pick .have { position: absolute; top: 5px; left: 5px; background: var(--green); color: #002a10; border-radius: 50%; width: 20px; height: 20px; display: grid; place-items: center; font-size: 12px; font-weight: 900; }
 /* ---------- battle depth: ultimate, combos, weakness, formation ---------- */
 .ult-wrap { display: flex; align-items: center; gap: 8px; padding: 4px 14px 0; position: relative; z-index: 4; }
@@ -533,12 +533,12 @@ img.mini.big { width: 84px; height: 84px; border-width: 3px; border-color: var(-
 .set-heroes div { display: flex; flex-direction: column; align-items: center; opacity: .45; }
 .set-heroes div.ok { opacity: 1; }
 .set-heroes img { width: 100%; aspect-ratio: 1; border-radius: 50%; object-fit: cover; object-position: 50% 20%; }
-.set-heroes small { font-size: 9px; color: var(--muted); }
+.set-heroes small { font-size: 11px; color: var(--muted); }
 .cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; margin-top: 8px; }
 .cday { background: var(--panel2); border-radius: 10px; padding: 6px 2px; display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; }
-.cday small { font-size: 10px; color: var(--muted); }
+.cday small { font-size: 11px; color: var(--muted); }
 .cday b { font-size: 18px; }
-.cday span { font-size: 8.5px; line-height: 1.1; color: var(--muted); overflow-wrap: anywhere; hyphens: auto; max-width: 100%; }
+.cday span { font-size: 11px; line-height: 1.1; color: var(--muted); overflow-wrap: anywhere; hyphens: auto; max-width: 100%; }
 .cday.today { background: #3a3000; box-shadow: inset 0 0 0 2px var(--gold); }
 .cday.today span { color: var(--gold); }
 /* ---------- first-battle coach ---------- */
@@ -550,7 +550,7 @@ img.mini.big { width: 84px; height: 84px; border-width: 3px; border-color: var(-
 .rookie { border-color: rgba(75,227,122,.45); box-shadow: 0 0 20px -8px var(--green); }
 .rdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; margin-bottom: 10px; }
 .rday { background: var(--panel2); border-radius: 10px; padding: 6px 0; display: flex; flex-direction: column; align-items: center; gap: 2px; border: 2px solid transparent; }
-.rday small { font-size: 10px; color: var(--muted); }
+.rday small { font-size: 11px; color: var(--muted); }
 .rday b { font-size: 16px; }
 .rday.got { opacity: .55; } .rday.locked { opacity: .45; }
 .rday.ready { border-color: var(--gold); box-shadow: 0 0 12px -2px var(--gold); }
@@ -574,7 +574,7 @@ img.mini.big { width: 84px; height: 84px; border-width: 3px; border-color: var(-
 .prow.cur .pt { box-shadow: 0 0 0 3px var(--gold); }
 .pcell { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
 .pcell span { font-weight: 900; font-size: 14px; white-space: nowrap; }
-.pcell small { font-size: 10px; color: var(--muted); min-height: 12px; }
+.pcell small { font-size: 11px; color: var(--muted); min-height: 12px; }
 .pcell.prem { background: linear-gradient(180deg, rgba(255,197,49,.10), transparent), var(--panel); border-color: rgba(255,197,49,.35); }
 .pcell.ready { border-color: var(--green); box-shadow: 0 0 12px -3px var(--green); }
 .pcell.ready small { color: var(--green); font-weight: 700; }
@@ -598,7 +598,7 @@ img.mini.big { width: 84px; height: 84px; border-width: 3px; border-color: var(-
 /* deck synergies */
 .syn-strip { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; margin: 10px 0 4px; padding: 8px; border-radius: 12px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); color: var(--text); font: inherit; text-align: start; position: relative; }
 .syn { display: inline-flex; flex-direction: column; padding: 4px 8px; border-radius: 9px; font-size: 12px; font-weight: 700; line-height: 1.25; }
-.syn small { font-size: 10px; font-weight: 600; opacity: .9; }
+.syn small { font-size: 11px; font-weight: 600; opacity: .9; }
 .syn.good { background: rgba(46,204,113,.16); color: #5df29a; border: 1px solid rgba(46,204,113,.45); }
 .syn.bad { background: rgba(255,77,77,.14); color: #ff7b7b; border: 1px solid rgba(255,77,77,.45); }
 .syn.off { color: var(--muted); border: 1px dashed rgba(255,255,255,.18); font-weight: 600; font-size: 11px; }
@@ -697,7 +697,7 @@ img.mini.big { width: 84px; height: 84px; border-width: 3px; border-color: var(-
 /* saved decks 1–5 */
 .deck-switch { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 6px 0 8px; }
 .dk { display: flex; flex-direction: column; align-items: center; padding: 5px 2px; border-radius: 10px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.04); color: var(--text); font: inherit; }
-.dk b { font-size: 15px; } .dk small { font-size: 10px; color: var(--muted); white-space: nowrap; }
+.dk b { font-size: 15px; } .dk small { font-size: 11px; color: var(--muted); white-space: nowrap; }
 .dk.on { border-color: var(--gold); background: rgba(255,200,60,.14); box-shadow: 0 0 10px -4px var(--gold); } .dk.on small { color: var(--gold); }
 .dk.empty { border-style: dashed; opacity: .75; }
 /* quick deck building */
@@ -717,3 +717,52 @@ img.mini.big { width: 84px; height: 84px; border-width: 3px; border-color: var(-
 .fund-bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); margin: 4px 0; overflow: hidden; }
 .fund-bar i { display: block; height: 100%; background: linear-gradient(90deg, #ffd24a, #ff8a00); }
 .fund-link { width: 100%; margin: 4px 0 8px; padding: 10px 12px; border-radius: 12px; border: 1px dashed rgba(255,210,74,.6); background: rgba(255,210,74,.08); color: var(--text); font: inherit; font-size: 13px; text-align: start; }
+/* review fixes: hero actions at the top, shards, gem chest pity */
+.hero-actions { margin: 12px 0 4px; }
+.hero-actions .btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.hero-actions .btn small { font-size: 11px; font-weight: 700; opacity: .9; }
+.hero-actions .btn small.lose { color: #ff8a8a; }
+.shard-line { font-size: 12px; color: #c9b8ff; text-align: center; margin: 2px 0 6px; }
+.pity { font-size: 12px; color: #e3c6ff; margin: 4px 0 6px; }
+/* map: the Fight button stays reachable above the nav; one goal banner; small chips for the rest */
+.stage-panel { margin-top: 10px; }
+.fight-bar { position: sticky; bottom: 84px; z-index: 5; padding-top: 8px; }
+.fight-bar .btn { box-shadow: 0 6px 22px rgba(0,0,0,.55); }
+.goal-banner { width: 100%; margin-top: 10px; padding: 12px 14px; min-height: 44px; border-radius: 12px; display: flex; align-items: center; gap: 8px; font-size: 14px;
+  background: linear-gradient(90deg, rgba(255,197,49,.25), rgba(255,138,61,.15)); border: 1px solid rgba(255,197,49,.55); color: var(--text); }
+.goal-banner b { flex: 1; text-align: start; }
+.map-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.map-chips .chip { flex: 1 1 30%; min-height: 44px; padding: 8px 10px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; }
+.map-chips .war-chip img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
+/* defeat: ways to get coins */
+.get-coins { margin: 10px 0 0; padding: 10px; border-radius: 14px; background: rgba(255,197,49,.06); border: 1px solid rgba(255,197,49,.25); text-align: start; }
+.get-coins .t { font-weight: 900; margin-bottom: 6px; }
+.gc-row { display: block; width: 100%; min-height: 44px; margin-top: 6px; padding: 10px 12px; border-radius: 12px; background: var(--panel2); border: 1px solid var(--line); font-size: 13px; font-weight: 700; text-align: start; }
+.gc-row.gold { border-color: rgba(255,197,49,.6); color: var(--gold); }
+/* quests tab badge shows the number of waiting rewards */
+#nav button.dot::after { content: attr(data-n); width: auto; height: 16px; min-width: 16px; padding: 0 4px; top: 4px; left: calc(50% + 6px); border-radius: 8px;
+  font-size: 10px; font-weight: 900; line-height: 16px; color: #fff; text-align: center; box-sizing: border-box; }
+#claim-all { margin-bottom: 8px; }
+
+/* tap targets: small controls get a 44px touch area; the deck +/− button sits above the card name */
+.card .qd { bottom: 50px; }
+.card .qd::after { content: ''; position: absolute; inset: -6px; }
+.card .dhint { bottom: 92px; }
+.chip, .tag { min-height: 32px; }
+button.tag { min-height: 36px; padding-top: 6px; padding-bottom: 6px; }
+.dk { min-height: 44px; }
+/* long popups keep their main button in reach */
+#fac-ok, .modal-box .btns.sticky { position: sticky; bottom: -16px; z-index: 3; box-shadow: 0 -10px 18px var(--panel); }
+.modal-box .btns.sticky { background: var(--panel); padding: 10px 0 12px; margin-bottom: -4px; }
+.fac-own { position: absolute; top: 4px; inset-inline-start: 4px; font-style: normal; font-size: 11px; font-weight: 900; background: var(--green); color: #002a10; border-radius: 7px; padding: 0 5px; }
+/* skill banner: long (e.g. Persian) skill names wrap inside the screen instead of running off it */
+.banner { max-width: calc(100% - 16px); box-sizing: border-box; }
+.banner > div { min-width: 0; }
+.banner .s { font-size: clamp(15px, 5vw, 22px); line-height: 1.15; overflow-wrap: anywhere; }
+.manual-tag { color: #8ff0b0; font-weight: 800; margin: 4px 0; }
+.starter-offer { width: 100%; text-align: center; border: 2px solid var(--gold); background: linear-gradient(135deg, rgba(255,197,49,.18), rgba(212,155,255,.14)); display: block; }
+.starter-offer .so-items { font-size: 20px; font-weight: 900; margin: 6px 0; }
+.starter-offer .btn { margin-top: 8px; }
+.pack .pb { font-size: 11px; font-weight: 900; color: #8ff0b0; }
+.club { border-color: rgba(255,197,49,.5); }
+.war-entry .mini-av { width: 40px; height: 40px; margin-inline-end: 8px; }

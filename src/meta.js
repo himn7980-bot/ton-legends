@@ -12,9 +12,10 @@ const afkAmount = () => ECON.afkAmount(S, now());
 const achTier = a => ECON.achTier(S, a);
 
 let SUGGEST = null; // community suggested by the friend who invited this player
+// Quests tab badge: how many rewards are waiting.
 function updateBadge() {
-  const b = document.querySelector('#nav [data-tab=quests]');
-  if (b) b.classList.toggle('dot', ECON.claimable(S, now()) > 0);
+  const b = document.querySelector('#nav [data-tab=quests]'), c = ECON.claimable(S, now());
+  if (b) { b.classList.toggle('dot', c > 0); b.dataset.n = c > 9 ? '9+' : String(c); }
 }
 
 function giftModal(icon, title, coins, note, gems) {
@@ -31,7 +32,8 @@ async function claimDaily() {
   const r = await tryAct({ type: 'daily' });
   if (!r) return;
   if (r.chest) { chestReveal(CHESTS.find(c => c.key === 'royal'), r.chest); if (r.gems) toast(`+💎 ${n(r.gems)}`); }
-  else giftModal('📅', T().dayReward(n(r.day)), r.coins);
+  else giftModal('📅', T().dayReward(n(r.day)), r.coins, r.frozen ? '🧊 ' + T().freezeUsed : '');
+  if (r.chest && r.frozen) toast('🧊 ' + T().freezeUsed);
 }
 function dailyHtml(panel = true) {
   const t = T(), can = dailyCanClaim();
@@ -41,7 +43,8 @@ function dailyHtml(panel = true) {
       const d = i + 1, got = can ? d < nextDay : d <= nextDay, cur = can && d === nextDay;
       return `<div class="day ${got ? 'got' : ''} ${cur ? 'cur' : ''}"><small>${t.day(n(d))}</small><b>${r === 'royal' ? '👑' : '🪙'}</b><small>${r === 'royal' ? `${t.chestShort} +💎${n(ECON.DAY7_GEMS)}` : n(r)}</small></div>`;
     }).join('')}</div>
-    <button class="btn wide ${can ? 'gold' : 'ghost'}" id="daily" ${can ? '' : 'disabled'}>${can ? t.claimToday : t.comeBack}</button></div>`;
+    <button class="btn wide ${can ? 'gold' : 'ghost'}" id="daily" ${can ? '' : 'disabled'}>${can ? t.claimToday : t.comeBack}</button>
+    <p class="muted small" style="margin:6px 0 0">🧊 ${ECON.freezeReady(S, now()) ? t.freezeReady : t.freezeUsedWeek}</p></div>`;
 }
 function maybeDaily() { if (dailyCanClaim() && S.seenHelp) setTimeout(() => { if ($('#modal').hidden && !BT) openModal(dailyHtml(false), box => box.querySelector('#daily').onclick = claimDaily); }, 400); }
 
@@ -104,30 +107,36 @@ function calendarHtml() {
 function renderQuests() {
   const t = T();
   ECON.ensureDQ(S, now());
-  const afk = afkAmount(), afkH = Math.min(AFK_CAP_H, (Date.now() - S.afkSince) / 3600e3);
+  const cap = ECON.afkCap(S, now()), afk = afkAmount(), afkH = Math.min(cap, (Date.now() - S.afkSince) / 3600e3);
   $('#screen').innerHTML = `
-    ${passBanner()}
+    ${isOpen('pass') ? passBanner() : ''}
     ${ECON.rookieActive(S) ? rookieHtml() : ''}
     ${calendarHtml()}
     ${dailyHtml()}
     <div class="panel"><div class="row"><div class="t">${t.idleTitle}</div><span class="muted">${t.perHour(n(afkRate()))}</span></div>
-      <p class="muted">${t.idleNote(n(AFK_CAP_H))}</p>
-      <div class="bar xp"><i style="width:${afkH / AFK_CAP_H * 100}%"></i></div>
+      <p class="muted">${t.idleNote(n(cap))}</p>
+      <div class="bar xp"><i style="width:${afkH / cap * 100}%"></i></div>
       <button class="btn wide" id="afk" style="margin-top:10px" ${afk > 0 ? '' : 'disabled'}>${t.claim(n(afk))}</button></div>
+    ${Online.state.askNotify && S.cleared >= 3 ? `<div class="panel notify-ask"><div class="t">🔔 ${t.notifyAskTitle}</div><p class="muted small" style="margin:4px 0 8px">${t.notifyAskNote}</p>
+      <div class="btns"><button class="btn ghost" id="na-no">${t.notifyNo}</button><button class="btn gold" id="na-yes">${t.notifyYes}</button></div></div>` : ''}
+    ${clubHtml()}
     <div id="pq-box"></div>
     <div class="h2">${t.todayQuests}</div>
+    ${claimAllList().length > 1 ? `<button class="btn wide gold" id="claim-all">🎁 ${t.claimAll(n(claimAllList().length))}</button>` : ''}
     ${DAILY_QUESTS.map(q => questRow('dq-' + q.id, '🎯', t.dq[q.id], Math.min(q.goal, S.dq.p[q.id] || 0), q.goal, dqReward(q), !!S.dq.c[q.id])).join('')}
     <div class="h2">${t.achievements}</div>
-    ${ACHIEVEMENTS.map(a => ({ a, tier: achTier(a) })).map(x => ({ ...x, rank: x.tier >= x.a.tiers.length ? 2 : x.a.stat(S) >= x.a.tiers[x.tier] ? 0 : 1 })).sort((x, y) => x.rank - y.rank).map(({ a }) => {
-      const tier = achTier(a), done = tier >= a.tiers.length, goal = a.tiers[Math.min(tier, a.tiers.length - 1)];
-      return questRow('ach-' + a.id, a.icon, t.ach[a.id](a.id === 'league' ? t.leagueTier[['bronze', 'silver', 'gold', 'diamond', 'legend'][goal]] : n(goal)) + (a.tiers.length > 1 ? ` <span class="muted">(${n(Math.min(tier + 1, a.tiers.length))}/${n(a.tiers.length)})</span>` : ''),
-        Math.min(goal, a.stat(S)), goal, a.r[Math.min(tier, a.r.length - 1)], done, ECON.achGems(Math.min(tier, a.r.length - 1)));
-    }).join('')}`;
+    ${isOpen('ach') ? achList() : lockNote('ach')}`;
   partnerQuests($('#pq-box'));
   $('#daily').onclick = claimDaily;
   bindRookie();
-  $('#to-pass').onclick = () => show('pass');
+  if ($('#to-pass')) $('#to-pass').onclick = () => show('pass');
   $('#afk').onclick = async () => { if (await tryAct({ type: 'afk' })) renderQuests(); };
+  if ($('#claim-all')) $('#claim-all').onclick = claimAll;
+  const ask = on => async () => { try { Online.state.notify = (await Online.setNotify(on)).on; } catch (e) {} Online.state.askNotify = false; renderQuests(); };
+  if ($('#na-yes')) { $('#na-yes').onclick = ask(true); $('#na-no').onclick = ask(false); }
+  if ($('#club-claim')) $('#club-claim').onclick = async () => { $('#club-claim').disabled = true; const r = await tryAct({ type: 'club' }); if (r) giftModal('👑', T().clubTitle, 0, '', r.gems); else renderQuests(); };
+  if ($('#club-buy')) $('#club-buy').onclick = () => buyPack('club', $('#club-buy'));
+  if ($('#ach-more')) $('#ach-more').onclick = () => { ACH_ALL = !ACH_ALL; renderQuests(); };
   document.querySelectorAll('[data-q]').forEach(b => b.onclick = async () => {
     const [kind, id] = b.dataset.q.split('-');
     b.disabled = true;
@@ -135,6 +144,54 @@ function renderQuests() {
     if (r && r.gems) toast(`+🪙 ${n(r.coins)} · +💎 ${n(r.gems)}`);
     renderQuests();
   });
+}
+// Gram Club (monthly Stars subscription): today's gems, or the offer.
+function clubHtml() {
+  const t = T(), C = Online.state.club, on = ECON.clubActive(S, now());
+  if (on) { const got = S.club.day === ECON.day(now()), days = Math.max(1, Math.ceil((S.club.until - now()) / 864e5));
+    return `<div class="panel club"><div class="row"><div class="t">👑 ${t.clubTitle}</div><span class="muted small">${t.clubDays(n(days))}</span></div>
+      <button class="btn wide gem" id="club-claim" ${got ? 'disabled' : ''}>${got ? '✓ ' + t.comeBack : t.clubClaim(n(ECON.CLUB.gems))}</button></div>`; }
+  if (!C || !Online.state.profile) return '';
+  return `<div class="panel club"><div class="t">👑 ${t.clubTitle}</div><p class="muted small" style="margin:4px 0 8px">${t.clubNote(n(ECON.CLUB.gems), n(ECON.CLUB.afkH))}</p>
+    <button class="btn wide gold" id="club-buy">${t.clubBuy(n(C.stars))}</button></div>`;
+}
+// Achievements: rewards waiting first, then the 3 closest goals; the rest folds behind "Show all".
+let ACH_ALL = false;
+function achList() {
+  const t = T(), rows = ACHIEVEMENTS.map(a => ({ a, tier: achTier(a) })).map(x => ({ ...x, done: x.tier >= x.a.tiers.length }))
+    .map(x => ({ ...x, ready: !x.done && x.a.stat(S) >= x.a.tiers[x.tier], prog: x.done ? 0 : Math.min(1, x.a.stat(S) / x.a.tiers[x.tier]) }))
+    .sort((x, y) => (y.ready - x.ready) || (x.done - y.done) || (y.prog - x.prog));
+  const ready = rows.filter(x => x.ready).length, shown = ACH_ALL ? rows : rows.slice(0, ready + 3);
+  return shown.map(({ a }) => {
+    const tier = achTier(a), done = tier >= a.tiers.length, goal = a.tiers[Math.min(tier, a.tiers.length - 1)];
+    return questRow('ach-' + a.id, a.icon, t.ach[a.id](a.id === 'league' ? t.leagueTier[['bronze', 'silver', 'gold', 'diamond', 'legend'][goal]] : n(goal)) + (a.tiers.length > 1 ? ` <span class="muted">(${n(Math.min(tier + 1, a.tiers.length))}/${n(a.tiers.length)})</span>` : ''),
+      Math.min(goal, a.stat(S)), goal, a.r[Math.min(tier, a.r.length - 1)], done, ECON.achGems(Math.min(tier, a.r.length - 1)));
+  }).join('') + (rows.length > shown.length || ACH_ALL ? `<button class="btn ghost wide" id="ach-more">${ACH_ALL ? t.showLess : t.showAll(n(rows.length))}</button>` : '');
+}
+// Everything that can be collected in one go: the idle chest, finished daily quests and achievements.
+function claimAllList() {
+  ECON.ensureDQ(S, now());
+  const out = [];
+  if (afkAmount() >= afkRate() / 2) out.push({ type: 'afk' });
+  if (ECON.clubActive(S, now()) && S.club.day !== ECON.day(now())) out.push({ type: 'club' });
+  for (const q of DAILY_QUESTS) if (!S.dq.c[q.id] && (S.dq.p[q.id] || 0) >= q.goal) out.push({ type: 'quest', id: q.id });
+  if (isOpen('ach')) for (const a of ACHIEVEMENTS) { const tr = achTier(a); if (tr < a.tiers.length && a.stat(S) >= a.tiers[tr]) out.push({ type: 'ach', id: a.id }); }
+  return out;
+}
+let CLAIMING = false;
+async function claimAll() {
+  if (CLAIMING) return;
+  CLAIMING = true;
+  const b = $('#claim-all'); if (b) b.disabled = true;
+  let coins = 0, gems = 0;
+  try {
+    // achievements can unlock the next tier right away, so keep going until nothing is left (bounded)
+    for (let round = 0; round < 5; round++) {
+      const list = claimAllList(); if (!list.length) break;
+      for (const a of list) { const r = await tryAct(a); if (!r) continue; coins += r.coins || 0; gems += r.gems || 0; }
+    }
+  } finally { CLAIMING = false; }
+  if (coins || gems) { Sound.play('coin'); giftModal('🎁', T().claimedAll, coins, '', gems); } else renderQuests();
 }
 function questRow(key, icon, title, prog, goal, reward, claimed, gems) {
   const ready = !claimed && prog >= goal;
@@ -148,18 +205,18 @@ function questRow(key, icon, title, prog, goal, reward, claimed, gems) {
 function renderRank() {
   const t = T(), u = Online.user();
   $('#screen').innerHTML = `
+    <div class="panel row clan-entry war-entry" id="to-war2">${S.faction ? `<img class="mini-av" src="${img(S.faction)}" alt="">` : '🚩'}<div class="t" style="flex:1">${t.warTitle}${S.faction ? `<div class="muted small">${t.army(factionName(S.faction))}${myRank() ? ` · ${medal(myRank())}` : ''}</div>` : ''}</div><button class="btn gold">${t.openClan} →</button></div>
+    ${Online.state.profile ? `<div class="panel row clan-entry" id="to-clan"><div class="t">${t.clanTitle}</div><button class="btn">${t.openClan} →</button></div>` : ''}
+    ${Online.inviteLink() ? `<div class="panel"><div class="t">${t.invite}</div>
+      <p class="muted">${t.inviteNote}</p>
+      <button class="btn wide" id="invite">${t.sendInvite}</button><button class="btn wide ghost" id="to-friends" style="margin-top:8px">👥 ${t.friendsTitle} →</button></div>` : ''}
+    ${Online.state.profile ? `<div class="panel row clan-entry" id="to-fund2"><div class="t">🤝 ${t.fundTitle}</div><button class="btn">${t.openClan} →</button></div>` : ''}
     <div class="panel profile" id="to-profile"><div class="avatar has-img ${skinClass()}">${ECON.avatarOf(S) ? `<img src="${img(ECON.avatarOf(S))}" alt="">` : (u && u.first_name ? esc(u.first_name[0]) : '🦸')}</div><div style="flex:1">
       <div class="t">${esc(MY_NAME || (u ? u.first_name + (u.last_name ? ' ' + u.last_name : '') : t.player))} <span class="edit-ico">✏️</span></div>
       <div class="muted">${t.stageOf(n(S.cleared), n(TOTAL_STAGES), n(teamPower(S.team)))}</div></div></div>
     <div class="stats">
       <div>${t.wins}<b>${n(S.stats.wins)}</b></div><div>${t.arenaWins}<b>${n(S.stats.pvpWins || 0)}</b></div><div>${t.bossesBeaten}<b>${n(S.stats.bosses)}</b></div>
     </div>
-    <div class="panel row clan-entry" id="to-war2"><div class="t">${t.warTitle}</div><button class="btn">${t.openClan} →</button></div>
-    ${Online.state.profile ? `<div class="panel row clan-entry" id="to-fund2"><div class="t">💰 ${t.fundTitle}</div><button class="btn">${t.openClan} →</button></div>` : ''}
-    ${Online.state.profile ? `<div class="panel row clan-entry" id="to-clan"><div class="t">${t.clanTitle}</div><button class="btn">${t.openClan} →</button></div>` : ''}
-    ${Online.inviteLink() ? `<div class="panel"><div class="t">${t.invite}</div>
-      <p class="muted">${t.inviteNote}</p>
-      <button class="btn wide" id="invite">${t.sendInvite}</button><button class="btn wide ghost" id="to-friends" style="margin-top:8px">👥 ${t.friendsTitle} →</button></div>` : ''}
     ${Online.state.profile ? `<div class="panel row clan-entry" id="to-wallet"><div class="t">💠 ${t.walletTitle}</div><button class="btn">${t.openClan} →</button></div>` : ''}
     <div class="h2">${t.leaderboard}</div>
     <div id="board">${Online.state.server ? `<p class="muted center">${t.loading}</p>` : `<div class="panel center muted">${t.boardOffline}</div>`}</div>`;
@@ -228,7 +285,7 @@ function langModal() {
 function guideModal() {
   const t = T();
   openModal(`<div class="big center" style="font-size:22px">${t.guideTitle}</div>
-    ${[...t.guideSections.map((sec, i) => (t.guideFix && t.guideFix[i]) || sec), ...(t.guideExtra || [])].map(([h, p]) => `<div class="guide-sec"><div class="t">${h}</div><p class="muted">${p}</p></div>`).join('')}
+    ${[...t.guideSections.map((sec, i) => (t.guideFix && t.guideFix[i]) || sec), ...(t.guideExtra || []).map((sec, i) => (t.guideExtraFix && t.guideExtraFix[i]) || sec), ...(t.guideMore || [])].map(([h, p]) => `<div class="guide-sec"><div class="t">${h}</div><p class="muted">${p}</p></div>`).join('')}
     <div class="guide-sec"><div class="t">🔗 ${t.synTitle}</div><p class="muted">${t.synNote}</p>
       ${SYNERGIES.map(x => `<div class="syn-row ${x.bad ? 'bad' : 'good'}"><div class="row"><b>${x.ico} ${t.synName[x.id]}</b><span>${synFx(x)}</span></div><div class="muted small">${t.synNeed[x.id]}</div></div>`).join('')}</div>
     <div class="guide-sec"><div class="t">⚔️ ${t.pairsTitle}</div><p class="muted">${t.pairsText}</p></div>
@@ -288,7 +345,7 @@ window.initTelegram = async () => {
   if (Online.state.profile) {
     loadWar().then(() => { if (!BT && S.tab === 'map') refresh(); });
     // Returning players who never chose a community get the picker once the server profile is in.
-    if (S.seenHelp && !S.faction && $('#modal').hidden && !BT) factionPicker({ suggest: SUGGEST, then: maybeDaily });
+    if (S.seenHelp && !S.faction && S.cleared >= 1 && $('#modal').hidden && !BT) factionPicker({ suggest: SUGGEST, then: maybeDaily });
     arenaBoot();
   }
 };
@@ -302,7 +359,7 @@ function boot() {
   showCoins();
   show(S.tab || 'map');
   if (!S.seenHelp) help();
-  else if (!S.faction && !Online.tg()) factionPicker({ then: maybeDaily });
+  else if (!S.faction && S.cleared >= 1 && !Online.tg()) factionPicker({ then: maybeDaily });
   else maybeDaily();
   setInterval(updateBadge, 60e3);
 }
