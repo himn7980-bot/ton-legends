@@ -6,6 +6,9 @@ src = root / "src"
 html = (src / "index.html").read_text(encoding="utf-8")
 
 images = {p.stem: "data:image/jpeg;base64," + base64.b64encode(p.read_bytes()).decode() for p in sorted((src / "images").glob("*.jpg"))}
+# UI art (chests, gem): transparent webp / png
+MIME = {".webp": "image/webp", ".png": "image/png"}
+images.update({p.stem: f"data:{MIME[p.suffix]};base64," + base64.b64encode(p.read_bytes()).decode() for p in sorted((src / "images").glob("ui-*")) if p.suffix in MIME})
 game = (src / "game.js").read_text(encoding="utf-8").replace("{/*IMAGES*/}", json.dumps(images))
 
 html = html.replace('<link rel="stylesheet" href="style.css">', "<style>\n" + (src / "style.css").read_text(encoding="utf-8") + "</style>")

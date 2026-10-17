@@ -892,3 +892,54 @@ button.tag { min-height: 36px; padding-top: 6px; padding-bottom: 6px; }
 .story-chips .sc.next { filter: none; border-color: #ff3b3b; box-shadow: 0 0 12px -2px #ff3b3b; animation: pulse 1.6s infinite; }
 .st-next { font-weight: 800; text-align: center; color: #ff8a8a; }
 .st-win { margin: 6px 0; display: flex; flex-direction: column; gap: 6px; }
+
+/* chest and gem art: 3D float, glow, opening */
+.chest3d { position: relative; flex: none; width: 108px; perspective: 500px; display: grid; place-items: center; padding-bottom: 8px; }
+.chest3d img { width: 100%; display: block; transform-style: preserve-3d; animation: chestFloat 3.2s ease-in-out infinite; filter: drop-shadow(0 6px 8px rgba(0,0,0,.6)); position: relative; z-index: 1; }
+.chest3d.c-royal img { filter: drop-shadow(0 6px 8px rgba(0,0,0,.6)) drop-shadow(0 0 10px rgba(255,197,49,.55)); }
+.chest3d.c-gem img { filter: drop-shadow(0 6px 8px rgba(0,0,0,.6)) drop-shadow(0 0 12px rgba(90,200,255,.7)); animation-duration: 2.6s; }
+.chest3d .cs { position: absolute; bottom: 0; left: 18%; right: 18%; height: 10px; border-radius: 50%; background: radial-gradient(closest-side, rgba(0,0,0,.6), transparent); animation: chestShadow 3.2s ease-in-out infinite; }
+.chest3d.c-gem .cs { animation-duration: 2.6s; }
+@keyframes chestFloat { 0%, 100% { transform: translateY(0) rotateY(-14deg) rotateX(6deg); } 50% { transform: translateY(-7px) rotateY(14deg) rotateX(-4deg); } }
+@keyframes chestShadow { 0%, 100% { transform: scaleX(1); opacity: .9; } 50% { transform: scaleX(.8); opacity: .55; } }
+.panel.chest:active .chest3d img { animation: chestShake .12s 4; }
+@keyframes chestShake { 25% { transform: rotate(-5deg) scale(1.04); } 75% { transform: rotate(5deg) scale(1.04); } }
+.gi { height: 1.15em; width: auto; vertical-align: -0.22em; filter: drop-shadow(0 0 3px rgba(110,200,255,.8)); animation: gemSpin 4s ease-in-out infinite; }
+@keyframes gemSpin { 0%, 78% { transform: none; filter: drop-shadow(0 0 3px rgba(110,200,255,.8)); } 89% { transform: rotateY(180deg) scale(1.15); filter: drop-shadow(0 0 7px #bfe9ff) brightness(1.4); } 100% { transform: rotateY(360deg); } }
+.pack .pi { display: flex; justify-content: center; align-items: flex-end; height: 40px; perspective: 300px; }
+.pack .pi .gp { width: 34px; margin: 0 -9px; filter: drop-shadow(0 3px 4px rgba(0,0,0,.5)) drop-shadow(0 0 6px rgba(110,200,255,.6)); animation: gemFloat 2.4s ease-in-out infinite; }
+.pack .pi .gp:nth-child(2) { animation-delay: -.6s; transform: translateY(-6px); } .pack .pi .gp:nth-child(3) { animation-delay: -1.2s; } .pack .pi .gp:nth-child(4) { animation-delay: -1.8s; }
+@keyframes gemFloat { 0%, 100% { transform: translateY(0) rotateY(-25deg); } 50% { transform: translateY(-5px) rotateY(25deg); } }
+.star-chest .wc-art { height: 26px; width: auto; vertical-align: middle; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); }
+.star-chest.ready .wc-art { animation: chestShake .5s infinite; filter: drop-shadow(0 0 8px var(--gold)); }
+/* opening: the chest replaces the old card back */
+.reveal { position: relative; }
+.chest-reveal .reveal .card-back { display: none !important; }
+.chest-open { position: absolute; left: -12%; right: -12%; bottom: 4%; aspect-ratio: 4/3; display: grid; place-items: end center; pointer-events: none; z-index: 2; }
+.co-chest { position: relative; width: 100%; perspective: 600px; animation: coDrop .5s cubic-bezier(.3,1.5,.6,1) both; }
+.co-chest img { width: 100%; display: block; filter: drop-shadow(0 10px 14px rgba(0,0,0,.6)); }
+.co-body { clip-path: inset(var(--lid) 0 0 0); }
+.co-lid { position: absolute; inset: 0; clip-path: inset(0 0 calc(100% - var(--lid)) 0); transform-origin: 50% var(--lid); }
+.co-seam { position: absolute; left: 14%; right: 14%; top: var(--lid); height: 3px; margin-top: -2px; border-radius: 3px; background: #fff; box-shadow: 0 0 10px 3px var(--rc), 0 0 26px 8px var(--rc); opacity: .2; }
+.co-rays { position: absolute; left: 50%; top: 40%; width: 180%; aspect-ratio: 1; translate: -50% -50%; border-radius: 50%; opacity: 0;
+  background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--rc) 70%, transparent) 0 8deg, transparent 8deg 22deg);
+  -webkit-mask: radial-gradient(closest-side, #000 20%, transparent 75%); mask: radial-gradient(closest-side, #000 20%, transparent 75%); }
+.co-spark { position: absolute; width: 7px; height: 7px; border-radius: 50%; box-shadow: 0 0 8px currentColor; z-index: 3; pointer-events: none; }
+.chest-reveal.waiting .co-chest { animation: coDrop .5s cubic-bezier(.3,1.5,.6,1) both, coShake .16s .5s infinite; }
+.chest-reveal.waiting .co-seam { animation: coLeak .5s .4s infinite alternate; }
+.chest-reveal.waiting.rar-L .co-chest, .chest-reveal.waiting.rar-E .co-chest { animation: coDrop .5s cubic-bezier(.3,1.5,.6,1) both, coShake .09s .5s infinite; }
+.chest-reveal:not(.waiting) .co-lid { animation: coLid .55s cubic-bezier(.3,.6,.4,1) forwards; }
+.chest-reveal:not(.waiting) .co-seam { opacity: 1; animation: coBurst .6s forwards; }
+.chest-reveal:not(.waiting) .co-rays { animation: coRays 1.6s ease-out forwards; }
+.chest-reveal:not(.waiting) .co-chest { animation: coAway .5s .65s ease-in forwards; }
+.chest-reveal:not(.waiting) .reveal .flip { animation: cardRise 1s .25s cubic-bezier(.2,.8,.3,1) both; }
+@keyframes coDrop { from { transform: translateY(-120%) scale(.6); opacity: 0; } }
+@keyframes coShake { 25% { transform: rotate(-3deg) translateX(-3px); } 75% { transform: rotate(3deg) translateX(3px); } }
+@keyframes coLeak { from { opacity: .25; } to { opacity: .95; } }
+@keyframes coLid { to { transform: rotateX(115deg) translateY(-30%); opacity: 0; } }
+@keyframes coBurst { 0% { transform: scaleX(1); opacity: 1; } 100% { transform: scaleX(1.4) scaleY(14); opacity: 0; } }
+@keyframes coRays { 0% { opacity: 0; transform: rotate(0) scale(.4); } 25% { opacity: 1; } 100% { opacity: 0; transform: rotate(90deg) scale(1.15); } }
+@keyframes coAway { to { transform: translateY(30%) scale(.85); opacity: 0; } }
+@keyframes cardRise { 0% { transform: translateY(55%) rotateY(540deg) scale(.2); opacity: 0; filter: brightness(4); } 40% { opacity: 1; } 100% { transform: none; filter: none; } }
+.chest-reveal.waiting .reveal { visibility: visible; }
+.reveal .chest-open img { aspect-ratio: auto; object-fit: contain; border: 0; border-radius: 0; box-shadow: none; height: auto; }

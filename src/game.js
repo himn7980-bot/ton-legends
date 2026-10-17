@@ -138,6 +138,7 @@ function haptic(kind) { try { const w = Online.tg(); if (w && w.HapticFeedback) 
 function showCoins(prev, prevGems) {
   const el = $('#coins'); el.querySelector('span').textContent = n(S.coins);
   const g = $('#gems'); g.querySelector('span').textContent = n(S.gems || 0);
+  if (!g.querySelector('.gi')) g.firstChild.replaceWith(document.createRange().createContextualFragment(gemImg() + ' '));
   if (prevGems !== undefined && prevGems !== S.gems) { g.classList.remove('bump'); void g.offsetWidth; g.classList.add('bump'); }
   if (prev !== undefined && prev !== S.coins) {
     if (S.coins > prev) Sound.play('coin');
@@ -314,7 +315,7 @@ function renderMap() {
       </div>
       <div class="stages ${hard ? 'hard' : ''}">${nodes}</div>
       <div class="world-foot">
-        <button class="star-chest ${wReady ? 'ready' : ''}" id="w-chest" ${wReady ? '' : 'disabled'}>🎁 <span class="sc-bar"><i style="width:${wNext ? Math.min(100, ws / wNext * 100) : 100}%"></i></span><b>★ ${n(ws)}/${n(wNext || 30)}</b></button>
+        <button class="star-chest ${wReady ? 'ready' : ''}" id="w-chest" ${wReady ? '' : 'disabled'}><img class="wc-art" src="${UI_ART('chest-basic')}" alt="🎁"> <span class="sc-bar"><i style="width:${wNext ? Math.min(100, ws / wNext * 100) : 100}%"></i></span><b>★ ${n(ws)}/${n(wNext || 30)}</b></button>
         ${worldDone ? `<button class="hard-toggle ${hard ? 'on' : ''}" id="w-hard">🔥 ${t.hardMode}</button>` : ''}
       </div>
     </div>
@@ -558,11 +559,15 @@ function allianceHtml(h, owned) {
 }
 
 // ---------- chest ----------
+// UI art (transparent): the three chests and the gem. lid = where the lid meets the body (share of the height).
+const UI_ART = k => IMAGES['ui-' + k] || `images/ui-${k}.${k === 'gem-icon' ? 'png' : 'webp'}`;
+const gemImg = (cls = 'gi') => `<img class="${cls}" src="${UI_ART('gem-icon')}" alt="💎">`;
 const CHESTS = [
-  { key: 'basic', ico: '🎁', c: '#3fa2ff', ...ECON.CHESTS.basic },
-  { key: 'royal', ico: '👑', c: '#ffc531', ...ECON.CHESTS.royal },
-  { key: 'gem', ico: '💎', c: '#c77dff', ...ECON.CHESTS.gem },
+  { key: 'basic', ico: '🎁', c: '#3fa2ff', art: 'chest-basic', lid: 0.45, ...ECON.CHESTS.basic },
+  { key: 'royal', ico: '👑', c: '#ffc531', art: 'chest-royal', lid: 0.45, ...ECON.CHESTS.royal },
+  { key: 'gem', ico: '💎', c: '#c77dff', art: 'chest-gem', lid: 0.41, ...ECON.CHESTS.gem },
 ];
+const chest3d = (c, cls = '') => `<div class="chest3d c-${c.key} ${cls}" style="--c:${c.c}"><img src="${UI_ART(c.art)}" alt="${c.ico}"><i class="cs"></i></div>`;
 const chestLock = c => ({ royal: 'royal', gem: 'gemChest' })[c.key];
 const chestCan = c => (c.currency === 'gems' ? S.gems || 0 : S.coins) >= c.cost;
 const chestBtn = (c, again) => c.currency === 'gems' ? T()[again ? 'againGems' : 'openGems'](n(c.cost)) : T()[again ? 'again' : 'open'](n(c.cost));
@@ -572,7 +577,7 @@ function renderChest() {
   $('#screen').innerHTML = `<div class="h2">${t.chestTitle}</div>
     ${featuredHtml()}
     <p class="muted">${t.chestNote}</p>
-    ${CHESTS.map(c => `<div class="panel chest" style="--c:${c.c}"><div class="ico">${c.ico}</div><div style="flex:1">
+    ${CHESTS.map(c => `<div class="panel chest" style="--c:${c.c}">${chest3d(c)}<div style="flex:1">
       <div class="t">${chestName(c)}</div>
       <div class="rates">${Object.entries(c.rates).filter(([, v]) => v).map(([r, v]) => `<span style="color:${RARITY[r].color}">${L().rarity[r]} ${pct(v)}</span>`).join('')}</div>
       ${c.key === 'gem' ? `<div class="pity">🎯 ${t.pityLeft(n(ECON.GEM_PITY - (S.pity || 0)))}</div>` : ''}
@@ -588,7 +593,7 @@ function renderChest() {
         <div class="so-items">💎 ${n(Online.state.starter.gems)} + 🪙 ${n(Online.state.starter.coins)}</div><div class="muted small">${t.starterNote}</div><div class="btn gold">⭐ ${n(Online.state.starter.stars)}</div></button>` : ''}
       <button class="fund-link" id="to-fund">🤝 ${t.fundShopNote}</button>
       <div class="shop">${Online.state.packs.map((p, i, all) => { const base = all[0].gems / all[0].stars, bonus = Math.round((p.gems / p.stars / base - 1) * 100);
-        return `<button class="pack" data-pack="${esc(p.id)}"><div class="pi">${p.gems >= 1400 ? '💎💎💎💎' : p.gems >= 500 ? '💎💎💎' : p.gems >= 150 ? '💎💎' : '💎'}</div>
+        return `<button class="pack" data-pack="${esc(p.id)}"><div class="pi">${gemImg('gp').repeat(p.gems >= 1400 ? 4 : p.gems >= 500 ? 3 : p.gems >= 150 ? 2 : 1)}</div>
         <div class="pc">${n(p.gems)}</div>${bonus > 0 ? `<div class="pb">+${pct(bonus)}</div>` : ''}<div class="ps">⭐ ${n(p.stars)}</div></button>`; }).join('')}</div>` : ''}
     ${adsHtml()}
     ${framesHtml()}
@@ -636,11 +641,14 @@ function chestReveal(c, r) {
   const msg = r.outcome === 'new' ? t.newHero + (r.added ? t.addedTeam : '') : r.outcome === 'dupe' ? (r.levels ? t.dupeUp(n(r.level), n(r.shards)) : t.dupeShards(n(r.shards), n(r.left || 0)))
     : t.maxRefund(n(r.refund));
   // Suspense: the card back shakes in its rarity's glow (longer and brighter for Epic and Legendary), then flips.
-  const big = rarity === 'L' || rarity === 'E', wait = rarity === 'L' ? 1700 : big ? 1300 : 900;
+  const big = rarity === 'L' || rarity === 'E', wait = rarity === 'L' ? 2000 : big ? 1600 : 1200;
   haptic('light'); Sound.play('chest');
   openModal(`<div class="center chest-reveal waiting rar-${rarity}">
     <div class="tag cr-late" style="color:${R.color}">${L().rarity[rarity]}</div>
-    <div class="reveal" style="--rc:${R.color}"><div class="card-back"><span>❓</span></div><div class="flip ${r.holo ? 'holo' : ''}"><img src="${img(h.id)}" alt=""></div></div>
+    <div class="reveal" style="--rc:${R.color}">
+      <div class="chest-open" style="--lid:${c.lid * 100}%"><div class="co-rays"></div>
+        <div class="co-chest"><img class="co-body" src="${UI_ART(c.art)}" alt=""><img class="co-lid" src="${UI_ART(c.art)}" alt=""><i class="co-seam"></i></div></div>
+      <div class="flip ${r.holo ? 'holo' : ''}"><img src="${img(h.id)}" alt=""></div></div>
     ${r.holo ? `<p class="holo-msg">${t.holoNew}</p>` : ''}
     <div class="big latin" style="font-size:26px">${h.name}</div>
     <div class="muted">${heroText(h.id).title} · ${ROLES[h.role].icon} ${L().role[h.role]}</div>
@@ -650,9 +658,23 @@ function chestReveal(c, r) {
     box.querySelector('#cl').onclick = () => { closeModal(); refresh(); };
     box.querySelector('#again').onclick = () => openChest(c);
     const cr = box.querySelector('.chest-reveal');
-    setTimeout(() => { if (!cr.isConnected) return; cr.classList.remove('waiting'); haptic('heavy'); if (big) { Sound.play('legend'); if (rarity === 'L') flashGold(); } }, wait);
+    setTimeout(() => { if (!cr.isConnected) return; cr.classList.remove('waiting'); haptic('heavy'); chestSparks(cr, R.color, big ? 34 : 18); if (big) { Sound.play('legend'); if (rarity === 'L') flashGold(); } }, wait);
   });
   if (S.tab === 'chest') renderChest();
+}
+// Sparks burst from the open chest in the card's rarity colour.
+function chestSparks(root, color, count) {
+  const at = root.querySelector('.co-seam'); if (!at || (S.fx ?? 2) === 0) return;
+  const box = root.querySelector('.reveal');
+  for (let i = 0; i < count; i++) {
+    const p = document.createElement('i'); p.className = 'co-spark'; p.style.background = i % 3 ? color : '#fff';
+    p.style.left = at.offsetLeft + at.offsetWidth * (0.2 + Math.random() * 0.6) + 'px'; p.style.top = at.offsetTop + 'px';
+    box.appendChild(p);
+    const a = -Math.PI * (0.1 + Math.random() * 0.8), d = 80 + Math.random() * 140;
+    p.animate([{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${Math.cos(a) * d}px, ${Math.sin(a) * d}px) scale(.2)`, opacity: 0 }],
+      { duration: 700 + Math.random() * 600, easing: 'cubic-bezier(.2,.7,.4,1)', fill: 'forwards' });
+    setTimeout(() => p.remove(), 1400);
+  }
 }
 
 // ---------- fusion lab ----------
