@@ -306,6 +306,32 @@ function weakHint(k) {
 }
 // ---------- heroes ----------
 let ARRANGE = null; // { sel: slot index | null } while swapping team positions
+// ---------- quick deck building ----------
+const FRONT_ROLES = ['tank', 'warrior', 'assassin', 'control', 'support', 'healer', 'mage', 'archer']; // sturdy cards first = front row
+const byFront = team => [...team].sort((a, b) => FRONT_ROLES.indexOf(HERO_BY_ID[a].role) - FRONT_ROLES.indexOf(HERO_BY_ID[b].role));
+// Random: owned cards in random order that fit the deck rules. Best: each step adds the card that raises deck power most.
+function autoDeck(best) {
+  const pool = HEROES.filter(h => S.owned[h.id]).map(h => h.id);
+  const team = [];
+  if (!best) { for (const id of pool.sort(() => Math.random() - 0.5)) if (team.length < 5 && !teamError([...team, id])) team.push(id); }
+  else while (team.length < 5) {
+    let pick = null, pw = -1;
+    for (const id of pool) if (!team.includes(id) && !teamError([...team, id])) { const v = teamPower(byFront([...team, id])); if (v > pw) { pw = v; pick = id; } }
+    if (!pick) break; team.push(pick);
+  }
+  return byFront(team);
+}
+async function setDeck(team) {
+  if (await tryAct({ type: 'team', team })) { haptic('light'); renderHeroes(); }
+}
+async function toggleDeck(id) {
+  const t = T(), inDeck = S.team.includes(id);
+  if (!inDeck && S.team.length >= 5) return toast(t.teamFull);
+  const team = inDeck ? S.team.filter(x => x !== id) : [...S.team, id];
+  const err = !inDeck && teamError(team);
+  if (err) return toast(t.err[err] || t.teamFull);
+  await setDeck(team);
+}
 function renderHeroes() {
   const t = T(), owned = BASE_HEROES.filter(h => S.owned[h.id]).length, holos = BASE_HEROES.filter(h => S.holo[h.id]).length;
   // Collection: all base heroes + the fusion cards you crafted (the rest live in the Fusion Lab).
@@ -314,6 +340,7 @@ function renderHeroes() {
   $('#screen').innerHTML = `
     <div class="h2">${t.battleTeam} <span class="muted">(${n(S.team.length)}/${n(5)} · ${t.power} ${n(teamPower(S.team))})</span></div>
     ${deckSwitcher()}<p class="muted small" style="margin:2px 0 8px">${t.decksNote}</p>
+    <div class="deck-tools"><button class="chip" id="dk-clear" ${S.team.length ? '' : 'disabled'}>🧹 ${t.deckClear}</button><button class="chip" id="dk-rand">🎲 ${t.deckRandom}</button><button class="chip gold" id="dk-best">⚡ ${t.deckBest}</button></div>
     <div class="row-labels"><span>${t.front}</span><span>${t.back}</span></div>
     <div class="team-slots ${ARRANGE ? 'arranging' : ''}">${[0, 1, 2, 3, 4].map(i => `<button class="slot ${i < 2 ? 'row-front' : 'row-back'} ${ARRANGE && ARRANGE.sel === i ? 'sel' : ''}" data-slot-i="${i}" data-id="${S.team[i] || ''}">${S.team[i] ? `<img src="${img(S.team[i])}" alt="">` : '+'}</button>`).join('')}</div>
     <div class="row" style="margin-top:6px"><span class="muted small" style="flex:1">${ARRANGE ? t.arrangeHint : t.formationNote}</span>
@@ -329,8 +356,18 @@ function renderHeroes() {
         <div class="small ${done ? '' : 'muted'}">${t.setFxN[fx](n(Math.round(st.perk[fx] * (fx === 'energy' ? 1 : 100) * (ECON.SET_MULT[tier] || 1))))}</div></div>`; }).join('')}</div>
     <p class="muted small">${t.setNote(n(ECON.SET_LEVEL))}</p>
     <div class="h2">${t.collection} <span class="muted">(${n(owned)}/${n(BASE_HEROES.length)}) · ${t.holoCount(n(holos), n(BASE_HEROES.length))}</span></div>
+    <p class="muted small" style="margin:4px 0 8px">${t.quickHint}</p>
     <div class="grid">${order.map(cardHtml).join('')}</div>`;
-  document.querySelectorAll('.card').forEach(c => c.onclick = () => c.dataset.id && heroModal(c.dataset.id));
+  // Build mode: one tap adds a card to the active deck or takes it out (cards in the deck are dimmed). Info mode opens the card.
+  // The ＋/✓ corner button adds a card to the active deck or takes it out in one tap; the rest of the card opens it.
+  document.querySelectorAll('.grid .card').forEach(c => c.onclick = e => {
+    if (!c.dataset.id) return;
+    if (e.target.closest('.qd')) { e.stopPropagation(); toggleDeck(c.dataset.id); return; }
+    heroModal(c.dataset.id);
+  });
+  $('#dk-clear').onclick = () => setDeck([]);
+  $('#dk-rand').onclick = () => setDeck(autoDeck(false));
+  $('#dk-best').onclick = () => setDeck(autoDeck(true));
   // Arrange mode: tap two team slots to swap them (the first two cards form the front row).
   document.querySelectorAll('.slot').forEach(c => c.onclick = async () => {
     const i = +c.dataset.slotI;
@@ -365,6 +402,7 @@ function cardHtml(h) {
     <span class="rl">${ROLES[h.role].icon}</span>
     ${h.id === S.faction ? '<span class="fac-flag">🚩</span>' : ''}${canUp ? '<span class="up">⬆️</span>' : ''}${deckHint(h.id)}${S.serials[h.id] ? `<span class="serial">#${n(S.serials[h.id])}</span>` : ''}
     ${deck >= 0 ? `<span class="deck-mark"><b>✓</b>${t.inTeam} · ${n(deck + 1)}</span>` : ''}
+    ${lv && S.tab === 'heroes' ? `<span class="qd ${deck >= 0 ? 'in' : ''}" role="button" aria-label="deck">${deck >= 0 ? '−' : '+'}</span>` : ''}
     <div class="info"><div class="nm">${h.name}</div><div class="muted" style="font-size:11px">${heroText(h.id).title}</div></div>
   </button>`;
 }

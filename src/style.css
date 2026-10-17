@@ -700,3 +700,13 @@ img.mini.big { width: 84px; height: 84px; border-width: 3px; border-color: var(-
 .dk b { font-size: 15px; } .dk small { font-size: 10px; color: var(--muted); white-space: nowrap; }
 .dk.on { border-color: var(--gold); background: rgba(255,200,60,.14); box-shadow: 0 0 10px -4px var(--gold); } .dk.on small { color: var(--gold); }
 .dk.empty { border-style: dashed; opacity: .75; }
+/* quick deck building */
+.deck-tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0 0 10px; }
+.deck-tools .chip { justify-content: center; font-weight: 700; }
+.deck-tools .chip.gold { border-color: var(--gold); color: var(--gold); }
+.mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,.14); }
+.mode-switch button { padding: 9px 6px; background: rgba(255,255,255,.03); border: 0; color: var(--muted); font: inherit; font-weight: 700; }
+.mode-switch button.on { background: var(--ton); color: #fff; }
+.card .qd { position: absolute; bottom: 6px; inset-inline-end: 6px; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; z-index: 4;
+  font-size: 22px; font-weight: 900; line-height: 1; background: var(--ton); color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.5); border: 2px solid rgba(255,255,255,.7); }
+.card .qd.in { background: #e0475a; }
