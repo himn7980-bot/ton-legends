@@ -27,6 +27,7 @@ const createRaid = require('./raid.js');
 const createLeague = require('./league.js');
 const createPartners = require('./partners.js');
 const createWallet = require('./wallet.js');
+const createFund = require('./fund.js');
 const BOT_TEXT = require('./bot-text.js');
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
@@ -405,7 +406,7 @@ async function handleUpdate(up) {
     else if (pack.cos) { if (u.profile) ECON.giveCosmetic(u.profile, pack.cos); else (u.pendingCos = u.pendingCos || []).push(pack.cos); }
     else credit(u, pack.coins || 0, pack.gems || 0);
     db.payments[chargeId] = { uid, pack: packId, stars: p.total_amount, at: Date.now() };
-    analytics.payment(p.total_amount);
+    analytics.payment(p.total_amount); fund.onPayment(u, p.total_amount);
     persist(); await flushDb();
     const L = tx(m.from.language_code);
     await tg('sendMessage', { chat_id: m.chat.id, text: pack.cos ? L.paidFrame : pack.pass ? ((BOT_TEXT[String(m.from.language_code || '').slice(0, 2)] || {}).paidPass || L.paidPass) : pack.gems ? L.paidGems(pack.gems) : L.paid(pack.coins),
@@ -421,6 +422,7 @@ async function handleUpdate(up) {
     return tg('sendMessage', { chat_id: m.chat.id, text: !GAME_CHANNEL ? 'No game channel set (GAME_CHANNEL=off).' : ok ? `✅ ${GAME_CHANNEL}: the bot is an admin. New players are asked to join and get 🪙 ${CHANNEL_COINS} + 💎 ${CHANNEL_GEMS}.` : `⚠️ ${GAME_CHANNEL}: the bot is NOT an admin (${diag.channelState}). Add @${BOT_USERNAME} as an administrator of the channel, then send /channel again.` });
   }
   if (typeof m.text === 'string' && /^\/nft\b/.test(m.text)) return wallet.handle(m);
+  if (typeof m.text === 'string' && /^\/fund\b/.test(m.text)) return fund.handle(m);
   if (typeof m.text === 'string' && /^\/backup\b/.test(m.text)) {
     if (!ADMIN_IDS.has(String(m.from.id))) return tg('sendMessage', { chat_id: m.chat.id, text: `Your Telegram ID is ${m.from.id}. Only admins (ADMIN_IDS) can get backups.` });
     if (m.chat.type && m.chat.type !== 'private') return tg('sendMessage', { chat_id: m.chat.id, text: 'Backups are only sent in a private chat with the bot.' });
@@ -563,6 +565,7 @@ const raid = createRaid({ db, persist, weekKey: clans.weekKey, credit, profileOu
     return { market, perks: { ...ECON.perksOf(p), ...(t ? { mascot: t * ECON.MASCOT_PER_TIER } : {}) } };
   } });
 const league = createLeague({ db, persist, profileOut });
+const fund = createFund({ db, persist, tg, admins: () => ADMIN_IDS });
 const wallet = createWallet({ db, persist, tg, admins: () => ADMIN_IDS, E });
 const partners = createPartners({ db, persist, tg, credit, profileOut, admins: () => ADMIN_IDS });
 const arena = createArena({ db, persist, league, onPoints: (uid, pts, info = {}) => onWin(uid, info.kind || (pts >= 5 ? 'pvp' : 'ai'), info), market: battleMarket, perksExtra: p => { const t = war.tierFor(p.faction); return t ? { mascot: t * ECON.MASCOT_PER_TIER } : {}; }, notify: (uid, end) => {
@@ -637,6 +640,7 @@ const routes = {
   ...league.routes,
   ...partners.routes,
   ...wallet.routes,
+  ...fund.routes,
   'POST /api/invoice': async (body, u) => {
     const pack = body.pack === 'pass' ? PASS_PACK : PACKS.find(p => p.id === body.pack) || COS_PACKS.find(p => p.id === body.pack);
     if (!pack) throw Object.assign(new Error('unknown pack'), { code: 400 });

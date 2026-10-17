@@ -155,6 +155,7 @@ function renderRank() {
       <div>${t.wins}<b>${n(S.stats.wins)}</b></div><div>${t.arenaWins}<b>${n(S.stats.pvpWins || 0)}</b></div><div>${t.bossesBeaten}<b>${n(S.stats.bosses)}</b></div>
     </div>
     <div class="panel row clan-entry" id="to-war2"><div class="t">${t.warTitle}</div><button class="btn">${t.openClan} →</button></div>
+    ${Online.state.profile ? `<div class="panel row clan-entry" id="to-fund2"><div class="t">💰 ${t.fundTitle}</div><button class="btn">${t.openClan} →</button></div>` : ''}
     ${Online.state.profile ? `<div class="panel row clan-entry" id="to-clan"><div class="t">${t.clanTitle}</div><button class="btn">${t.openClan} →</button></div>` : ''}
     ${Online.inviteLink() ? `<div class="panel"><div class="t">${t.invite}</div>
       <p class="muted">${t.inviteNote}</p>
@@ -168,6 +169,7 @@ function renderRank() {
   if ($('#to-wallet')) $('#to-wallet').onclick = walletModal;
   if ($('#to-clan')) $('#to-clan').onclick = () => show('clan');
   $('#to-war2').onclick = () => show('war');
+  if ($('#to-fund2')) $('#to-fund2').onclick = () => show('fund');
   if (Online.state.server) Online.leaderboard().then(d => {
     const el = $('#board'); if (!el || S.tab !== 'rank') return;
     if (!d || !d.top) { el.innerHTML = `<div class="panel center muted">${t.boardErr}</div>`; return; }

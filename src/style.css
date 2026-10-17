@@ -710,3 +710,10 @@ img.mini.big { width: 84px; height: 84px; border-width: 3px; border-color: var(-
 .card .qd { position: absolute; bottom: 6px; inset-inline-end: 6px; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; z-index: 4;
   font-size: 22px; font-weight: 900; line-height: 1; background: var(--ton); color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.5); border: 2px solid rgba(255,255,255,.7); }
 .card .qd.in { background: #e0475a; }
+/* community fund */
+.fund-row { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+.fund-row:last-child { border: 0; } .fund-row.me b { color: var(--gold); }
+.fund-row .mini-av { width: 34px; height: 34px; } .fund-row .fr-main { flex: 1; min-width: 0; }
+.fund-bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); margin: 4px 0; overflow: hidden; }
+.fund-bar i { display: block; height: 100%; background: linear-gradient(90deg, #ffd24a, #ff8a00); }
+.fund-link { width: 100%; margin: 4px 0 8px; padding: 10px 12px; border-radius: 12px; border: 1px dashed rgba(255,210,74,.6); background: rgba(255,210,74,.08); color: var(--text); font: inherit; font-size: 13px; text-align: start; }

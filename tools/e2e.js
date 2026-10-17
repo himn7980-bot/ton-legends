@@ -259,6 +259,9 @@ const tgScript = (user, startParam) => `
   await p1.evaluate(() => { Online.state.channel = { url: 'https://t.me/gl', joined: false, coins: 500, gems: 20 }; channelGate(); }); await p1.waitForSelector('#ch-check');
   await p1.screenshot({ path: OUT + '/x10-channel.png' }); await p1.evaluate(() => closeModal());
   console.log('✓ game name + card avatar, channel join screen');
+  await p1.evaluate(() => show('fund')); await p1.waitForSelector('.fund-row');
+  await p1.screenshot({ path: OUT + '/x11-fund.png', fullPage: true });
+  console.log('✓ community fund page');
 
   // ---- Telegram BackButton still drives navigation ----
   await p2.click('[data-tab=heroes]'); await p2.waitForTimeout(150);

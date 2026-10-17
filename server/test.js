@@ -576,6 +576,20 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   r = await post('/api/nft/request', { initData: initData(alice), id: 'f1' }); assert.equal(r.body.nft[0].status, 'requested'); assert.equal(r.body.nft[0].serial, 1);
   r = await post('/api/nft/request', { initData: initData(alice), id: 'f1' }); assert.equal(r.body.error, 'claimed');
   r = await fetch(base + '/tonconnect-manifest.json').then(x => x.json()); assert.equal(r.name, 'Gram Legends'); assert.equal(r.url, 'https://game.example');
+  // Community Fund: every Stars purchase recorded for the buyer's community; buybacks only after an agreement
+  r = await post('/api/fund', { initData: initData(alice) });
+  const facA = srv.db.users['111'].profile.faction, fundA = r.body.fund.coms.find(c => c.id === facA);
+  assert.ok(fundA && fundA.stars >= 150, 'the frame purchase was recorded for Alice\'s community'); assert.equal(r.body.fund.pct, 40); assert.equal(fundA.share, Math.floor(fundA.stars * 0.4));
+  const fq = calls.length;
+  queue.push({ update_id: 9206, message: { chat: { id: 111 }, from: alice, text: `/fund buyback ${facA} 10 TON https://tonviewer.com/tx/abc` } });
+  await sleep(700);
+  assert.ok(calls.slice(fq).some(c => /No agreement/.test(c.data.text || '')), 'no buyback before an agreement');
+  queue.push({ update_id: 9207, message: { chat: { id: 111 }, from: alice, text: `/fund agree ${facA}` } });
+  await sleep(700);
+  queue.push({ update_id: 9208, message: { chat: { id: 111 }, from: alice, text: `/fund buyback ${facA} 10 TON https://tonviewer.com/tx/abc` } });
+  await sleep(700);
+  r = await post('/api/fund', { initData: initData(alice) });
+  assert.equal(r.body.fund.coms.find(c => c.id === facA).agreed, true); assert.equal(r.body.fund.buybacks[0].amount, 10);
   console.log('   partner quests (verified + open-to-claim), frames (gems + Stars), /backup document, wallet + NFT request');
 
   // ---------- world boss ----------

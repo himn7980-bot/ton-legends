@@ -60,6 +60,27 @@ function channelGate() {
   }, { lock: true, onBack: () => {} }));
 }
 
+// ---------- Community Fund: purchases recorded per community for token buybacks (after agreements) ----------
+async function renderFund() {
+  const t = T();
+  if (!Online.state.profile) { $('#screen').innerHTML = onlineOnly(t.fundTitle); return; }
+  $('#screen').innerHTML = `<div class="h2">💰 ${t.fundTitle}</div><p class="muted center">${t.loading}</p>`;
+  let r; try { r = await Online.api('fund'); } catch (e) { toast(errText(e)); return; }
+  if (S.tab !== 'fund') return;
+  const F = r.fund, max = Math.max(1, ...F.coms.map(c => c.stars));
+  $('#screen').innerHTML = `<div class="h2">💰 ${t.fundTitle}</div>
+    <div class="panel fund-hero"><p style="margin:0 0 8px">${t.fundNote(n(F.pct))}</p>
+      <div class="ref-nums"><div><b>⭐ ${n(F.total)}</b><small>${t.fundTotal}</small></div><div><b>⭐ ${n(F.totalShare)}</b><small>${t.fundShare(n(F.pct))}</small></div><div><b>${n(F.coms.filter(c => c.agreed).length)}/${n(F.coms.length)}</b><small>${t.fundAgreedN}</small></div></div></div>
+    <div class="h2">${t.fundComs}</div>
+    <div class="panel">${F.coms.map(c => `<div class="fund-row ${c.id === S.faction ? 'me' : ''}">
+      <img class="mini-av" src="${img(c.id)}" alt=""><div class="fr-main"><div class="row"><b>${factionName(c.id)}${c.id === S.faction ? ` <span class="muted small">(${t.you})</span>` : ''}</b><span class="tag ${c.agreed ? 'gold' : ''}">${c.agreed ? '🤝 ' + t.fundAgreed : '⏳ ' + t.fundPending}</span></div>
+      <div class="fund-bar"><i style="width:${c.stars / max * 100}%"></i></div><div class="muted small">⭐ ${n(c.stars)} · ${t.fundShare(n(F.pct))}: ⭐ ${n(c.share)}${c.buybacks ? ' · 🔥 ' + n(c.buybacks) : ''}</div></div></div>`).join('')}
+      ${F.none ? `<div class="muted small" style="padding-top:8px">${t.fundNone}: ⭐ ${n(F.none)}</div>` : ''}</div>
+    ${F.buybacks.length ? `<div class="h2">🔥 ${t.fundHistory}</div><div class="panel">${F.buybacks.map(b => `<div class="row lb-row"><span>${factionName(b.f)} · ${n(b.amount)} ${esc(b.asset)}</span><a href="${esc(b.link)}" target="_blank" rel="noopener">${t.fundProof} ↗</a></div>`).join('')}</div>` : ''}
+    ${F.wallet ? `<p class="muted small">${t.fundWallet}: <code>${esc(F.wallet)}</code></p>` : ''}
+    <p class="muted small">${t.fundDisclaimer}</p>`;
+}
+
 // ---------- friends (invites) ----------
 async function renderFriends() {
   const t = T();

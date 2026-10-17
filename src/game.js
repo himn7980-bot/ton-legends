@@ -204,7 +204,7 @@ function goBack() {
   if (BT) return BT.ended ? undefined : confirmLeave();
   if (S.tab !== 'map') show(PARENT_TAB[S.tab] || 'map');
 }
-const PARENT_TAB = { clan: 'rank', lab: 'heroes', pass: 'quests', friends: 'rank', raid: 'map' };
+const PARENT_TAB = { clan: 'rank', lab: 'heroes', pass: 'quests', friends: 'rank', raid: 'map', fund: 'rank' };
 function syncNav() {
   const can = canGoBack(), w = Online.tg();
   const back = $('#back'); if (back) back.hidden = S.tab === 'map';
@@ -230,7 +230,7 @@ window.addEventListener('popstate', () => {
 function show(tab) {
   S.tab = tab; save();
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === (PARENT_TAB[tab] || tab)));
-  ({ map: renderMap, arena: renderArena, lab: renderLab, heroes: renderHeroes, chest: renderChest, quests: renderQuests, rank: renderRank, clan: renderClan, war: renderWar, pass: renderPass, friends: () => renderFriends(), raid: () => renderRaid() })[tab]();
+  ({ map: renderMap, arena: renderArena, lab: renderLab, heroes: renderHeroes, chest: renderChest, quests: renderQuests, rank: renderRank, clan: renderClan, war: renderWar, pass: renderPass, friends: () => renderFriends(), raid: () => renderRaid(), fund: () => renderFund() })[tab]();
   updateBadge();
   window.scrollTo(0, 0);
   syncNav();
@@ -507,12 +507,14 @@ function renderChest() {
       <button class="btn wide gem" id="warp" ${(S.gems || 0) < ECON.WARP_COST ? 'disabled' : ''}>${t.warpBtn(n(ECON.WARP_COST))}</button></div>`}
     ${Online.state.server && Online.state.packs.length ? `<div class="h2">${t.shop}</div>
       <p class="muted">${t.shopNote}</p>
+      <button class="fund-link" id="to-fund">💰 ${t.fundShopNote}</button>
       <div class="shop">${Online.state.packs.map(p => `<button class="pack" data-pack="${esc(p.id)}"><div class="pi">${p.gems >= 500 ? '💎💎💎' : p.gems >= 150 ? '💎💎' : '💎'}</div>
         <div class="pc">${n(p.gems)}</div><div class="ps">⭐ ${n(p.stars)}</div></button>`).join('')}</div>` : ''}
     ${framesHtml()}
     <p class="muted" style="margin-top:18px">${t.gemTip}</p>
     <p class="muted">${t.coinTip}</p>`;
   bindFrames();
+  if ($('#to-fund')) $('#to-fund').onclick = () => show('fund');
   document.querySelectorAll('[data-k]').forEach(b => b.onclick = () => openChest(CHESTS.find(c => c.key === b.dataset.k)));
   document.querySelectorAll('[data-pack]').forEach(b => b.onclick = async () => {
     b.disabled = true;

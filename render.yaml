@@ -16,6 +16,11 @@ services:
         sync: false
       - key: ADMIN_IDS
         sync: false
+      # Community Fund: share of Stars purchases recorded for each community's token buyback (only spent after an agreement)
+      - key: BUYBACK_PCT
+        value: "40"
+      - key: FUND_WALLET
+        sync: false
       # The game's own channel (@name). New players must join it first (welcome reward). The bot must be an admin there.
       - key: GAME_CHANNEL
         value: "@gramlegends_game"
