@@ -43,6 +43,8 @@ const Sound = (() => {
     heal() { [784, 988, 1175].forEach((f, i) => tone(f, 0.25, { vol: 0.25, delay: i * 0.06 })); },
     shield() { tone(440, 0.3, { type: 'triangle', vol: 0.3, slide: 1.5 }); },
     skill() { tone(220, 0.45, { type: 'sawtooth', vol: 0.25, slide: 4 }); noise(0.4, { vol: 0.3, freq: 3000, delay: 0.15 }); },
+    count() { tone(880, 0.12, { type: 'square', vol: 0.18 }); tone(440, 0.2, { type: 'triangle', vol: 0.2 }); },
+    go() { tone(523, 0.12, { type: 'square', vol: 0.2 }); tone(784, 0.14, { type: 'square', vol: 0.2, delay: 0.08 }); tone(1047, 0.35, { type: 'sawtooth', vol: 0.2, delay: 0.16 }); noise(0.3, { vol: 0.3, freq: 2500, delay: 0.16 }); },
     die() { tone(300, 0.35, { type: 'square', vol: 0.15, slide: 0.25 }); },
     boss() { tone(80, 0.7, { type: 'sawtooth', vol: 0.4, slide: 0.6 }); noise(0.6, { vol: 0.5, freq: 400 }); },
     coin() { tone(988, 0.08, { type: 'square', vol: 0.15 }); tone(1319, 0.2, { type: 'square', vol: 0.15, delay: 0.08 }); },

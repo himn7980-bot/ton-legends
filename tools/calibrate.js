@@ -16,7 +16,7 @@ const RAMP = [0.93, 0.95, 0.97, 0.99, 1.0, 1.01, 1.02, 1.03, 1.04, 1.1];
 const EARLY_FROM = 19, EARLY_LEVEL = 3, EARLY_TO = 40;
 // Late game is tuned on alliance decks: past ALLY_TO the alliance teams themselves need ALLY_TARGET levels (no
 // strength discount), so a deck of fusions is not a free pass. Between EARLY_TO and ALLY_TO the goal blends over.
-const ALLY_TARGET = idx => 1 + 75 * Math.pow(idx / 199, 1.1), ALLY_TO = 90;
+const ALLY_TARGET = idx => 1 + 72 * Math.pow(idx / 199, 1.1), ALLY_TO = 90;
 const goal = idx => (idx < EARLY_TO ? EARLY_LEVEL + (TARGET(EARLY_TO) - EARLY_LEVEL) * (idx - EARLY_FROM) / (EARLY_TO - EARLY_FROM) : TARGET(idx)) * RAMP[idx % 10];
 const allyW = idx => Math.max(0, Math.min(1, (idx - EARLY_TO) / (ALLY_TO - EARLY_TO)));
 function winRate(team, lv, idx, n = 16) {

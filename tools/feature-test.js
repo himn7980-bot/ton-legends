@@ -55,7 +55,15 @@ const assert = require('assert');
   assert.equal(await p.evaluate(async () => { try { await act({ type: 'team', team: ['f1', 'f440', S.team.find(id => !id.startsWith('f')), Object.keys(S.owned).find(id => id.startsWith('f') && id !== 'f1' && id !== 'f440')] }); return 'ok'; } catch (e) { return e.message; } }), 'fusion_limit');
   // fusion in team and fights
   await p.evaluate(async () => { await act({ type: 'team', team: ['f1', 'f440', 'babyshark'] }); S.auto = true; S.speed = 3; S.sel = 0; S.world = 0; save(); });
-  await p.click('[data-tab=map]'); await p.click('#go'); await p.waitForTimeout(2500);
+  await p.click('[data-tab=map]'); await p.click('#go'); await p.waitForTimeout(300);
+  // entrance: 3-2-1 count while the cards fly in; the fight waits for it
+  assert.ok(await p.$('#battle .cd3'), '3-2-1 count'); assert.equal(await p.evaluate(() => BT.B.tick), 0, 'fight waits for the count');
+  await p.waitForTimeout(2200); assert.ok(await p.evaluate(() => BT.B.tick > 0), 'fight starts after the count');
+  // kill effect: the killer decides how the card is destroyed (Pengu shatters it)
+  assert.equal(await p.evaluate(() => BFX.killKind('pengu', false)), 'shatter'); assert.equal(await p.evaluate(() => BFX.killKind('f1', false)), await p.evaluate(() => BFX.KILL[ECON.leaderOf(S, 'f1')]), 'alliance kills like its leader');
+  await p.evaluate(() => { const u = BT.B.enemies.find(e => e.alive); BFX.kill(u.uid, 'pengu', false); });
+  assert.ok((await p.$$('#b-fx .kfx i')).length >= 12, 'card breaks into pieces');
+  console.log('✓ battle entrance count and kill effects');
   await p.screenshot({ path: out + '/l4-fusion-battle.png' });
   await p.waitForSelector('#r-map', { timeout: 60000 }); await p.click('#r-map');
   console.log('✓ fusion cards battle (both parts’ skills)');

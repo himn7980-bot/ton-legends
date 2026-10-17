@@ -855,8 +855,14 @@ async function startBattle(idx, hard = false) {
     onTap: u => { BT.queue.push(u.uid); tutorDone(1); }, onUlt: () => { BT.queue.push(-3); tutorDone(2); },
   });
   Sound.music('battle');
-  if (tut) coach(T().tut1, 3200);
-  if (isBossStage(idx) && !tut) bossIntro(B.enemies.find(e => e.boss));
+  // 3 · 2 · 1 — the cards fly in, then the fight (and the boss entrance) starts.
+  const mineBT = BT; BT.paused = true;
+  BFX.intro({ mine: B.heroes, theirs: B.enemies }, () => {
+    if (BT !== mineBT) return;
+    BT.paused = false; BT.last = performance.now();
+    if (tut) coach(T().tut1, 3200);
+    if (isBossStage(idx) && !tut) bossIntro(B.enemies.find(e => e.boss));
+  });
   BT.raf = requestAnimationFrame(loop);
 }
 // Controls for battles simulated here (stages, world boss, challenge, tower): taps go into the input queue.
@@ -1046,7 +1052,7 @@ function processEvents() {
       case 'miss': float(ev.uid, t.dodge, 'info'); break;
       case 'block': float(ev.uid, '🛡️', 'info'); break;
       case 'shield': float(ev.uid, t.shield, 'info'); Sound.play('shield'); break;
-      case 'die': float(ev.uid, '💀', 'info'); Sound.play('die'); break;
+      case 'die': float(ev.uid, '💀', 'info'); Sound.play('die'); BFX.kill(ev.uid, ev.by, mineUid.has(ev.uid)); break;
       case 'skill': {
         const enemy = !mineUid.has(ev.uid);
         Sound.play('skill');

@@ -181,7 +181,8 @@ function startPvp(m) {
   $('#battle').appendChild(bar); $('#battle').classList.add('has-emotes');
   bar.querySelectorAll('[data-emo]').forEach(b => b.onclick = () => { if (BT && !BT.ended) { haptic('light'); Online.pvp('emote', { ticket: BT.ticket, e: +b.dataset.emo }).catch(() => {}); } });
   Sound.music('battle');
-  countdown(m.startIn);
+  // The server starts the fight after startIn: the cards fly in during the count.
+  if ((S.fx ?? 2) && m.startIn > 300) BFX.intro({ mine, theirs, ms: m.startIn }); else { BFX.intro({ mine, theirs, count: false }); countdown(m.startIn); }
 }
 
 const EMOTES = ['😂', '🔥', '😱', '👏', '🤝', '🚩'];

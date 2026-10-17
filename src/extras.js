@@ -170,7 +170,9 @@ async function startRaidNow(buy) {
   BT = { mode: 'raid', B, mySide: 'hero', inputs: [], queue: S.auto ? [-1] : [], acc: 0, last: performance.now(), raf: 0, ended: false, raid: r.raid };
   buildBattle({ title: `👹 ${t.raidTitle} · ${t.raidLevel(n(r.raid.level))}`, bg: 'radial-gradient(circle at 50% 30%,#5a0d1e 0,#1a0612 55%,#05020a 100%)', scene: { key: 'temple', ch: 3 },
     mine: B.heroes, theirs: B.enemies, showSpeed: true, ...queueControls(), onTap: u => BT.queue.push(u.uid) });
-  if (r.raid.enrage) { $('#battle').classList.add('enraged'); bossIntro(B.enemies[0]); }
+  if (r.raid.enrage) $('#battle').classList.add('enraged');
+  const mineBT = BT; BT.paused = true;
+  BFX.intro({ mine: B.heroes, theirs: B.enemies }, () => { if (BT !== mineBT) return; BT.paused = false; BT.last = performance.now(); if (r.raid.enrage) bossIntro(B.enemies[0]); });
   const hud = document.createElement('div'); hud.className = 'raid-hud';
   hud.innerHTML = `<div>⏱ <b id="rh-t">${n(RAID_TIME)}</b></div><div>💥 <b id="rh-d">0</b></div>`;
   $('#battle').insertBefore(hud, $('#battle .b-enemies'));
@@ -365,6 +367,8 @@ async function startModeBattle(kind) {
   buildBattle({ title: kind === 'challenge' ? `🏅 ${t.chTitle} · ${MOD_ICON[r.opts.mod]} ${t.modName[r.opts.mod]}` : `🗼 ${t.towerTitle} · ${t.towerFloor(n(r.floor))}`,
     bg: W.bg, scene: { key: W.key, ch: W.chapter }, mine: B.heroes, theirs: B.enemies, showSpeed: true, ...queueControls(), onTap: u => BT.queue.push(u.uid) });
   Sound.music('battle');
+  const mineBT = BT; BT.paused = true;
+  BFX.intro({ mine: B.heroes, theirs: B.enemies }, () => { if (BT !== mineBT) return; BT.paused = false; BT.last = performance.now(); });
   BT.raf = requestAnimationFrame(loop);
 }
 async function finishMode() {

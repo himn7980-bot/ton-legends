@@ -852,3 +852,25 @@ button.tag { min-height: 36px; padding-top: 6px; padding-bottom: 6px; }
 .ch-hero, .tower-hero { display: flex; align-items: center; gap: 14px; }
 .ch-mod { font-size: 46px; } .tw-floor { min-width: 64px; height: 64px; border-radius: 16px; display: grid; place-items: center; font-size: 28px; font-weight: 900; background: linear-gradient(180deg, #6a4cff, #2f1f8f); }
 .mini-team img.dead { filter: grayscale(1) brightness(.5); }
+
+/* 3D cards: a coloured edge and a drop shadow give them thickness; the gloss slides as the card leans */
+.hcard { box-shadow: 0 2px 0 -1px var(--rc), 0 4px 0 -1px rgba(0,0,0,.55), 0 11px 14px -6px rgba(0,0,0,.85); }
+.hcard::after { content: ''; position: absolute; inset: 3px 3px auto; aspect-ratio: 3/4.2; border-radius: 8px; pointer-events: none; z-index: 2;
+  background: linear-gradient(125deg, rgba(255,255,255,.3) 0%, rgba(255,255,255,.07) 28%, transparent 42%, transparent 72%, rgba(255,255,255,.12) 100%);
+  background-size: 220% 220%; background-position: calc(50% + var(--gx, 0) * 4%) calc(50% + var(--gy, 0) * 4%); }
+.hcard.dead::after { display: none; }
+/* entrance count: 3 · 2 · 1 · Fight! */
+.cd3 { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 6; }
+.cd3-n { font-size: 120px; font-weight: 900; color: #fff; line-height: 1; text-shadow: 0 0 30px var(--gold), 0 6px 0 #b8860b, 0 12px 22px #000; animation: cd3 .65s ease-out both; }
+.cd3-n.go { font-size: 54px; color: var(--gold); white-space: nowrap; text-shadow: 0 0 26px rgba(255,197,49,.9), 0 4px 0 #6b4a00, 0 10px 20px #000; animation: cd3go .6s ease-out both; }
+@keyframes cd3 { 0% { transform: scale(2.6); opacity: 0; } 25% { transform: scale(1); opacity: 1; } 80% { opacity: 1; } 100% { transform: scale(.7); opacity: 0; } }
+@keyframes cd3go { 0% { transform: scale(.3) rotate(-8deg); opacity: 0; } 30% { transform: scale(1.15); opacity: 1; } 75% { opacity: 1; } 100% { transform: scale(1.45); opacity: 0; } }
+/* kill effects: pieces of the card picture (see battle-fx.js) */
+.kfx { position: absolute; pointer-events: none; z-index: 4; }
+.kfx i { position: absolute; background-image: var(--im); background-repeat: no-repeat; will-change: transform, opacity; }
+.kfx-ember { position: absolute; left: -4px; right: -4px; height: 16px; background: linear-gradient(to top, transparent, #ff5a00 40%, #ffd76a 55%, transparent); filter: blur(2px); }
+.kfx-smoke { position: absolute; bottom: 10%; width: 44%; aspect-ratio: 1; margin-left: -22%; border-radius: 50%; background: radial-gradient(circle, rgba(80,80,90,.85), rgba(40,40,50,0) 70%); }
+.kfx-flash { position: absolute; inset: 0; border-radius: 8px; }
+.kfx-cut { position: absolute; left: -15%; right: -15%; top: 52%; height: 4px; border-radius: 4px; background: #fff; box-shadow: 0 0 12px #fff, 0 0 26px #a98bff; }
+.hcard.gone img { animation: ghost 1.9s forwards; }
+@keyframes ghost { 0%, 75% { opacity: 0; } 100% { opacity: .5; } }

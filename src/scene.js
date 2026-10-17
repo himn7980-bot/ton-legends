@@ -214,6 +214,7 @@ const Scene = (() => {
       const ang = Math.hypot(rx, ry);
       n.style.translate = `0 ${(Math.sin(time * 1.3 + ph) * 3).toFixed(1)}px`;
       n.style.rotate = ang > 0.01 ? `${rx.toFixed(2)} ${ry.toFixed(2)} 0 ${ang.toFixed(2)}deg` : '';
+      n.style.setProperty('--gx', ry.toFixed(1)); n.style.setProperty('--gy', rx.toFixed(1));
     });
   }
   return { start, stop, burst, CFG };
