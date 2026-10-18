@@ -943,3 +943,28 @@ button.tag { min-height: 36px; padding-top: 6px; padding-bottom: 6px; }
 @keyframes cardRise { 0% { transform: translateY(55%) rotateY(540deg) scale(.2); opacity: 0; filter: brightness(4); } 40% { opacity: 1; } 100% { transform: none; filter: none; } }
 .chest-reveal.waiting .reveal { visibility: visible; }
 .reveal .chest-open img { aspect-ratio: auto; object-fit: contain; border: 0; border-radius: 0; box-shadow: none; height: auto; }
+
+/* Book of Legends (the comic) */
+.book-chip { width: 100%; margin-top: 10px; min-height: 46px; border-radius: 14px; background: linear-gradient(90deg, #3a0d12, #1a1030); border: 2px solid #E62429; color: #fff; font-weight: 900; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.book-chip .bk-new, .book-ch.new .bc-t small { color: #FFE14D; }
+.book-chip .bk-new { background: #E62429; border-radius: 99px; padding: 1px 9px; font-size: 12px; animation: pulse 1.6s infinite; }
+.book-list { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.book-ch { display: flex; align-items: center; gap: 12px; padding: 10px 12px; min-height: 56px; border-radius: 14px; background: var(--panel2); border: 2px solid var(--line); text-align: start; color: inherit; }
+.book-ch.new { border-color: #E62429; box-shadow: 0 0 14px -4px #E62429; }
+.book-ch.locked { opacity: .5; }
+.book-ch .bc-n { flex: none; width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: #E62429; color: #fff; font-weight: 900; font-size: 18px; border: 2px solid #111; }
+.book-ch .bc-t { display: flex; flex-direction: column; gap: 2px; }
+.book-ch .bc-t small { color: var(--muted); font-size: 12px; }
+.book-new { width: 100%; margin: 8px 0; min-height: 48px; border-radius: 14px; background: linear-gradient(90deg, #E62429, #a3141a); color: #fff; font-weight: 800; border: 2px solid #FFE14D; animation: pulse 1.6s infinite; }
+.book-new b { color: #FFE14D; }
+#modal.reading { padding: 0; place-items: stretch; }
+#modal.reading .modal-box { max-height: none; height: 100vh; height: 100dvh; border-radius: 0; padding: 0; background: #0d0d12; border: 0; max-width: none; }
+#modal.reading #m-close { display: none; }
+.reader .rd-top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; padding: 10px 12px; padding-top: max(10px, env(safe-area-inset-top)); background: rgba(13,13,18,.94); border-bottom: 2px solid #E62429; color: #fff; }
+.reader .rd-x { width: 40px; height: 40px; border-radius: 12px; background: #E62429; color: #fff; font-weight: 900; flex: none; }
+.reader .rd-pages { display: flex; flex-direction: column; align-items: center; }
+.reader .rd-end { padding: 18px 16px 30px; padding-bottom: max(30px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; }
+.reader .rd-prize { text-align: center; font-weight: 900; font-size: 20px; color: #FFE14D; animation: pop .4s; }
+.comic { width: 720px; flex: none; }
+.comic a { pointer-events: none; }
+.comic a[href*="t.me"] { display: none !important; }

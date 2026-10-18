@@ -29,6 +29,9 @@
   // New players see a few things at a time: the season pass after 5 stages, the community war in world 2, the world
   // boss after 15 stages, saved decks, collection sets and achievements in world 3 (their progress counts from day one);
   // the daily challenge opens in world 2 and the endless tower in world 3.
+  // Book of Legends (the comic): chapter k opens once COMIC_UNLOCK[k-1] stages are cleared; the first read pays gems.
+  const COMIC_UNLOCK = [1, 10, 30, 50, 70], COMIC_GEMS = 10;
+  const comicOpen = (p, ch) => (p.cleared || 0) >= COMIC_UNLOCK[ch - 1];
   const UNLOCKS = { pass: 5, royal: 10, ai: 10, war: 10, challenge: 10, raid: 15, tower: 20, pvp: 20, exchange: 20, decks: 20, sets: 20, ach: 20, duo: 30, gemChest: 40, clan: 40, trio: 70 };
   const unlocked = (p, key) => (p.cleared || 0) >= UNLOCKS[key];
   const needUnlock = (p, key) => { if (!unlocked(p, key)) fail('locked_feature'); };
@@ -232,10 +235,10 @@
   // Streak freeze: once per week (Monday–Sunday UTC weeks) a single missed day doesn't break the login streak.
   const weekNo = now => Math.floor((Math.floor(now / 864e5) + 3) / 7);
   const HOLO_CHANCE = 0.03; // a chest card has a 3% chance to come out as a shimmering Holo variant (cosmetic)
-  const KEYS = ['stars', 'starClaims', 'hard', 'lossStreak', 'ads', 'starter', 'club', 'shards', 'pity', 'decks', 'deck', 'avatar', 'cos', 'leaders', 'pass', 'rookie', 'fv', 'faction', 'factionAt', 'shareDay', 'coins', 'gems', 'owned', 'team', 'cleared', 'stats', 'daily', 'dq', 'ach', 'afkSince', 'pending', 'serials', 'holo', 'replays', 'aiDay'];
+  const KEYS = ['comic', 'stars', 'starClaims', 'hard', 'lossStreak', 'ads', 'starter', 'club', 'shards', 'pity', 'decks', 'deck', 'avatar', 'cos', 'leaders', 'pass', 'rookie', 'fv', 'faction', 'factionAt', 'shareDay', 'coins', 'gems', 'owned', 'team', 'cleared', 'stats', 'daily', 'dq', 'ach', 'afkSince', 'pending', 'serials', 'holo', 'replays', 'aiDay'];
 
   function newProfile(now) {
-    return { stars: {}, starClaims: {}, hard: 0, lossStreak: 0, shards: {}, pity: 0, decks: null, deck: 0, avatar: null, cos: { own: [], on: null }, leaders: {}, rookie: { start: day(now), claimed: [] }, fv: FUSION_VERSION, faction: null, factionAt: 0, shareDay: null, coins: 300, gems: START_GEMS, aiDay: null, owned: Object.fromEntries(E.STARTERS.map(id => [id, 1])), team: [...E.STARTERS], cleared: 0,
+    return { comic: [], stars: {}, starClaims: {}, hard: 0, lossStreak: 0, shards: {}, pity: 0, decks: null, deck: 0, avatar: null, cos: { own: [], on: null }, leaders: {}, rookie: { start: day(now), claimed: [] }, fv: FUSION_VERSION, faction: null, factionAt: 0, shareDay: null, coins: 300, gems: START_GEMS, aiDay: null, owned: Object.fromEntries(E.STARTERS.map(id => [id, 1])), team: [...E.STARTERS], cleared: 0,
       stats: { wins: 0, losses: 0, chests: 0, upgrades: 0, skills: 0, bosses: 0, pvpWins: 0, pvpLosses: 0 },
       daily: { last: null, streak: 0 }, dq: { date: null, p: {}, c: {} }, ach: {}, afkSince: now, pending: null, serials: {}, holo: {}, replays: {} };
   }
@@ -266,7 +269,7 @@
       p.team = keep.filter(id => Object.prototype.hasOwnProperty.call(E.HERO_BY_ID, id) && p.owned && Object.prototype.hasOwnProperty.call(p.owned, id));
     }
     return { ...d, ...p, stats: { ...d.stats, ...(p.stats || {}) }, daily: { ...d.daily, ...(p.daily || {}) }, dq: { ...d.dq, ...(p.dq || {}) },
-      ach: { ...(p.ach || {}) }, stars: { ...(p.stars || {}) }, starClaims: { ...(p.starClaims || {}) }, shards: { ...(p.shards || {}) }, serials: { ...(p.serials || {}) }, holo: { ...(p.holo || {}) }, replays: { ...(p.replays || {}) } };
+      comic: Array.isArray(p.comic) ? p.comic.filter(x => Number.isInteger(x)) : [], ach: { ...(p.ach || {}) }, stars: { ...(p.stars || {}) }, starClaims: { ...(p.starClaims || {}) }, shards: { ...(p.shards || {}) }, serials: { ...(p.serials || {}) }, holo: { ...(p.holo || {}) }, replays: { ...(p.replays || {}) } };
   }
   const pickKeys = p => Object.fromEntries(KEYS.map(k => [k, p[k]]));
 
@@ -429,6 +432,13 @@
         if (r === 'royal') { p.gems += DAY7_GEMS; return { day: p.daily.streak, gems: DAY7_GEMS, frozen, chest: openChest(p, 'royal', rng, now) }; }
         p.coins += r;
         return { day: p.daily.streak, coins: r, frozen };
+      }
+      case 'comic': { // Book of Legends: a chapter read for the first time pays gems once
+        const ch = a.ch | 0;
+        if (ch < 1 || ch > COMIC_UNLOCK.length || !comicOpen(p, ch)) fail('locked_feature');
+        if (p.comic.includes(ch)) fail('not_ready');
+        p.comic = [...p.comic, ch]; p.gems += COMIC_GEMS;
+        return { ch, gems: COMIC_GEMS };
       }
       case 'starChest': { // world chest opened by stars: tiers at STAR_CHEST stars
         const w = a.world | 0, tier = (p.starClaims[w] || 0);
@@ -637,6 +647,6 @@
     return out;
   }
   const avatarOf = p => (p ? (p.avatar && p.owned && p.owned[p.avatar] ? p.avatar : p.faction || (p.team && p.team[0]) || null) : null);
-  return { STAR_TIME, STAR_CHEST, starsFor, worldStars, starChestReward, HARD, hardOpen, GOBLIN_COINS, COMEBACK_AFTER, COMEBACK, BLITZ, blitzWindow, ADS, adsLeft, STARTER, CLUB, clubActive, afkCap, MANUAL_BONUS, weekNo, freezeReady, dailyFrozen, LAUNCH, fusionSupply, PVP_CUT, PVP_GAP, PVP_GAP_LATE, PVP_WAIT_MS, PVP_PAIR_DAILY, pvpPrize, GEM_PITY, DUPE_VALUE, SHARD_RARITY, progressReward, upgradeCoins, DECKS, fixDecks, avatarOf, COSMETICS, giveCosmetic, FEATURED_CHANCE, featuredOf, leaderOf, MASCOT_PER_TIER, ALLY_DEFAULT, ALLY_SHARE, allianceBoosts, PASS, seasonOf, seasonEnds, passReward, passOf, passTier, addPassXp, ROOKIE, rookieStat, rookieOpenDays, rookieDayDone, rookieActive, SET_LEVEL, SETS, SET_TIERS, SET_MULT, setTier, setDone, perksOf, STAR_LEVELS, starsOf, EVENTS, EVENT_FX, eventOf, COMMUNITY, MOODS, moodOf, marketBoosts, marketCoinBonus, FACTION_SWITCH_GEMS, FACTION_SWITCH_DAYS, FACTION_UPGRADE_DISCOUNT, FACTION_CHEST_WEIGHT, SHARE_GEMS, upgradePrice, UNLOCKS, unlocked, START_GEMS, DAY7_GEMS, WARP_COST, WARP_HOURS, gemRate, achGems, AI_DAILY, AI_LEVELS, aiLeft, aiReward, migrateIds, HOLO_CHANCE, CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
+  return { COMIC_UNLOCK, COMIC_GEMS, comicOpen, STAR_TIME, STAR_CHEST, starsFor, worldStars, starChestReward, HARD, hardOpen, GOBLIN_COINS, COMEBACK_AFTER, COMEBACK, BLITZ, blitzWindow, ADS, adsLeft, STARTER, CLUB, clubActive, afkCap, MANUAL_BONUS, weekNo, freezeReady, dailyFrozen, LAUNCH, fusionSupply, PVP_CUT, PVP_GAP, PVP_GAP_LATE, PVP_WAIT_MS, PVP_PAIR_DAILY, pvpPrize, GEM_PITY, DUPE_VALUE, SHARD_RARITY, progressReward, upgradeCoins, DECKS, fixDecks, avatarOf, COSMETICS, giveCosmetic, FEATURED_CHANCE, featuredOf, leaderOf, MASCOT_PER_TIER, ALLY_DEFAULT, ALLY_SHARE, allianceBoosts, PASS, seasonOf, seasonEnds, passReward, passOf, passTier, addPassXp, ROOKIE, rookieStat, rookieOpenDays, rookieDayDone, rookieActive, SET_LEVEL, SETS, SET_TIERS, SET_MULT, setTier, setDone, perksOf, STAR_LEVELS, starsOf, EVENTS, EVENT_FX, eventOf, COMMUNITY, MOODS, moodOf, marketBoosts, marketCoinBonus, FACTION_SWITCH_GEMS, FACTION_SWITCH_DAYS, FACTION_UPGRADE_DISCOUNT, FACTION_CHEST_WEIGHT, SHARE_GEMS, upgradePrice, UNLOCKS, unlocked, START_GEMS, DAY7_GEMS, WARP_COST, WARP_HOURS, gemRate, achGems, AI_DAILY, AI_LEVELS, aiLeft, aiReward, migrateIds, HOLO_CHANCE, CHESTS, DAILY_QUESTS, ACHIEVEMENTS, DAILY_REWARDS, AFK_CAP_H, KEYS, newProfile, normalize, pickKeys, day, ensureDQ, track,
     dqReward, dailyCanClaim, dailyNext, afkRate, afkAmount, achTier, coinBonus, replayFactor, stageCoins, teamPower, claimable, act, importLocal };
 });

@@ -12,7 +12,7 @@ images.update({p.stem: f"data:{MIME[p.suffix]};base64," + base64.b64encode(p.rea
 game = (src / "game.js").read_text(encoding="utf-8").replace("{/*IMAGES*/}", json.dumps(images))
 
 html = html.replace('<link rel="stylesheet" href="style.css">', "<style>\n" + (src / "style.css").read_text(encoding="utf-8") + "</style>")
-for name in ["audio.js", "online.js", "fusions-data.js", "engine.js", "scene.js", "i18n.js", "i18n-world.js", "i18n-social.js", "i18n-review.js", "i18n-play.js", "i18n-story.js", "economy.js", "game.js", "battle-fx.js", "meta.js", "clans.js", "war.js", "pass.js", "extras.js", "arena.js"]:
+for name in ["audio.js", "online.js", "fusions-data.js", "engine.js", "scene.js", "i18n.js", "i18n-world.js", "i18n-social.js", "i18n-review.js", "i18n-play.js", "i18n-story.js", "i18n-book.js", "economy.js", "game.js", "battle-fx.js", "comic-data.js", "comic.js", "meta.js", "clans.js", "war.js", "pass.js", "extras.js", "arena.js"]:
     code = game if name == "game.js" else (src / name).read_text(encoding="utf-8")
     tag = f'<script src="{name}"></script>'
     assert tag in html, tag

@@ -206,6 +206,17 @@ const assert = require('assert');
   await p.waitForSelector('.chest-reveal.waiting'); await p.screenshot({ path: out + '/s8-chest-wait.png' });
   await p.waitForSelector('.chest-reveal:not(.waiting)', { timeout: 3000 }); await p.click('#cl');
   console.log('✓ world chest, hard mode, comeback, near miss, chest suspense');
+  // Book of Legends: chapters open with progress; reading one to the end pays gems once
+  await p.evaluate(() => { S.cleared = 31; S.comic = []; save(); show('map'); }); await p.waitForTimeout(200);
+  await p.click('#to-book'); await p.waitForSelector('.book-ch');
+  assert.deepEqual(await p.$$eval('.book-ch', bs => bs.map(b => b.disabled)), [false, false, false, true, true], 'chapters 1-3 open at 31 stages');
+  const bg0 = await p.evaluate(() => S.gems);
+  await p.click('[data-ch="2"]'); await p.waitForSelector('#modal.reading .comic');
+  await p.evaluate(() => document.querySelector('#rd-end').scrollIntoView()); await p.waitForSelector('.rd-prize', { timeout: 5000 });
+  assert.equal(await p.evaluate(() => S.gems), bg0 + 10); assert.deepEqual(await p.evaluate(() => S.comic), [2]);
+  await p.screenshot({ path: out + '/s9-book.png' });
+  await p.click('#rd-close'); await p.waitForSelector('.book-ch'); await p.click('#bk-close');
+  console.log('✓ book of legends: chapters unlock, reader, first-read gems');
   // languages
   for (const code of ['ar', 'zh', 'hi', 'en']) {
     await p.click('#settings'); await p.click('#s-lang'); await p.click(`[data-lang=${code}]`); await p.waitForTimeout(150);

@@ -226,13 +226,13 @@ function toast(msg) {
 let modalBack = null;
 function openModal(html, onBind, opts = {}) {
   const m = $('#modal'), box = m.querySelector('.modal-box');
-  box.innerHTML = html; box.scrollTop = 0; m.hidden = false;
+  box.innerHTML = html; box.scrollTop = 0; m.hidden = false; m.classList.remove('reading');
   if (opts.lock) m.dataset.lock = '1'; else delete m.dataset.lock;
   modalBack = opts.onBack || closeModal;
   if (onBind) onBind(box);
   syncNav();
 }
-function closeModal() { const m = $('#modal'); m.hidden = true; delete m.dataset.lock; modalBack = null; syncNav(); }
+function closeModal() { const m = $('#modal'); m.hidden = true; m.classList.remove('reading'); delete m.dataset.lock; modalBack = null; syncNav(); }
 $('#modal').addEventListener('click', e => { if (e.target.id === 'modal' && !$('#modal').dataset.lock) goBack(); });
 $('#m-close').addEventListener('click', () => goBack());
 
@@ -319,6 +319,7 @@ function renderMap() {
         ${worldDone ? `<button class="hard-toggle ${hard ? 'on' : ''}" id="w-hard">🔥 ${t.hardMode}</button>` : ''}
       </div>
     </div>
+    ${S.cleared >= 1 ? `<button class="book-chip" id="to-book">📖 ${t.bookTitle}${comicUnread().length ? ` <span class="bk-new">${t.bookNew} ${n(comicUnread().length)}</span>` : ''}</button>` : ''}
     ${(S.lossStreak || 0) >= ECON.COMEBACK_AFTER ? `<div class="comeback">💪 ${t.comebackOn(pct(ECON.COMEBACK * 100))}</div>` : ''}
     ${blitzChip()}
     <div class="panel stage-panel">
@@ -351,6 +352,7 @@ function renderMap() {
   if ($('#to-rookie')) $('#to-rookie').onclick = () => show('quests');
   if ($('#ticker')) $('#ticker').onclick = marketModal;
   $('#go').onclick = () => startBattle(S.sel, hard);
+  if ($('#to-book')) $('#to-book').onclick = openBook;
   if ($('#w-hard')) $('#w-hard').onclick = () => { S.hardView = !S.hardView; S.sel = -1; save(); renderMap(); };
   $('#w-chest').onclick = async () => {
     const r = await tryAct({ type: 'starChest', world: w }); if (!r) return;
@@ -1180,6 +1182,7 @@ function showStageResult(idx, res) {
       ${skillLine(res)}
       ${!res.hard && (res.stars || 1) < 3 ? `<p class="muted small">${t.starHow(n(ECON.STAR_TIME))}</p>` : ''}
       ${res.first ? `<p class="muted">${t.firstBonus}</p>` : ''}
+      ${res.first && !res.hard && comicJustOpened(S.cleared) ? `<button class="book-new" id="r-book">📖 ${t.bookUnlocked} <b>${t.bookRead} ▸</b></button>` : ''}
       ${res.manual ? `<p class="manual-tag">🎮 ${t.manualBonus(pct(ECON.MANUAL_BONUS * 100))}</p>` : res.result === 'win' && S.auto ? `<p class="muted small">🎮 ${t.manualHint(pct(ECON.MANUAL_BONUS * 100))}</p>` : ''}
       ${res.timeout ? `<p class="muted">⏱️ ${t.timeUp}</p>` : ''}
       ${res.unlocked.length ? `<div class="unlocked">${res.unlocked.map(k => `<div class="unl"><div>🔓 ${t.unlockedNew}: <b>${t.feat[k]}</b></div>
@@ -1236,6 +1239,7 @@ function bindResult(box, idx, nextIdx) {
   if (q('#gc-replay')) q('#gc-replay').onclick = leave(() => startBattle(+q('#gc-replay').dataset.i));
   if (q('#gc-afk')) q('#gc-afk').onclick = async () => { const b = q('#gc-afk'); b.disabled = true; const r = await tryAct({ type: 'afk' }); if (r) { b.textContent = `✓ +🪙 ${n(r.coins)}`; } };
   if (q('#r-map')) q('#r-map').onclick = leave(() => { $('#battle').hidden = true; show('map'); });
+  if (q('#r-book')) q('#r-book').onclick = leave(() => { $('#battle').hidden = true; show('map'); readChapter(comicJustOpened(S.cleared)); });
   if (q('#r-heroes')) q('#r-heroes').onclick = leave(() => { $('#battle').hidden = true; show('heroes'); });
   if (q('#r-again')) q('#r-again').onclick = leave(() => startBattle(idx, LAST_HARD && ECON.hardOpen(S, idx)));
   if (q('#r-next')) q('#r-next').onclick = leave(() => startBattle(nextIdx, LAST_HARD));

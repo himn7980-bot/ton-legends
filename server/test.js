@@ -864,6 +864,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     q.stars = { 0: 3, 1: 3, 2: 3, 3: 1 }; const c0 = q.coins;
     const sc = ECON.act(q, { type: 'starChest', world: 0 }, { now: Date.now(), rng: Math.random }); assert.equal(sc.tier, 0); assert.ok(q.coins > c0);
     assert.throws(() => ECON.act(q, { type: 'starChest', world: 0 }, { now: Date.now(), rng: Math.random }), /not_ready/);
+    // Book of Legends: a chapter opens with progress and pays gems on the first read only
+    { const g0 = q.gems; q.cleared = 10; assert.throws(() => ECON.act(q, { type: 'comic', ch: 3 }, { now: Date.now() }), /locked_feature/);
+      assert.equal(ECON.act(q, { type: 'comic', ch: 2 }, { now: Date.now() }).gems, ECON.COMIC_GEMS); assert.equal(q.gems, g0 + ECON.COMIC_GEMS);
+      assert.throws(() => ECON.act(q, { type: 'comic', ch: 2 }, { now: Date.now() }), /not_ready/); }
     const hs = ECON.act(q, { type: 'stageStart', stage: 0, hard: true }, { now: Date.now(), rng: Math.random }); assert.equal(hs.hard, true); assert.equal(q.pending.hard, true);
   }
   console.log('   skill play: perfect taps, chains, boss weak spot, focus + aimed ultimate, goblin, stars, hard mode, comeback, world chest');
